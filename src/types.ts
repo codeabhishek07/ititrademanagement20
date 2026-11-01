@@ -21,6 +21,13 @@ export interface LeaveLimits {
   halfDayMonthlyLimit: number;
 }
 
+export interface AdminAccount {
+  email: string;
+  password: string;
+  name: string;
+  mobile?: string;
+}
+
 export interface SystemSettings {
   instituteName: string;
   instituteCode: string;
@@ -33,6 +40,7 @@ export interface SystemSettings {
   minimumAttendancePercent: number; // default 80%
   leaveLimits: LeaveLimits;
   currentSessionId: string;
+  adminAccount?: AdminAccount;
 }
 
 export interface AcademicSession {
@@ -158,7 +166,9 @@ export interface WarningNotice {
   officerName: string;
   attendancePercent: number;
   subject: string;
+  subjectHindi?: string;
   message: string;
+  messageHindi?: string;
   issuedDate: string;
   status: 'issued' | 'acknowledged';
   acknowledgedAt?: string;

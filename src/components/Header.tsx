@@ -30,7 +30,7 @@ interface HeaderProps {
     employeeId?: string;
   } | null;
   onLogout: () => void;
-  onSwitchRole: (role: UserRole, id?: string) => void;
+  onSwitchRole?: (role: UserRole, id?: string) => void;
   onOpenResetConfirm?: () => void;
   onNavigateTraineeTab?: (tab: 'mark_attendance' | 'history' | 'leaves' | 'warnings' | 'tools') => void;
 }
@@ -182,54 +182,25 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="text-base sm:text-lg font-bold text-slate-900 tracking-tight whitespace-nowrap">
                 ITI Trade Management
               </span>
-              <span className="hidden md:inline-block px-1.5 py-0.5 text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200/80 rounded">
-                Govt. ITI Raigarh
+              <span className="hidden md:inline-block px-1.5 py-0.5 text-[10px] font-semibold bg-amber-50 text-amber-900 border border-amber-200/80 rounded">
+                शासकीय आईटीआई रायगढ़
               </span>
             </div>
             <p className="text-[11px] text-slate-500 hidden sm:block">
-              Trade Training, GPS Attendance & Workshop Inventory Portal
+              शासकीय औद्योगिक प्रशिक्षण संस्था, रायगढ़ (छ.ग.) · Govt. ITI Raigarh
             </p>
           </div>
         </div>
 
-        {/* Zone 2: Role Switcher / Demo Controls */}
-        <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-lg text-xs">
-          <button
-            onClick={() => onSwitchRole('admin')}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 font-medium rounded-md transition-colors whitespace-nowrap ${
-              currentUser?.role === 'admin'
-                ? 'bg-white text-slate-900 shadow-xs font-semibold'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Shield className="w-3.5 h-3.5 text-blue-600" />
-            <span className="hidden sm:inline">Admin</span>
-          </button>
-          <button
-            onClick={() => onSwitchRole('officer')}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 font-medium rounded-md transition-colors whitespace-nowrap ${
-              currentUser?.role === 'officer'
-                ? 'bg-white text-slate-900 shadow-xs font-semibold'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
-            <span className="hidden sm:inline">Training Officer</span>
-            <span className="sm:hidden">Officer</span>
-          </button>
-          <button
-            onClick={() => onSwitchRole('trainee')}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 font-medium rounded-md transition-colors whitespace-nowrap ${
-              currentUser?.role === 'trainee'
-                ? 'bg-white text-slate-900 shadow-xs font-semibold'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <GraduationCap className="w-3.5 h-3.5 text-amber-600" />
-            <span className="hidden sm:inline">Trainee</span>
-            <span className="sm:hidden">Student</span>
-          </button>
-        </div>
+        {/* Portal Status when logged out */}
+        {!currentUser && (
+          <div className="hidden sm:flex items-center gap-2 text-xs">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 rounded-lg border border-slate-200/80 text-slate-700 font-medium">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              Official MIS Portal Online
+            </span>
+          </div>
+        )}
 
         {/* Zone 3: Real-Time Notifications + User Details & Logout */}
         {currentUser ? (
@@ -430,32 +401,92 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
             )}
 
-            {/* Profile Info */}
-            <div className="text-right hidden lg:block">
-              <div className="text-xs font-semibold text-slate-900 truncate max-w-[180px]">
-                {currentUser.name}
+            {/* High-Contrast Modern Profile Pill */}
+            <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl border shadow-xs bg-slate-950 border-slate-800 text-white">
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 font-bold text-xs shadow-xs text-white bg-slate-800">
+                {currentUser.role === 'admin' && <Shield className="w-4 h-4 text-blue-400" />}
+                {currentUser.role === 'officer' && <UserCheck className="w-4 h-4 text-emerald-400" />}
+                {currentUser.role === 'trainee' && <GraduationCap className="w-4 h-4 text-amber-400" />}
               </div>
-              <div className="text-[11px] text-slate-500 font-mono">
-                {currentUser.role === 'admin' && 'Principal / Administrator'}
-                {currentUser.role === 'officer' && (currentUser.employeeId || 'Training Officer')}
-                {currentUser.role === 'trainee' && (currentUser.rollNo || 'Electrician')}
+              <div className="text-left hidden sm:block">
+                <div className="text-xs font-extrabold text-white truncate max-w-[170px] leading-tight">
+                  {currentUser.name}
+                </div>
+                <div className="text-[10px] font-mono leading-tight flex items-center gap-1.5">
+                  <span
+                    className={`font-bold ${
+                      currentUser.role === 'admin'
+                        ? 'text-blue-300'
+                        : currentUser.role === 'officer'
+                        ? 'text-emerald-300'
+                        : 'text-amber-300'
+                    }`}
+                  >
+                    {currentUser.role === 'admin' && 'Principal / Admin'}
+                    {currentUser.role === 'officer' && (currentUser.employeeId || 'Training Officer')}
+                    {currentUser.role === 'trainee' && (currentUser.rollNo || 'Electrician')}
+                  </span>
+                  <span className="text-slate-500">·</span>
+                  <span className="text-slate-400 text-[9px] uppercase tracking-wider font-semibold">Active</span>
+                </div>
               </div>
             </div>
 
-            {/* Logout button */}
+            {/* High-Contrast Bold Modern Logout button */}
             <button
               onClick={onLogout}
               title="Logout from session"
-              className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg transition-colors whitespace-nowrap"
+              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-extrabold text-white bg-slate-900 hover:bg-rose-700 border border-slate-700 hover:border-rose-600 rounded-xl transition-all shadow-sm whitespace-nowrap cursor-pointer"
             >
-              <LogOut className="w-3.5 h-3.5" />
+              <LogOut className="w-3.5 h-3.5 text-slate-300 group-hover:text-white" />
               <span className="hidden sm:inline">Logout</span>
             </button>
           </div>
         ) : (
-          <div className="text-xs text-slate-500">Demo Portal</div>
+          <div className="flex items-center gap-2">
+            <span className="px-2.5 py-1 rounded-lg bg-slate-900 text-amber-300 text-xs font-bold border border-slate-800 shadow-xs">
+              Portal v2.6
+            </span>
+          </div>
         )}
       </div>
+
+      {/* Active Login View Banner - High-Contrast Role Status Strip */}
+      {currentUser && (
+        <div
+          className={`py-1.5 px-4 sm:px-6 text-xs border-t font-semibold ${
+            currentUser.role === 'admin'
+              ? 'bg-blue-950 text-blue-100 border-blue-900/60'
+              : currentUser.role === 'officer'
+              ? 'bg-emerald-950 text-emerald-100 border-emerald-900/60'
+              : 'bg-amber-950 text-amber-100 border-amber-900/60'
+          }`}
+        >
+          <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span
+                className={`w-2 h-2 rounded-full animate-pulse ${
+                  currentUser.role === 'admin'
+                    ? 'bg-blue-400'
+                    : currentUser.role === 'officer'
+                    ? 'bg-emerald-400'
+                    : 'bg-amber-400'
+                }`}
+              />
+              <span className="font-bold tracking-tight">
+                {currentUser.role === 'admin' && 'ADMINISTRATIVE CONSOLE · GOVT. ITI RAIGARH'}
+                {currentUser.role === 'officer' && 'TRAINING OFFICER WORKSPACE · DGT / NCVT OFFICIAL REGISTERS'}
+                {currentUser.role === 'trainee' && 'TRAINEE ATTENDANCE & INVENTORY DASHBOARD · NCVT REGULAR'}
+              </span>
+            </div>
+            <div className="text-[11px] opacity-80 hidden md:flex items-center gap-2">
+              <span>Govt. ITI Raigarh MIS</span>
+              <span>·</span>
+              <span>Authorized Session Active</span>
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 };

@@ -97,6 +97,16 @@ export async function deleteSession(id: string) {
   return res.json();
 }
 
+export async function setDefaultSession(sessionId: string) {
+  const res = await fetch('/api/sessions/set-default', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId }),
+  });
+  if (!res.ok) throw new Error('Failed to update default session');
+  return res.json();
+}
+
 export async function fetchMonthlyWorkingDays(sessionId?: string): Promise<MonthlyWorkingDay[]> {
   const url = sessionId ? `/api/monthly-working-days?sessionId=${sessionId}` : '/api/monthly-working-days';
   const res = await fetch(url);
@@ -110,6 +120,22 @@ export async function saveMonthlyWorkingDay(payload: Partial<MonthlyWorkingDay>)
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error('Failed to save monthly working days');
+  return res.json();
+}
+
+export async function saveBulkMonthlyWorkingDays(sessionId: string, days: Partial<MonthlyWorkingDay>[]) {
+  const res = await fetch('/api/monthly-working-days/bulk', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId, days }),
+  });
+  if (!res.ok) throw new Error('Failed to save bulk monthly working days');
+  return res.json();
+}
+
+export async function deleteMonthlyWorkingDay(id: string) {
+  const res = await fetch(`/api/monthly-working-days/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to delete monthly working day');
   return res.json();
 }
 
@@ -146,6 +172,12 @@ export async function deleteTrade(id: string) {
 
 export async function fetchOfficers(): Promise<TrainingOfficer[]> {
   const res = await fetch('/api/officers');
+  return res.json();
+}
+
+export async function fetchOfficer(id: string): Promise<TrainingOfficer> {
+  const res = await fetch(`/api/officers/${id}`);
+  if (!res.ok) throw new Error('Failed to fetch officer details');
   return res.json();
 }
 
@@ -322,7 +354,9 @@ export async function issueWarning(payload: {
   officerName: string;
   attendancePercent: number;
   subject?: string;
+  subjectHindi?: string;
   message: string;
+  messageHindi?: string;
 }) {
   const res = await fetch('/api/warnings', {
     method: 'POST',
@@ -417,5 +451,77 @@ export async function fetchNotifications(traineeId?: string): Promise<AppNotific
   const res = await fetch(`/api/notifications${params}`);
   if (!res.ok) return [];
   return res.json();
+}
+
+// -------------------------------------------------------------
+// Password Recovery Flow APIs
+// -------------------------------------------------------------
+export async function requestPasswordReset(params: {
+  identifier: string;
+  role?: 'admin' | 'officer' | 'trainee';
+}): Promise<{
+  success: boolean;
+  message: string;
+  email: string;
+  maskedEmail: string;
+  userName: string;
+  role: 'admin' | 'officer' | 'trainee';
+  token: string;
+  expiresMinutes: number;
+}> {
+  const res = await fetch('/api/auth/forgot-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to request password reset token');
+  }
+  return data;
+}
+
+export async function verifyResetToken(params: {
+  token: string;
+  email?: string;
+}): Promise<{
+  success: boolean;
+  valid: boolean;
+  email: string;
+  userName: string;
+  role: 'admin' | 'officer' | 'trainee';
+}> {
+  const res = await fetch('/api/auth/verify-reset-token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Invalid or expired token');
+  }
+  return data;
+}
+
+export async function resetPasswordWithToken(params: {
+  token: string;
+  email: string;
+  newPassword: string;
+}): Promise<{
+  success: boolean;
+  message: string;
+  email: string;
+  role: 'admin' | 'officer' | 'trainee';
+}> {
+  const res = await fetch('/api/auth/reset-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to reset password');
+  }
+  return data;
 }
 

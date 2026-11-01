@@ -25,7 +25,13 @@
       "medicalAnnual": 15,
       "halfDayMonthlyLimit": 4
     },
-    "currentSessionId": "session_2025_2026"
+    "currentSessionId": "session_2025_2026",
+    "adminAccount": {
+      "email": "admin.iti.raigarh@cg.gov.in",
+      "password": "admin123",
+      "name": "Shri S. K. Patel (Principal / Admin)",
+      "mobile": "+91 98261 45210"
+    }
   },
   "sessions": [
     {
@@ -49,7 +55,7 @@
       "name": "Session 2026-2027",
       "startDate": "2026-08-01",
       "endDate": "2027-07-31",
-      "totalWorkingDays": 245,
+      "totalWorkingDays": 23,
       "status": "upcoming"
     }
   ],
@@ -225,7 +231,8 @@
       "mobile": "+91 94252 87612",
       "employeeId": "CG-ITI-TO-1042",
       "assignedTradeIds": [
-        "trade_elec"
+        "trade_elec",
+        "trade_copa"
       ],
       "designation": "Senior Training Officer (Electrical)",
       "qualification": "B.Tech (Electrical Engg), CITS Certified",
@@ -3339,6 +3346,150 @@
     }
   ],
   "auditLogs": [
+    {
+      "id": "log_1793536107609_ig6s",
+      "timestamp": "1/11/2026, 5:58:27 pm",
+      "userId": "off_1",
+      "userName": "Er. Rajesh Kumar Dewangan",
+      "userRole": "officer",
+      "action": "OFFICER_LOGIN",
+      "details": "Training Officer logged in for trade(s): trade_elec, trade_copa.",
+      "ipAddress": "127.0.0.1"
+    },
+    {
+      "id": "log_1793536101351_ewsv",
+      "timestamp": "1/11/2026, 5:58:21 pm",
+      "userId": "usr_admin",
+      "userName": "Principal / Admin",
+      "userRole": "admin",
+      "action": "ALTER_OFFICER",
+      "details": "Updated Training Officer details and trade assignments for: Er. Rajesh Kumar Dewangan (2 trades)."
+    },
+    {
+      "id": "log_1793533366235_fkh5",
+      "timestamp": "1/11/2026, 5:12:46 pm",
+      "userId": "tr_1",
+      "userName": "Rohan Sahu",
+      "userRole": "trainee",
+      "action": "UPDATE_TRAINEE_RECORD",
+      "details": "Updated email for trainee Rohan Sahu (ITI/RAI/2025/ELE-014) to: rohan.sahu@student.iti.cg.in."
+    },
+    {
+      "id": "log_1793533360118_1lue",
+      "timestamp": "1/11/2026, 5:12:40 pm",
+      "userId": "tr_1",
+      "userName": "Rohan Sahu",
+      "userRole": "trainee",
+      "action": "UPDATE_TRAINEE_RECORD",
+      "details": "Updated email for trainee Rohan Sahu (ITI/RAI/2025/ELE-014) to: rohan.sahu.updated@student.iti.cg.in."
+    },
+    {
+      "id": "log_1793533354296_qbsj",
+      "timestamp": "1/11/2026, 5:12:34 pm",
+      "userId": "tr_1",
+      "userName": "Rohan Sahu",
+      "userRole": "trainee",
+      "action": "TRAINEE_LOGIN",
+      "details": "Trainee authenticated: Roll No ITI/RAI/2025/ELE-014.",
+      "ipAddress": "127.0.0.1"
+    },
+    {
+      "id": "log_1793533348555_pzzw",
+      "timestamp": "1/11/2026, 5:12:28 pm",
+      "userId": "tr_1",
+      "userName": "Rohan Sahu",
+      "userRole": "trainee",
+      "action": "PASSWORD_RESET_COMPLETED",
+      "details": "Password securely updated for account rohan.sahu@student.iti.cg.in via verified token.",
+      "ipAddress": "127.0.0.1"
+    },
+    {
+      "id": "log_1793533342978_3plk",
+      "timestamp": "1/11/2026, 5:12:22 pm",
+      "userId": "tr_1",
+      "userName": "Rohan Sahu",
+      "userRole": "trainee",
+      "action": "PASSWORD_RESET_TOKEN_ISSUED",
+      "details": "Password recovery token dispatched for rohan.sahu@student.iti.cg.in (Token valid for 15 minutes).",
+      "ipAddress": "127.0.0.1"
+    },
+    {
+      "id": "log_1793533322218_7qju",
+      "timestamp": "1/11/2026, 5:12:02 pm",
+      "userId": "usr_admin",
+      "userName": "Shri S. K. Patel (Principal / Admin)",
+      "userRole": "admin",
+      "action": "PASSWORD_RESET_TOKEN_ISSUED",
+      "details": "Password recovery token dispatched for admin.iti.raigarh@cg.gov.in (Token valid for 15 minutes).",
+      "ipAddress": "127.0.0.1"
+    },
+    {
+      "id": "log_1793460680709_x1ky",
+      "timestamp": "31/10/2026, 9:01:20 pm",
+      "userId": "usr_admin",
+      "userName": "Principal / Admin",
+      "userRole": "admin",
+      "action": "BULK_CONFIG_WORKING_DAYS",
+      "details": "Saved 1 monthly working days records for session session_2026_2027 (Total 23 working days)."
+    },
+    {
+      "id": "log_1793460674750_qcjg",
+      "timestamp": "31/10/2026, 9:01:14 pm",
+      "userId": "usr_admin",
+      "userName": "Principal / Admin",
+      "userRole": "admin",
+      "action": "SET_DEFAULT_SESSION",
+      "details": "Set default active academic session to: session_2025_2026"
+    },
+    {
+      "id": "log_1793460669214_k71d",
+      "timestamp": "31/10/2026, 9:01:09 pm",
+      "userId": "usr_admin",
+      "userName": "Principal / Admin",
+      "userRole": "admin",
+      "action": "CLEAR_DEFAULT_SESSION",
+      "details": "Cleared default active academic session."
+    },
+    {
+      "id": "log_1793458925390_6v0p",
+      "timestamp": "31/10/2026, 8:32:05 pm",
+      "userId": "tr_1",
+      "userName": "Rohan Sahu",
+      "userRole": "trainee",
+      "action": "TRAINEE_LOGIN",
+      "details": "Trainee authenticated: Roll No ITI/RAI/2025/ELE-014.",
+      "ipAddress": "127.0.0.1"
+    },
+    {
+      "id": "log_1793458925352_3vxq",
+      "timestamp": "31/10/2026, 8:32:05 pm",
+      "userId": "off_0",
+      "userName": "Abhishek Swarnkar",
+      "userRole": "officer",
+      "action": "OFFICER_LOGIN",
+      "details": "Training Officer logged in for trade(s): trade_elec, trade_copa.",
+      "ipAddress": "127.0.0.1"
+    },
+    {
+      "id": "log_1793458925278_v67b",
+      "timestamp": "31/10/2026, 8:32:05 pm",
+      "userId": "usr_admin",
+      "userName": "Shri S. K. Patel (Principal / Admin)",
+      "userRole": "admin",
+      "action": "ADMIN_LOGIN",
+      "details": "Administrator authenticated successfully.",
+      "ipAddress": "127.0.0.1"
+    },
+    {
+      "id": "log_1793458620076_9112",
+      "timestamp": "31/10/2026, 8:27:00 pm",
+      "userId": "usr_admin",
+      "userName": "Principal / Admin",
+      "userRole": "admin",
+      "action": "ADMIN_LOGIN",
+      "details": "Admin logged into administration portal.",
+      "ipAddress": "127.0.0.1"
+    },
     {
       "id": "log_1793373997600_16k3",
       "timestamp": "30/10/2026, 8:56:37 pm",

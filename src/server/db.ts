@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import {
+import type {
   SystemSettings,
   AcademicSession,
   MonthlyWorkingDay,
@@ -66,6 +66,12 @@ function getInitialDatabase(): DatabaseSchema {
       halfDayMonthlyLimit: 4,
     },
     currentSessionId: 'session_2025_2026',
+    adminAccount: {
+      email: 'admin.iti.raigarh@cg.gov.in',
+      password: 'admin123',
+      name: 'Shri S. K. Patel (Principal / Admin)',
+      mobile: '+91 98261 45210',
+    },
   };
 
   const sessions: AcademicSession[] = [
@@ -471,8 +477,11 @@ function getInitialDatabase(): DatabaseSchema {
       officerName: 'Er. Rajesh Kumar Dewangan',
       attendancePercent: 68.4,
       subject: 'Official Warning: Deficit Attendance Below NCVT Minimum Threshold (80%)',
+      subjectHindi: 'कार्यालयीन चेतावनी सूचना: न्यून उपस्थिति (80% से कम) - अखिल भारतीय व्यावसायिक परीक्षा (AITT) हेतु अपात्रता संबंधी',
       message:
         'Your recorded attendance for the current quarter has dropped to 68.4%, which is severely below the mandatory 80% NCVT training standard. You are directed to attend regular practical workshops and explain your repeated absenteeism within 3 working days.',
+      messageHindi:
+        'आपको सूचित किया जाता है कि वर्तमान सत्र में आपकी दर्ज उपस्थिति 68.4% है, जो DGT / NCVT के अनिवार्य 80% मानक से कम है। यदि आपकी उपस्थिति में तत्काल सुधार नहीं हुआ, तो आपको अखिल भारतीय व्यावसायिक परीक्षा (AITT) से वंचित (Debar) कर दिया जाएगा। अतः आगामी सभी वर्कशॉप प्रायोगिक कक्षाओं में अनिवार्यतः उपस्थित रहें तथा 3 दिवस में लिखित स्पष्टीकरण प्रस्तुत करें।',
       issuedDate: '2026-10-25',
       status: 'issued',
     },

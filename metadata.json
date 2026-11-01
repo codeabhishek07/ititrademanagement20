@@ -1,7 +1,10 @@
 {
   "name": "ITI Trade Management - Govt ITI Raigarh",
   "description": "Comprehensive trade-level training, GPS geofenced attendance, leave management, and inventory system for Government ITI Raigarh, Chhattisgarh.",
-  "requestFramePermissions": ["geolocation"],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
-

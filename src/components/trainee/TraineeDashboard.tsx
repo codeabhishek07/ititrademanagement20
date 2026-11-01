@@ -15,6 +15,10 @@ import {
   BarChart2,
   RefreshCw,
   Building,
+  Printer,
+  X,
+  Edit2,
+  Mail,
 } from 'lucide-react';
 import {
   AttendanceRecord,
@@ -32,6 +36,7 @@ import {
   fetchWarnings,
   acknowledgeWarning,
   fetchIndents,
+  updateTrainee,
 } from '../../api.ts';
 
 interface TraineeDashboardProps {
@@ -50,6 +55,7 @@ interface TraineeDashboardProps {
   settings: SystemSettings;
   selectedTab?: TraineeTab;
   onTabChange?: (tab: TraineeTab) => void;
+  onTraineeUpdate?: (updated: { email?: string; mobile?: string }) => void;
 }
 
 type TraineeTab = 'mark_attendance' | 'history' | 'leaves' | 'warnings' | 'tools';
@@ -59,6 +65,7 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
   settings,
   selectedTab,
   onTabChange,
+  onTraineeUpdate,
 }) => {
   const [activeTab, setActiveTab] = useState<TraineeTab>(selectedTab || 'mark_attendance');
 
@@ -88,6 +95,8 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
   const [leavesList, setLeavesList] = useState<LeaveRequest[]>([]);
   const [warningsList, setWarningsList] = useState<WarningNotice[]>([]);
   const [indentsList, setIndentsList] = useState<IndentRecord[]>([]);
+  const [noticeLanguage, setNoticeLanguage] = useState<'hindi' | 'bilingual' | 'english'>('bilingual');
+  const [viewOrderNotice, setViewOrderNotice] = useState<WarningNotice | null>(null);
 
   // Apply Leave Modal
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
@@ -98,6 +107,41 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
     days: 1,
     reason: '',
   });
+
+  // Trainee Contact & Email Edit Modal State
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    email: trainee.email,
+    mobile: trainee.mobile,
+  });
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!profileForm.email.trim()) {
+      alert('Email address cannot be empty');
+      return;
+    }
+    try {
+      setSavingProfile(true);
+      await updateTrainee(trainee.id, {
+        email: profileForm.email.trim(),
+        mobile: profileForm.mobile.trim(),
+      });
+      trainee.email = profileForm.email.trim();
+      trainee.mobile = profileForm.mobile.trim();
+      onTraineeUpdate?.({
+        email: profileForm.email.trim(),
+        mobile: profileForm.mobile.trim(),
+      });
+      showToast('Contact details and email updated successfully');
+      setProfileModalOpen(false);
+    } catch (err: any) {
+      alert(err.message || 'Failed to update contact info');
+    } finally {
+      setSavingProfile(false);
+    }
+  };
 
   const todayStr = new Date().toISOString().split('T')[0];
   const todayRecord = attendanceList.find((a) => a.date === todayStr);
@@ -289,15 +333,39 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
               .slice(0, 2)}
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-base sm:text-lg font-bold text-slate-900">{trainee.name}</h2>
-              <span className="text-[11px] font-mono font-semibold bg-slate-100 text-slate-800 px-2 py-0.5 rounded border border-slate-200">
-                {trainee.rollNo}
-              </span>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base sm:text-lg font-bold text-slate-900">{trainee.name}</h2>
+                <span className="text-[11px] font-mono font-semibold bg-slate-100 text-slate-800 px-2 py-0.5 rounded border border-slate-200">
+                  {trainee.rollNo}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProfileForm({
+                      email: trainee.email,
+                      mobile: trainee.mobile,
+                    });
+                    setProfileModalOpen(true);
+                  }}
+                  className="px-2 py-0.5 text-[11px] font-semibold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-md flex items-center gap-1 cursor-pointer transition-colors"
+                  title="Edit your email and contact number"
+                >
+                  <Edit2 className="w-3 h-3 text-amber-700" />
+                  <span>Edit Email / Contact (ईमेल बदलें)</span>
+                </button>
+              </div>
+              <p className="text-xs text-slate-500 flex items-center flex-wrap gap-x-2 gap-y-0.5 mt-0.5">
+                <span>Trade: <span className="font-semibold text-slate-700">{trainee.tradeName || 'Electrician'}</span></span>
+                <span>·</span>
+                <span className="flex items-center gap-1 text-slate-700 font-mono">
+                  <Mail className="w-3 h-3 text-slate-400" />
+                  {trainee.email}
+                </span>
+                <span>·</span>
+                <span className="font-mono text-slate-600">{trainee.mobile}</span>
+              </p>
             </div>
-            <p className="text-xs text-slate-500">
-              Trade: <span className="font-semibold text-slate-700">{trainee.tradeName || 'Electrician'}</span> · Govt. ITI Raigarh
-            </p>
           </div>
         </div>
 
@@ -325,14 +393,35 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
         </div>
       </div>
 
-      {/* Trainee Navigation Tabs */}
-      <div className="flex items-center gap-1 overflow-x-auto pb-1 border-b border-slate-200 text-xs">
+      {/* Trainee Navigation Tabs - High-Contrast Bold Modern Menu Bar */}
+      <div className="bg-slate-950 p-2 rounded-2xl shadow-lg border border-slate-800 ring-1 ring-slate-800/80 flex items-center gap-2 overflow-x-auto scrollbar-none">
         {[
-          { id: 'mark_attendance', label: 'Mark Attendance (GPS)', icon: Compass },
-          { id: 'history', label: 'Attendance History & Charts', icon: BarChart2 },
-          { id: 'leaves', label: `Leaves & Sanctions (${leavesList.length})`, icon: FileText },
-          { id: 'warnings', label: `Official Notices (${warningsList.length})`, icon: AlertTriangle },
-          { id: 'tools', label: `My Workshop Tools (${indentsList.length})`, icon: Wrench },
+          { id: 'mark_attendance', label: 'Mark Attendance (GPS)', hindi: 'जीपीएस उपस्थिति दर्ज', icon: Compass },
+          { id: 'history', label: 'Attendance History & Charts', hindi: 'उपस्थिति इतिहास व चार्ट', icon: BarChart2 },
+          {
+            id: 'leaves',
+            label: 'Leaves & Sanctions',
+            hindi: 'अवकाश आवेदन',
+            icon: FileText,
+            badge: leavesList.length,
+            badgeType: 'neutral',
+          },
+          {
+            id: 'warnings',
+            label: 'Official Notices',
+            hindi: 'संस्थान नोटिस',
+            icon: AlertTriangle,
+            badge: warningsList.length,
+            badgeType: 'danger',
+          },
+          {
+            id: 'tools',
+            label: 'My Workshop Tools',
+            hindi: 'वर्कशॉप औजार',
+            icon: Wrench,
+            badge: indentsList.length,
+            badgeType: 'neutral',
+          },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -340,14 +429,32 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
             <button
               key={tab.id}
               onClick={() => handleTabClick(tab.id as TraineeTab)}
-              className={`flex items-center gap-2 px-3.5 py-2 font-medium rounded-t-lg transition-colors whitespace-nowrap shrink-0 border-b-2 ${
+              className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all duration-150 whitespace-nowrap shrink-0 cursor-pointer ${
                 isActive
-                  ? 'border-amber-600 text-amber-700 bg-amber-50/50'
-                  : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-100/60'
+                  ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white font-extrabold shadow-md shadow-orange-950/40 ring-2 ring-amber-300/30 border border-amber-300'
+                  : 'bg-slate-900/90 hover:bg-slate-850 text-slate-200 hover:text-white border border-slate-800 hover:border-slate-700'
               }`}
             >
-              <Icon className="w-3.5 h-3.5" />
-              <span>{tab.label}</span>
+              <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+              <div className="flex flex-col text-left">
+                <span className="tracking-tight text-xs leading-tight font-extrabold">{tab.label}</span>
+                <span className={`text-[10px] leading-tight font-normal ${isActive ? 'text-amber-100 opacity-90' : 'text-slate-400'}`}>
+                  {tab.hindi}
+                </span>
+              </div>
+              {tab.badge !== undefined && tab.badge > 0 && (
+                <span
+                  className={`ml-1 text-[11px] font-black px-2 py-0.5 rounded-full shadow-xs ${
+                    isActive
+                      ? 'bg-white text-orange-950'
+                      : tab.badgeType === 'danger'
+                      ? 'bg-rose-500 text-white animate-pulse'
+                      : 'bg-slate-800 text-amber-300 border border-slate-700'
+                  }`}
+                >
+                  {tab.badge}
+                </span>
+              )}
             </button>
           );
         })}
@@ -755,59 +862,152 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
       )}
 
       {/* TAB 4: OFFICIAL NOTICES & WARNINGS */}
+      {/* TAB 4: OFFICIAL NOTICES & WARNINGS - HINDI & BILINGUAL */}
       {activeTab === 'warnings' && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-5 space-y-4 text-xs">
-          <div>
-            <h3 className="font-bold text-sm text-slate-900">Official Notices &amp; Warnings</h3>
-            <p className="text-slate-500 text-xs">
-              Notifications issued by your Training Officer regarding attendance compliance and workshop directives.
-            </p>
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 bg-rose-100 text-rose-800 rounded-lg">
+                  <AlertTriangle className="w-5 h-5" />
+                </span>
+                <div>
+                  <h3 className="font-bold text-sm text-slate-900">
+                    शासकीय चेतावनी सूचना पत्रक · Official Notices &amp; Directives
+                  </h3>
+                  <p className="text-slate-500 text-xs">
+                    न्यूनतम 80% अनिवार्य उपस्थिति अनुपालन एवं कार्यशाला निर्देशों संबंधी आधिकारिक शासकीय सूचनाएं।
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Language filter for notices */}
+            <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs font-semibold">
+              <span className="text-[11px] text-slate-500 px-2 font-medium">भाषा:</span>
+              {(['bilingual', 'hindi', 'english'] as const).map((lang) => (
+                <button
+                  key={lang}
+                  onClick={() => setNoticeLanguage(lang)}
+                  className={`px-2.5 py-1 rounded-md transition-all text-xs cursor-pointer ${
+                    noticeLanguage === lang
+                      ? 'bg-white text-slate-900 font-bold shadow-xs border border-slate-200'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {lang === 'bilingual' ? 'द्विभाषी (Bilingual)' : lang === 'hindi' ? 'हिन्दी (Hindi)' : 'English'}
+                </button>
+              ))}
+            </div>
           </div>
 
           {warningsList.length === 0 ? (
-            <div className="p-8 text-center text-slate-500">
-              No disciplinary or attendance warning notices on your record.
+            <div className="p-8 text-center text-slate-500 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+              <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
+              <p className="font-semibold text-slate-800">कोई चेतावनी या अनुशासनात्मक सूचना नहीं है।</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                No disciplinary or attendance warning notices on your record. Attendance is regular.
+              </p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-4">
               {warningsList.map((w) => (
-                <div key={w.id} className="p-4 rounded-xl border border-rose-200 bg-rose-50/40 space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-rose-200/80 pb-2">
+                <div key={w.id} className="p-4 sm:p-5 rounded-2xl border-2 border-rose-200 bg-rose-50/40 space-y-3.5 shadow-xs">
+                  {/* Notice Title Header */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-rose-200 pb-3">
                     <div className="flex items-center gap-2">
-                      <AlertTriangle className="w-4 h-4 text-rose-600" />
-                      <span className="font-mono font-bold text-rose-900">{w.refNumber}</span>
+                      <span className="px-2.5 py-1 rounded bg-rose-700 text-white font-mono font-bold text-xs shadow-xs">
+                        {w.refNumber}
+                      </span>
+                      <span className="text-slate-500 text-xs font-medium hidden sm:inline">
+                        शासकीय औद्योगिक प्रशिक्षण संस्था, रायगढ़ (छ.ग.)
+                      </span>
                     </div>
+
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-slate-500 text-[11px]">Date: {w.issuedDate}</span>
+                      <span className="font-mono text-slate-500 text-[11px] bg-white px-2 py-0.5 rounded border border-rose-100">
+                        दिनांक: {w.issuedDate}
+                      </span>
                       <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
                           w.status === 'acknowledged'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : 'bg-rose-100 text-rose-800'
+                            ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                            : 'bg-rose-100 text-rose-800 border-rose-300 animate-pulse'
                         }`}
                       >
-                        {w.status.toUpperCase()}
+                        {w.status === 'acknowledged' ? 'पावती स्वीकृत (ACKNOWLEDGED)' : 'पावती लंबित (ACTION REQUIRED)'}
                       </span>
                     </div>
                   </div>
 
-                  <div className="font-semibold text-slate-900">{w.subject}</div>
-                  <p className="p-3 bg-white rounded border border-rose-100 text-slate-700 leading-relaxed text-[11px]">
-                    {w.message}
-                  </p>
+                  {/* Hindi Notice Directive Block */}
+                  {(noticeLanguage === 'hindi' || noticeLanguage === 'bilingual') && (
+                    <div className="p-4 bg-amber-50/80 border-2 border-amber-300/80 rounded-xl space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] font-black uppercase tracking-wider bg-amber-300 text-amber-950 px-2 py-0.5 rounded">
+                          शासकीय हिन्दी चेतावनी आदेश
+                        </span>
+                        <span className="text-[11px] font-mono font-bold text-rose-800 bg-rose-100 px-2 py-0.5 rounded">
+                          दर्ज उपस्थिति: {w.attendancePercent}% (न्यूनतम आवश्यक: 80%)
+                        </span>
+                      </div>
 
-                  <div className="flex items-center justify-between pt-1">
-                    <div className="text-[11px] text-slate-500">
-                      Officer: {w.officerName} · Recorded Deficit: <span className="font-mono font-bold text-rose-700">{w.attendancePercent}%</span>
+                      <div className="font-extrabold text-slate-900 text-xs sm:text-sm">
+                        विषय: {w.subjectHindi || 'न्यून उपस्थिति (80% से कम) संबंधी औपचारिक चेतावनी'}
+                      </div>
+
+                      <p className="text-slate-800 text-xs leading-relaxed whitespace-pre-line font-medium pt-1">
+                        {w.messageHindi || w.message}
+                      </p>
+
+                      <div className="p-2.5 bg-amber-100/70 border border-amber-300/60 rounded-lg text-[11px] text-amber-950 flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 text-amber-800 shrink-0 mt-0.5" />
+                        <div>
+                          <strong>महत्वपूर्ण निर्देश:</strong> DGT/NCVT नियमों के तहत परीक्षा में शामिल होने हेतु कम से कम 80% उपस्थिति अनिवार्य है। कृपया कार्यशाला में नियमित रूप से उपस्थित होकर अपनी उपस्थिति में तत्काल सुधार करें तथा अपने प्रशिक्षण अधिकारी ({w.officerName}) से संपर्क करें।
+                        </div>
+                      </div>
                     </div>
-                    {w.status === 'issued' && (
+                  )}
+
+                  {/* English Notice Directive Block */}
+                  {(noticeLanguage === 'english' || noticeLanguage === 'bilingual') && (
+                    <div className="p-3.5 bg-white border border-rose-200 rounded-xl space-y-1.5">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                        Official English Directive (DGT Regulation)
+                      </div>
+                      <div className="font-bold text-slate-900 text-xs">{w.subject}</div>
+                      <p className="text-slate-700 leading-relaxed text-[11px] whitespace-pre-line">
+                        {w.message}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Footer & Actions */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-rose-200/60 text-[11px]">
+                    <div className="text-slate-600">
+                      जारीकर्ता: <strong className="text-slate-800">{w.officerName}</strong> (प्रशिक्षण अधिकारी, ITI रायगढ़)
+                    </div>
+
+                    <div className="flex items-center gap-2">
                       <button
-                        onClick={() => handleAcknowledgeWarning(w.id)}
-                        className="px-3 py-1 bg-rose-700 hover:bg-rose-800 text-white rounded text-[11px] font-medium"
+                        onClick={() => setViewOrderNotice(w)}
+                        className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                        title="View and print official government letterhead notice"
                       >
-                        Acknowledge Receipt
+                        <Printer className="w-3.5 h-3.5 text-amber-400" />
+                        <span>शासकीय आदेश पत्रक देखें (View Letter)</span>
                       </button>
-                    )}
+
+                      {w.status === 'issued' && (
+                        <button
+                          onClick={() => handleAcknowledgeWarning(w.id)}
+                          className="px-3.5 py-1.5 bg-rose-700 hover:bg-rose-800 text-white rounded-lg font-bold text-xs shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>पावती स्वीकार करें (Acknowledge Receipt)</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -947,6 +1147,212 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
                   className="flex-1 py-2 px-3 bg-amber-600 hover:bg-amber-700 text-white rounded font-medium"
                 >
                   Submit Application
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: VIEW OFFICIAL LETTER ORDER (TRAINEE VIEW) */}
+      {viewOrderNotice && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-300 max-w-2xl w-full p-6 sm:p-8 text-xs text-slate-900 max-h-[92vh] overflow-y-auto">
+            {/* Top Bar */}
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3 mb-5 print:hidden">
+              <span className="text-xs font-bold text-slate-700">
+                शासकीय आदेश पत्रक (Official Notice Letter)
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => window.print()}
+                  className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold text-xs flex items-center gap-1.5 shadow-sm"
+                >
+                  <Printer className="w-4 h-4 text-amber-400" />
+                  <span>प्रिंट करें (Print)</span>
+                </button>
+                <button
+                  onClick={() => setViewOrderNotice(null)}
+                  className="p-1.5 text-slate-500 hover:text-slate-800 rounded-lg hover:bg-slate-100"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Official Letterhead Body */}
+            <div className="p-6 border-2 border-slate-300 bg-white rounded-xl space-y-4">
+              <div className="text-center border-b-2 border-slate-900 pb-3">
+                <div className="w-12 h-12 mx-auto mb-1">
+                  <img
+                    src="/assets/aistudio/iti-logo_b32addc6.png"
+                    alt="Govt ITI Emblem"
+                    className="w-full h-full object-contain mx-auto"
+                  />
+                </div>
+                <h2 className="text-base font-extrabold text-slate-900 leading-tight">
+                  शासकीय औद्योगिक प्रशिक्षण संस्था, रायगढ़ (छत्तीसगढ़)
+                </h2>
+                <h3 className="text-xs font-bold text-slate-700 leading-tight">
+                  GOVERNMENT INDUSTRIAL TRAINING INSTITUTE, RAIGARH (C.G.)
+                </h3>
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  रोजगार एवं प्रशिक्षण संचालनालय, छत्तीसगढ़ शासन · संबद्धता: DGT / NCVT (Code: ITI-RAI-CG-04)
+                </p>
+                <p className="text-[10px] text-slate-500">
+                  चक्रधर नगर, औद्योगिक क्षेत्र, बोईरदादर, रायगढ़ (छ.ग.)
+                </p>
+              </div>
+
+              <div className="flex justify-between items-center text-[11px] font-mono border-b border-slate-200 pb-2">
+                <div>
+                  <strong>क्रमांक:</strong> {viewOrderNotice.refNumber}
+                </div>
+                <div>
+                  <strong>दिनांक:</strong> {viewOrderNotice.issuedDate}
+                </div>
+              </div>
+
+              <div className="text-[11px] space-y-0.5">
+                <div><strong>प्रति (To),</strong></div>
+                <div className="pl-4">
+                  <div><strong>प्रशिक्षु:</strong> {viewOrderNotice.traineeName} ({viewOrderNotice.rollNo})</div>
+                  <div><strong>ट्रेड:</strong> {viewOrderNotice.tradeName || trainee.tradeName || 'Electrician'}</div>
+                  <div><strong>संस्था:</strong> शासकीय आईटीआई रायगढ़ (छ.ग.)</div>
+                </div>
+              </div>
+
+              <div className="p-2.5 bg-amber-50 rounded border border-amber-200 text-[11px] font-bold">
+                <div>विषय: {viewOrderNotice.subjectHindi || viewOrderNotice.subject}</div>
+                <div className="text-[10px] text-slate-600 font-normal mt-0.5">
+                  Sub: {viewOrderNotice.subject}
+                </div>
+              </div>
+
+              <div className="text-xs leading-relaxed space-y-2 text-justify">
+                <p className="font-medium text-slate-900">
+                  उपरोक्त विषयान्तर्गत लेख है कि सत्र 2025-2026 के अंतर्गत आपकी अब तक की कुल उपस्थिति{' '}
+                  <strong className="text-rose-700 font-mono underline">{viewOrderNotice.attendancePercent}%</strong> दर्ज की गई है, जो कि DGT / NCVT के न्यूनतम अनिवार्य मानक <strong className="underline">80%</strong> से अत्यंत कम है।
+                </p>
+
+                <p className="text-slate-800 bg-slate-50 p-3 rounded border border-slate-200">
+                  {viewOrderNotice.messageHindi || viewOrderNotice.message}
+                </p>
+
+                <div className="p-2.5 bg-slate-50 rounded border border-slate-200 text-[11px] text-slate-600 italic">
+                  <strong>English Directive:</strong> {viewOrderNotice.message}
+                </div>
+              </div>
+
+              <div className="pt-6 flex justify-between items-end text-[11px]">
+                <div className="text-left space-y-1">
+                  <div className="text-[10px] text-slate-500 font-mono">
+                    पावती स्थिति: <strong>{viewOrderNotice.status.toUpperCase()}</strong>
+                  </div>
+                  <div className="text-[10px] text-slate-500">
+                    डिजिटल सत्यापन कोड: <span className="font-mono">ITI-RAI-CG-ATT-VERIFIED</span>
+                  </div>
+                </div>
+
+                <div className="text-center space-y-1">
+                  <div className="h-10 flex items-center justify-center font-serif italic text-slate-400 text-xs">
+                    (हस्ताक्षरित)
+                  </div>
+                  <div className="font-extrabold text-slate-900">{viewOrderNotice.officerName}</div>
+                  <div className="text-slate-600 font-medium">प्रशिक्षण अधिकारी (Training Officer)</div>
+                  <div className="text-[10px] text-slate-500">शासकीय औद्योगिक प्रशिक्षण संस्था, रायगढ़</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* MODAL: TRAINEE CONTACT & EMAIL EDIT */}
+      {profileModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full p-6 text-xs text-slate-800 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-amber-100 text-amber-800 rounded-lg">
+                  <Mail className="w-4 h-4 text-amber-700" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-slate-900">
+                    Edit Trainee Email &amp; Contact
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    प्रशिक्षु संपर्क विवरण एवं ईमेल पता संपादित करें
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setProfileModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveProfile} className="space-y-3.5">
+              <div>
+                <label className="block font-semibold mb-1 text-slate-700">Trainee Name</label>
+                <input
+                  type="text"
+                  value={trainee.name}
+                  disabled
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-100 text-slate-500 cursor-not-allowed font-medium text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-1 text-slate-700">Student Email Address (ईमेल पता)</label>
+                <input
+                  type="email"
+                  value={profileForm.email}
+                  onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
+                  placeholder="student@student.iti.cg.in"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-xs focus:ring-2 focus:ring-amber-500"
+                  required
+                />
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Used for signing into your trainee dashboard and for password recovery tokens.
+                </p>
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-1 text-slate-700">Mobile Phone Number (मोबाइल नंबर)</label>
+                <input
+                  type="text"
+                  value={profileForm.mobile}
+                  onChange={(e) => setProfileForm({ ...profileForm, mobile: e.target.value })}
+                  placeholder="+91 98260 00000"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-xs"
+                  required
+                />
+              </div>
+
+              <div className="pt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setProfileModalOpen(false)}
+                  className="flex-1 py-2 px-3 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-100 font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingProfile}
+                  className="flex-1 py-2 px-3 bg-amber-600 hover:bg-amber-700 disabled:bg-amber-300 text-white font-semibold rounded-lg shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  {savingProfile ? (
+                    <span>Saving...</span>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>Save Changes (सहेजें)</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

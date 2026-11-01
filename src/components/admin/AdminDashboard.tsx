@@ -1,15 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import {
   Calendar,
+  CalendarDays,
   Layers,
   Users,
   Settings,
+  Shield,
   ShieldAlert,
   Plus,
   Edit2,
   Trash2,
   KeyRound,
   Check,
+  CheckCircle2,
   X,
   MapPin,
   Clock,
@@ -18,6 +21,10 @@ import {
   AlertCircle,
   Building,
   RefreshCw,
+  Sparkles,
+  Save,
+  Star,
+  StarOff,
 } from 'lucide-react';
 import {
   AcademicSession,
@@ -32,8 +39,11 @@ import {
   createSession,
   updateSession,
   deleteSession,
+  setDefaultSession,
   fetchMonthlyWorkingDays,
   saveMonthlyWorkingDay,
+  saveBulkMonthlyWorkingDays,
+  deleteMonthlyWorkingDay,
   fetchTrades,
   createTrade,
   updateTrade,
@@ -80,6 +90,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
 
   // Selected session for monthly working days
   const [selectedSessionId, setSelectedSessionId] = useState(settings.currentSessionId || '');
+  const [editableMonthlyDays, setEditableMonthlyDays] = useState<MonthlyWorkingDay[]>([]);
+  const [savingWorkingDays, setSavingWorkingDays] = useState(false);
+  const [showAddMonthRow, setShowAddMonthRow] = useState(false);
+  const [newMonthForm, setNewMonthForm] = useState({
+    month: '',
+    workingDays: 22,
+    holidays: 8,
+    totalDays: 30,
+    remarks: '',
+  });
 
   // Form states
   const [sessionForm, setSessionForm] = useState({
@@ -87,7 +107,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
     startDate: '',
     endDate: '',
     totalWorkingDays: 240,
-    status: 'upcoming' as 'active' | 'upcoming' | 'completed',
+    status: 'active' as 'active' | 'upcoming' | 'completed',
+    setAsDefault: false,
   });
 
   const [tradeForm, setTradeForm] = useState({
@@ -150,9 +171,80 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
 
   useEffect(() => {
     if (selectedSessionId) {
-      fetchMonthlyWorkingDays(selectedSessionId).then(setMonthlyDays);
+      fetchMonthlyWorkingDays(selectedSessionId).then((days) => {
+        setMonthlyDays(days);
+        setEditableMonthlyDays(days);
+      });
+    } else {
+      setMonthlyDays([]);
+      setEditableMonthlyDays([]);
     }
   }, [selectedSessionId]);
+
+  // Helper to generate 12 monthly slots based on session dates
+  const generateMonthsForSession = (session: AcademicSession): MonthlyWorkingDay[] => {
+    let monthsList: string[] = [];
+
+    if (session.startDate && session.endDate) {
+      const start = new Date(session.startDate);
+      const end = new Date(session.endDate);
+      if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+        let current = new Date(start.getFullYear(), start.getMonth(), 1);
+        const endMonth = new Date(end.getFullYear(), end.getMonth(), 1);
+        while (current <= endMonth) {
+          const y = current.getFullYear();
+          const m = String(current.getMonth() + 1).padStart(2, '0');
+          monthsList.push(`${y}-${m}`);
+          current.setMonth(current.getMonth() + 1);
+        }
+      }
+    }
+
+    if (monthsList.length === 0) {
+      const match = session.name.match(/(\d{4})/);
+      const startYear = match ? parseInt(match[1]) : new Date().getFullYear();
+      for (let i = 8; i <= 12; i++) {
+        monthsList.push(`${startYear}-${String(i).padStart(2, '0')}`);
+      }
+      for (let i = 1; i <= 7; i++) {
+        monthsList.push(`${startYear + 1}-${String(i).padStart(2, '0')}`);
+      }
+    }
+
+    const defaultRemarks: Record<string, string> = {
+      '01': 'Republic Day, Cherchera Festival',
+      '02': 'Maha Shivratri, Mid-term Evaluation',
+      '03': 'Holi Festival Break',
+      '04': 'Ambedkar Jayanti, Ram Navami',
+      '05': 'Trade Practical Assessments & Training',
+      '06': 'Workshop Practice Sessions',
+      '07': 'AITT Annual Exam Preparation',
+      '08': 'Independence Day, Session Commencement',
+      '09': 'Vishwakarma Puja, Ganesh Chaturthi',
+      '10': 'Gandhi Jayanti, Dussehra, Diwali Break',
+      '11': 'CG State Foundation Day, Guru Nanak Jayanti',
+      '12': 'Guru Ghasidas Jayanti, Winter Break',
+    };
+
+    return monthsList.map((mStr, index) => {
+      const [yearStr, monthStr] = mStr.split('-');
+      const y = parseInt(yearStr);
+      const m = parseInt(monthStr);
+      const totalDays = new Date(y, m, 0).getDate();
+      const holidays = m === 10 ? 10 : m === 8 ? 8 : m === 1 ? 8 : 7;
+      const workingDays = totalDays - holidays;
+
+      return {
+        id: `temp_${Date.now()}_${index}`,
+        sessionId: session.id,
+        month: mStr,
+        totalDays,
+        workingDays,
+        holidays,
+        remarks: defaultRemarks[monthStr] || 'Regular trade training and workshop practicals',
+      };
+    });
+  };
 
   // Session Handlers
   const handleOpenSessionModal = (session?: AcademicSession) => {
@@ -164,30 +256,88 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
         endDate: session.endDate,
         totalWorkingDays: session.totalWorkingDays,
         status: session.status,
+        setAsDefault: session.id === settings.currentSessionId,
       });
     } else {
       setEditingSession(null);
+      // Cleared default fields for new session
       setSessionForm({
-        name: `Session ${new Date().getFullYear()}-${new Date().getFullYear() + 1}`,
-        startDate: `${new Date().getFullYear()}-08-01`,
-        endDate: `${new Date().getFullYear() + 1}-07-31`,
+        name: '',
+        startDate: '',
+        endDate: '',
         totalWorkingDays: 240,
-        status: 'upcoming',
+        status: 'active',
+        setAsDefault: false,
       });
     }
     setSessionModalOpen(true);
   };
 
+  const handleSetDefaultSession = async (sessionId: string) => {
+    try {
+      await setDefaultSession(sessionId);
+      const updatedSettings = { ...settings, currentSessionId: sessionId };
+      onSettingsUpdate(updatedSettings);
+      setSettingsForm(updatedSettings);
+      showToast(sessionId ? 'Default active session updated successfully' : 'Default active session cleared');
+      reloadData();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleClearDefaultSession = async () => {
+    try {
+      await setDefaultSession('');
+      const updatedSettings = { ...settings, currentSessionId: '' };
+      onSettingsUpdate(updatedSettings);
+      setSettingsForm(updatedSettings);
+      showToast('Default active session cleared successfully');
+      reloadData();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
   const handleSaveSession = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      let savedSessionId = '';
       if (editingSession) {
-        await updateSession(editingSession.id, sessionForm);
+        await updateSession(editingSession.id, {
+          name: sessionForm.name,
+          startDate: sessionForm.startDate,
+          endDate: sessionForm.endDate,
+          totalWorkingDays: Number(sessionForm.totalWorkingDays) || 240,
+          status: sessionForm.status,
+        });
+        savedSessionId = editingSession.id;
         showToast('Academic Session updated successfully');
       } else {
-        await createSession(sessionForm);
+        const res = await createSession({
+          name: sessionForm.name,
+          startDate: sessionForm.startDate,
+          endDate: sessionForm.endDate,
+          totalWorkingDays: Number(sessionForm.totalWorkingDays) || 240,
+          status: sessionForm.status,
+        });
+        savedSessionId = res.session?.id || '';
         showToast('New Academic Session created successfully');
       }
+
+      if (sessionForm.setAsDefault && savedSessionId) {
+        await setDefaultSession(savedSessionId);
+        const updated = { ...settings, currentSessionId: savedSessionId };
+        onSettingsUpdate(updated);
+        setSettingsForm(updated);
+        setSelectedSessionId(savedSessionId);
+      } else if (!sessionForm.setAsDefault && editingSession && editingSession.id === settings.currentSessionId) {
+        await setDefaultSession('');
+        const updated = { ...settings, currentSessionId: '' };
+        onSettingsUpdate(updated);
+        setSettingsForm(updated);
+      }
+
       setSessionModalOpen(false);
       reloadData();
     } catch (err: any) {
@@ -273,7 +423,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
         email: officer.email,
         mobile: officer.mobile,
         employeeId: officer.employeeId,
-        assignedTradeIds: officer.assignedTradeIds,
+        assignedTradeIds: Array.isArray(officer.assignedTradeIds) ? officer.assignedTradeIds : [],
         designation: officer.designation,
         qualification: officer.qualification,
         status: officer.status,
@@ -299,11 +449,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
   const handleSaveOfficer = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const payload = {
+        ...officerForm,
+        assignedTradeIds: Array.isArray(officerForm.assignedTradeIds) ? officerForm.assignedTradeIds : [],
+      };
       if (editingOfficer) {
-        await updateOfficer(editingOfficer.id, officerForm);
-        showToast(`Officer ${officerForm.name} updated successfully`);
+        await updateOfficer(editingOfficer.id, payload);
+        showToast(`Officer ${officerForm.name} updated successfully (${payload.assignedTradeIds.length} trade(s) assigned)`);
       } else {
-        await createOfficer(officerForm);
+        await createOfficer(payload);
         showToast(`Officer account created for ${officerForm.name}`);
       }
       setOfficerModalOpen(false);
@@ -353,7 +507,94 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
     }
   };
 
-  // Working Days save
+  // Working Days Handlers
+  const handleGenerateMonths = () => {
+    const session = sessions.find((s) => s.id === selectedSessionId);
+    if (!session) {
+      alert('Please select a valid academic session.');
+      return;
+    }
+    const generated = generateMonthsForSession(session);
+    setEditableMonthlyDays(generated);
+    showToast(`Generated 12 monthly slots for ${session.name}. Review below and click "Save Monthly Working Days"!`);
+  };
+
+  const handleSaveBulkMonthlyDays = async () => {
+    if (!selectedSessionId) {
+      alert('Please select an Academic Session first.');
+      return;
+    }
+    if (editableMonthlyDays.length === 0) {
+      alert('No monthly records to save. Click "Auto-Generate 12 Months" or "+ Add Month".');
+      return;
+    }
+    setSavingWorkingDays(true);
+    try {
+      await saveBulkMonthlyWorkingDays(selectedSessionId, editableMonthlyDays);
+      const session = sessions.find((s) => s.id === selectedSessionId);
+      showToast(`Saved ${editableMonthlyDays.length} months for ${session?.name || 'session'} successfully!`);
+      const updated = await fetchMonthlyWorkingDays(selectedSessionId);
+      setMonthlyDays(updated);
+      setEditableMonthlyDays(updated);
+      reloadData();
+    } catch (err: any) {
+      alert(err.message || 'Failed to save monthly working days');
+    } finally {
+      setSavingWorkingDays(false);
+    }
+  };
+
+  const handleAddCustomMonth = () => {
+    if (!newMonthForm.month) {
+      alert('Please select a valid Month (YYYY-MM).');
+      return;
+    }
+    if (editableMonthlyDays.some((m) => m.month === newMonthForm.month)) {
+      alert(`Month ${newMonthForm.month} is already in the list for this session.`);
+      return;
+    }
+    const [yStr, mStr] = newMonthForm.month.split('-');
+    const totalDays = new Date(parseInt(yStr), parseInt(mStr), 0).getDate();
+    const newEntry: MonthlyWorkingDay = {
+      id: `temp_${Date.now()}`,
+      sessionId: selectedSessionId,
+      month: newMonthForm.month,
+      totalDays,
+      workingDays: Number(newMonthForm.workingDays) || 22,
+      holidays: Number(newMonthForm.holidays) || 8,
+      remarks: newMonthForm.remarks || '',
+    };
+
+    const updated = [...editableMonthlyDays, newEntry].sort((a, b) => a.month.localeCompare(b.month));
+    setEditableMonthlyDays(updated);
+    setShowAddMonthRow(false);
+    setNewMonthForm({ month: '', workingDays: 22, holidays: 8, totalDays: 30, remarks: '' });
+    showToast(`Added ${newEntry.month}. Click "Save Monthly Working Days" to persist.`);
+  };
+
+  const handleDeleteMonthEntry = async (item: MonthlyWorkingDay, idx: number) => {
+    const updated = editableMonthlyDays.filter((_, i) => i !== idx);
+    setEditableMonthlyDays(updated);
+    if (item.id && !item.id.startsWith('temp_')) {
+      try {
+        await deleteMonthlyWorkingDay(item.id);
+        showToast(`Deleted ${item.month} from database`);
+        const latest = await fetchMonthlyWorkingDays(selectedSessionId);
+        setMonthlyDays(latest);
+      } catch (err: any) {
+        console.error(err);
+      }
+    }
+  };
+
+  const handleUpdateMonthField = (index: number, field: keyof MonthlyWorkingDay, val: any) => {
+    setEditableMonthlyDays((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], [field]: val };
+      return next;
+    });
+  };
+
   const handleSaveMonthDay = async (month: string, days: number, holidays: number, remarks: string) => {
     try {
       await saveMonthlyWorkingDay({
@@ -366,6 +607,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
       showToast(`Updated working days for ${month}`);
       const updated = await fetchMonthlyWorkingDays(selectedSessionId);
       setMonthlyDays(updated);
+      setEditableMonthlyDays(updated);
     } catch (err: any) {
       alert(err.message);
     }
@@ -440,16 +682,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
         </div>
       </div>
 
-      {/* Admin Tab Navigation Bar */}
-      <div className="flex items-center gap-1 overflow-x-auto pb-1 border-b border-slate-200 text-xs">
+      {/* Admin Tab Navigation Bar - High-Contrast Bold Modern Menu Bar */}
+      <div className="bg-slate-950 p-2 rounded-2xl shadow-lg border border-slate-800 ring-1 ring-slate-800/80 flex items-center gap-2 overflow-x-auto scrollbar-none">
         {[
-          { id: 'overview', label: 'System Overview', icon: Building },
-          { id: 'sessions', label: 'Academic Sessions', icon: Calendar },
-          { id: 'working_days', label: 'Monthly Working Days', icon: FileText },
-          { id: 'trades', label: 'Trade Management', icon: Layers },
-          { id: 'officers', label: 'Training Officers & Accounts', icon: Users },
-          { id: 'rules', label: 'Campus Geofence & Rules', icon: Settings },
-          { id: 'audit', label: 'Audit Trail', icon: ShieldAlert },
+          { id: 'overview', label: 'System Overview', hindi: 'सिस्टम विवरण', icon: Building },
+          { id: 'sessions', label: 'Academic Sessions', hindi: 'शैक्षणिक सत्र', icon: Calendar },
+          { id: 'working_days', label: 'Monthly Working Days', hindi: 'मासिक कार्य दिवस', icon: FileText },
+          { id: 'trades', label: 'Trade Management', hindi: 'ट्रेड प्रबंधन', icon: Layers },
+          { id: 'officers', label: 'Training Officers & Accounts', hindi: 'प्रशिक्षण अधिकारी व खाते', icon: Users },
+          { id: 'rules', label: 'Campus Geofence & Rules', hindi: 'जियोफेंस एवं नियम', icon: Settings },
+          { id: 'audit', label: 'Audit Trail', hindi: 'ऑडिट ट्रेल', icon: ShieldAlert },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -457,14 +699,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as AdminTab)}
-              className={`flex items-center gap-2 px-3.5 py-2 font-medium rounded-t-lg transition-colors whitespace-nowrap shrink-0 border-b-2 ${
+              className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all duration-150 whitespace-nowrap shrink-0 cursor-pointer ${
                 isActive
-                  ? 'border-blue-600 text-blue-700 bg-blue-50/50'
-                  : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-100/60'
+                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-extrabold shadow-md shadow-blue-950/40 ring-2 ring-blue-300/30 border border-blue-400'
+                  : 'bg-slate-900/90 hover:bg-slate-850 text-slate-200 hover:text-white border border-slate-800 hover:border-slate-700'
               }`}
             >
-              <Icon className="w-3.5 h-3.5" />
-              <span>{tab.label}</span>
+              <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+              <div className="flex flex-col text-left">
+                <span className="tracking-tight text-xs leading-tight font-extrabold">{tab.label}</span>
+                <span className={`text-[10px] leading-tight font-normal ${isActive ? 'text-blue-100 opacity-90' : 'text-slate-400'}`}>
+                  {tab.hindi}
+                </span>
+              </div>
             </button>
           );
         })}
@@ -578,13 +825,51 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
                 Configure academic batches, session duration, and minimum scheduled working days.
               </p>
             </div>
-            <button
-              onClick={() => handleOpenSessionModal()}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-blue-700 hover:bg-blue-800 rounded-lg transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Create New Session</span>
-            </button>
+            <div className="flex items-center gap-2">
+              {settings.currentSessionId && (
+                <button
+                  type="button"
+                  onClick={handleClearDefaultSession}
+                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors"
+                  title="Clear the current default session"
+                >
+                  <StarOff className="w-3.5 h-3.5" />
+                  <span>Clear Default Session</span>
+                </button>
+              )}
+              <button
+                onClick={() => handleOpenSessionModal()}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-blue-700 hover:bg-blue-800 rounded-lg transition-colors shadow-xs"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Create New Session</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Active Default Session Status Strip */}
+          <div className="bg-slate-50 border-b border-slate-200 px-5 py-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="text-slate-600 font-medium">Institute Active Default Session:</span>
+              {settings.currentSessionId ? (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded font-semibold text-emerald-800 bg-emerald-100 border border-emerald-300">
+                  <Star className="w-3.5 h-3.5 fill-emerald-500 text-emerald-600" />
+                  {sessions.find((s) => s.id === settings.currentSessionId)?.name || settings.currentSessionId} (Active Default)
+                </span>
+              ) : (
+                <span className="text-slate-500 italic bg-slate-200/80 px-2 py-0.5 rounded text-[11px]">
+                  None (Default Cleared)
+                </span>
+              )}
+            </div>
+            {settings.currentSessionId && (
+              <button
+                onClick={handleClearDefaultSession}
+                className="text-slate-500 hover:text-rose-600 text-[11px] underline font-medium"
+              >
+                Clear Default
+              </button>
+            )}
           </div>
 
           <div className="overflow-x-auto">
@@ -596,58 +881,100 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
                   <th className="py-3 px-4 font-semibold">End Date</th>
                   <th className="py-3 px-4 font-semibold text-right">Scheduled Working Days</th>
                   <th className="py-3 px-4 font-semibold text-center">Status</th>
+                  <th className="py-3 px-4 font-semibold text-center">Default Active</th>
                   <th className="py-3 px-4 font-semibold text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {sessions.map((sess) => (
-                  <tr key={sess.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-3 px-4 font-semibold text-slate-900">
-                      {sess.name}
-                      {sess.id === settings.currentSessionId && (
-                        <span className="ml-2 text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-mono font-medium">
-                          DEFAULT ACTIVE
+                {sessions.map((sess) => {
+                  const isDefault = sess.id === settings.currentSessionId;
+                  return (
+                    <tr key={sess.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-3 px-4 font-semibold text-slate-900">
+                        {sess.name}
+                        {isDefault && (
+                          <span className="ml-2 text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-mono font-medium">
+                            DEFAULT
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 font-mono text-slate-600">{sess.startDate || '—'}</td>
+                      <td className="py-3 px-4 font-mono text-slate-600">{sess.endDate || '—'}</td>
+                      <td className="py-3 px-4 font-mono text-right font-medium text-slate-800">
+                        {sess.totalWorkingDays} Days
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <span
+                          className={`inline-block px-2 py-0.5 text-[10px] font-semibold rounded ${
+                            sess.status === 'active'
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                              : sess.status === 'upcoming'
+                              ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                              : 'bg-slate-100 text-slate-600 border border-slate-200'
+                          }`}
+                        >
+                          {sess.status.toUpperCase()}
                         </span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 font-mono text-slate-600">{sess.startDate}</td>
-                    <td className="py-3 px-4 font-mono text-slate-600">{sess.endDate}</td>
-                    <td className="py-3 px-4 font-mono text-right font-medium text-slate-800">
-                      {sess.totalWorkingDays} Days
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <span
-                        className={`inline-block px-2 py-0.5 text-[10px] font-semibold rounded ${
-                          sess.status === 'active'
-                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                            : sess.status === 'upcoming'
-                            ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                            : 'bg-slate-100 text-slate-600 border border-slate-200'
-                        }`}
-                      >
-                        {sess.status.toUpperCase()}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => handleOpenSessionModal(sess)}
-                          className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded"
-                          title="Edit Session"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteSession(sess.id)}
-                          className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded"
-                          title="Delete Session"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        {isDefault ? (
+                          <div className="inline-flex items-center gap-1.5">
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded">
+                              <Star className="w-3 h-3 fill-amber-500 text-amber-600" />
+                              ACTIVE DEFAULT
+                            </span>
+                            <button
+                              type="button"
+                              onClick={handleClearDefaultSession}
+                              className="text-[10px] text-slate-400 hover:text-rose-600 underline"
+                              title="Clear default session"
+                            >
+                              Clear
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleSetDefaultSession(sess.id)}
+                            className="text-[10px] text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2 py-0.5 rounded font-medium inline-flex items-center gap-1"
+                          >
+                            <Star className="w-3 h-3 text-blue-500" />
+                            <span>Set as Default</span>
+                          </button>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => {
+                              setSelectedSessionId(sess.id);
+                              setActiveTab('working_days');
+                            }}
+                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded flex items-center gap-1 text-[11px] font-medium"
+                            title="Configure Monthly Working Days"
+                          >
+                            <CalendarDays className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Days</span>
+                          </button>
+                          <button
+                            onClick={() => handleOpenSessionModal(sess)}
+                            className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded"
+                            title="Edit Session"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteSession(sess.id)}
+                            className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded"
+                            title="Delete Session"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -655,75 +982,388 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
       )}
 
       {/* TAB 3: MONTHLY WORKING DAYS */}
-      {activeTab === 'working_days' && (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-5 space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-4">
-            <div>
-              <h3 className="font-bold text-sm text-slate-900">Monthly Working Days Configuration</h3>
-              <p className="text-xs text-slate-500">
-                Define exact working days, holidays, and practical sessions per calendar month.
-              </p>
-            </div>
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-slate-600 font-medium">Academic Session:</span>
-              <select
-                value={selectedSessionId}
-                onChange={(e) => setSelectedSessionId(e.target.value)}
-                className="px-2.5 py-1.5 border border-slate-300 rounded-lg text-slate-800 bg-white"
-              >
-                {sessions.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} ({s.status})
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
+      {activeTab === 'working_days' && (() => {
+        const currentSession = sessions.find((s) => s.id === selectedSessionId);
+        const totalWorkingDaysSum = editableMonthlyDays.reduce(
+          (sum, m) => sum + (Number(m.workingDays) || 0),
+          0
+        );
+        const totalHolidaysSum = editableMonthlyDays.reduce(
+          (sum, m) => sum + (Number(m.holidays) || 0),
+          0
+        );
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
-            {monthlyDays.map((m) => (
-              <div key={m.id} className="p-3 rounded-lg border border-slate-200 bg-slate-50 space-y-2">
-                <div className="flex items-center justify-between font-semibold text-slate-800">
-                  <span>Month: {m.month}</span>
-                  <span className="font-mono text-slate-500">{m.totalDays} Total Days</span>
+        return (
+          <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-5 space-y-5">
+            {/* Header with Session Selector & Main Actions */}
+            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-4">
+              <div>
+                <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-blue-600" />
+                  <span>Monthly Working Days Configuration</span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Define exact scheduled working days, holidays, and practical sessions per calendar month for trainee attendance calculations.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2 text-xs bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg">
+                  <span className="text-slate-700 font-semibold">Academic Session:</span>
+                  <select
+                    value={selectedSessionId}
+                    onChange={(e) => setSelectedSessionId(e.target.value)}
+                    className="px-2 py-1 border border-slate-300 rounded font-medium text-slate-800 bg-white"
+                  >
+                    {sessions.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({s.status.toUpperCase()})
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={handleSaveBulkMonthlyDays}
+                  disabled={savingWorkingDays || editableMonthlyDays.length === 0}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 rounded-lg transition-colors shadow-xs"
+                >
+                  <Save className={`w-3.5 h-3.5 ${savingWorkingDays ? 'animate-spin' : ''}`} />
+                  <span>{savingWorkingDays ? 'Saving...' : 'Save Monthly Working Days'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Session Summary & Target Metrics */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                <span className="text-slate-500 font-medium block">Configured Months</span>
+                <div className="text-base font-bold text-slate-800 mt-0.5 font-mono">
+                  {editableMonthlyDays.length} / 12 Months
+                </div>
+                <span className="text-[11px] text-slate-500">
+                  {currentSession?.name || 'Selected Session'}
+                </span>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                <span className="text-slate-500 font-medium block">Total Working Days</span>
+                <div className="text-base font-bold text-blue-700 mt-0.5 font-mono">
+                  {totalWorkingDaysSum} Days
+                </div>
+                <span className="text-[11px] text-slate-500">
+                  Sum of all monthly working days
+                </span>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                <span className="text-slate-500 font-medium block">Session Goal / Target</span>
+                <div className="text-base font-bold text-slate-800 mt-0.5 font-mono">
+                  {currentSession?.totalWorkingDays || 240} Days
+                </div>
+                <span
+                  className={`text-[11px] font-medium ${
+                    totalWorkingDaysSum === (currentSession?.totalWorkingDays || 240)
+                      ? 'text-emerald-600'
+                      : 'text-amber-600'
+                  }`}
+                >
+                  {totalWorkingDaysSum === (currentSession?.totalWorkingDays || 240)
+                    ? 'Target exactly matched'
+                    : `Diff: ${totalWorkingDaysSum - (currentSession?.totalWorkingDays || 240)} Days`}
+                </span>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                <span className="text-slate-500 font-medium block">Total Holidays &amp; Breaks</span>
+                <div className="text-base font-bold text-rose-600 mt-0.5 font-mono">
+                  {totalHolidaysSum} Days
+                </div>
+                <span className="text-[11px] text-slate-500">Sundays, Festivals, State holidays</span>
+              </div>
+            </div>
+
+            {/* Toolbar Buttons: Auto-Generate 12 Months & Add Month */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleGenerateMonths}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                  <span>
+                    {editableMonthlyDays.length === 0
+                      ? `Auto-Generate 12 Months for ${currentSession?.name || 'Session'}`
+                      : 'Re-Generate Standard 12 Months'}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowAddMonthRow(!showAddMonthRow)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>{showAddMonthRow ? 'Close Add Form' : 'Add Single Month'}</span>
+                </button>
+              </div>
+
+              {editableMonthlyDays.length > 0 && (
+                <div className="text-xs text-slate-500">
+                  Editable fields update live. Click <strong className="text-emerald-700">"Save Monthly Working Days"</strong> to persist.
+                </div>
+              )}
+            </div>
+
+            {/* INLINE ADD MONTH FORM */}
+            {showAddMonthRow && (
+              <div className="p-4 bg-blue-50/60 rounded-xl border border-blue-200 space-y-3 text-xs">
+                <div className="font-semibold text-slate-800 flex items-center gap-1.5">
+                  <Plus className="w-4 h-4 text-blue-600" />
+                  <span>Add New Month to {currentSession?.name || 'Selected Session'}</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                   <div>
-                    <label className="text-[10px] text-slate-500 block">Working Days</label>
+                    <label className="text-[11px] text-slate-600 block mb-1 font-medium">Select Month (YYYY-MM)</label>
                     <input
-                      type="number"
-                      defaultValue={m.workingDays}
-                      onBlur={(e) => handleSaveMonthDay(m.month, Number(e.target.value), m.holidays, m.remarks || '')}
-                      className="w-full px-2 py-1 bg-white border border-slate-300 rounded text-xs font-mono"
+                      type="month"
+                      value={newMonthForm.month}
+                      onChange={(e) => {
+                        const mVal = e.target.value;
+                        let daysInM = 30;
+                        if (mVal) {
+                          const [y, m] = mVal.split('-');
+                          daysInM = new Date(parseInt(y), parseInt(m), 0).getDate();
+                        }
+                        setNewMonthForm({
+                          ...newMonthForm,
+                          month: mVal,
+                          totalDays: daysInM,
+                          workingDays: daysInM - newMonthForm.holidays,
+                        });
+                      }}
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded font-mono text-xs"
+                      required
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] text-slate-500 block">Holidays</label>
+                    <label className="text-[11px] text-slate-600 block mb-1 font-medium">Working Days</label>
                     <input
                       type="number"
-                      defaultValue={m.holidays}
-                      onBlur={(e) => handleSaveMonthDay(m.month, m.workingDays, Number(e.target.value), m.remarks || '')}
-                      className="w-full px-2 py-1 bg-white border border-slate-300 rounded text-xs font-mono"
+                      min="0"
+                      max={newMonthForm.totalDays || 31}
+                      value={newMonthForm.workingDays}
+                      onChange={(e) => setNewMonthForm({ ...newMonthForm, workingDays: parseInt(e.target.value) || 0 })}
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded font-mono text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-slate-600 block mb-1 font-medium">Holidays</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max={newMonthForm.totalDays || 31}
+                      value={newMonthForm.holidays}
+                      onChange={(e) => setNewMonthForm({ ...newMonthForm, holidays: parseInt(e.target.value) || 0 })}
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded font-mono text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-slate-600 block mb-1 font-medium">Remarks / Festivals</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. State Foundation Day"
+                      value={newMonthForm.remarks}
+                      onChange={(e) => setNewMonthForm({ ...newMonthForm, remarks: e.target.value })}
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-xs"
                     />
                   </div>
                 </div>
-
-                <div>
-                  <label className="text-[10px] text-slate-500 block">Remarks / Festivals</label>
-                  <input
-                    type="text"
-                    defaultValue={m.remarks || ''}
-                    onBlur={(e) => handleSaveMonthDay(m.month, m.workingDays, m.holidays, e.target.value)}
-                    className="w-full px-2 py-1 bg-white border border-slate-300 rounded text-[11px]"
-                    placeholder="e.g. Diwali break, State Day"
-                  />
+                <div className="flex justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddMonthRow(false)}
+                    className="px-3 py-1.5 border border-slate-300 rounded text-slate-600 hover:bg-slate-100"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAddCustomMonth}
+                    className="px-4 py-1.5 bg-blue-700 text-white font-medium rounded hover:bg-blue-800"
+                  >
+                    Add Month
+                  </button>
                 </div>
               </div>
-            ))}
+            )}
+
+            {/* EMPTY STATE: WHEN NO MONTHS CONFIGURED */}
+            {editableMonthlyDays.length === 0 ? (
+              <div className="p-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-300 space-y-4">
+                <div className="w-12 h-12 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center mx-auto">
+                  <CalendarDays className="w-6 h-6" />
+                </div>
+                <div className="max-w-md mx-auto space-y-1">
+                  <h4 className="font-bold text-sm text-slate-900">
+                    No Monthly Working Days Configured for {currentSession?.name || 'Selected Session'}
+                  </h4>
+                  <p className="text-xs text-slate-500">
+                    To compute trainee monthly attendance percentages and enforce 80% NCVT threshold warnings, please enter the monthly calendar for this session.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={handleGenerateMonths}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white font-semibold rounded-lg text-xs shadow-xs transition-colors"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    <span>Auto-Generate 12 Months for {currentSession?.name || 'Session'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddMonthRow(true)}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-medium rounded-lg text-xs transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Enter Month Manually</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* INTERACTIVE MONTHS GRID */
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 text-xs">
+                  {editableMonthlyDays.map((m, idx) => {
+                    const isExceeding =
+                      (Number(m.workingDays) || 0) + (Number(m.holidays) || 0) > m.totalDays;
+
+                    // Formatted month name e.g. "August 2025"
+                    let monthTitle = m.month;
+                    if (m.month && m.month.includes('-')) {
+                      const [y, mn] = m.month.split('-');
+                      const dateObj = new Date(parseInt(y), parseInt(mn) - 1, 1);
+                      if (!isNaN(dateObj.getTime())) {
+                        monthTitle = dateObj.toLocaleDateString('en-US', {
+                          month: 'long',
+                          year: 'numeric',
+                        });
+                      }
+                    }
+
+                    return (
+                      <div
+                        key={m.id || idx}
+                        className={`p-3.5 rounded-xl border transition-all ${
+                          isExceeding
+                            ? 'border-amber-300 bg-amber-50/40'
+                            : 'border-slate-200 bg-slate-50 hover:bg-white hover:shadow-xs'
+                        } space-y-2.5`}
+                      >
+                        <div className="flex items-center justify-between pb-1 border-b border-slate-200/80">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-900 text-xs">{monthTitle}</span>
+                            <span className="font-mono text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded font-medium">
+                              {m.month}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono text-[11px] text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">
+                              {m.totalDays} Total Days
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteMonthEntry(m, idx)}
+                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded"
+                              title="Delete this month"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2.5">
+                          <div>
+                            <label className="text-[10px] text-slate-600 font-semibold block mb-0.5">
+                              Working Days
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              max={m.totalDays}
+                              value={m.workingDays}
+                              onChange={(e) =>
+                                handleUpdateMonthField(idx, 'workingDays', Number(e.target.value))
+                              }
+                              className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-xs font-mono font-semibold text-slate-900 focus:ring-1 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-slate-600 font-semibold block mb-0.5">
+                              Holidays / Sundays
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              max={m.totalDays}
+                              value={m.holidays}
+                              onChange={(e) =>
+                                handleUpdateMonthField(idx, 'holidays', Number(e.target.value))
+                              }
+                              className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-xs font-mono font-semibold text-slate-900 focus:ring-1 focus:ring-blue-500"
+                            />
+                          </div>
+                        </div>
+
+                        {isExceeding && (
+                          <div className="text-[10px] text-amber-700 bg-amber-100/70 p-1.5 rounded border border-amber-300 font-medium">
+                            Warning: Working ({m.workingDays}) + Holidays ({m.holidays}) exceeds calendar days ({m.totalDays}).
+                          </div>
+                        )}
+
+                        <div>
+                          <label className="text-[10px] text-slate-500 block mb-0.5">
+                            Remarks / Holidays / Practical Tests
+                          </label>
+                          <input
+                            type="text"
+                            value={m.remarks || ''}
+                            onChange={(e) => handleUpdateMonthField(idx, 'remarks', e.target.value)}
+                            placeholder="e.g. Independence Day, State Day, Diwali"
+                            className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-[11px] text-slate-700"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Sticky / Bottom Save Banner */}
+                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-xs text-slate-600">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>
+                      {editableMonthlyDays.length} months configured ({totalWorkingDaysSum} total working days). Remember to save changes!
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSaveBulkMonthlyDays}
+                    disabled={savingWorkingDays}
+                    className="flex items-center gap-1.5 px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 rounded-lg transition-colors shadow-xs"
+                  >
+                    <Save className={`w-3.5 h-3.5 ${savingWorkingDays ? 'animate-spin' : ''}`} />
+                    <span>{savingWorkingDays ? 'Saving Configuration...' : 'Save All Monthly Working Days'}</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* TAB 4: TRADES MANAGEMENT */}
       {activeTab === 'trades' && (
@@ -842,7 +1482,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {officers.map((off) => {
-                  const assignedTradeNames = off.assignedTradeIds
+                  const assignedTradeNames = (off.assignedTradeIds || [])
                     .map((tid) => trades.find((t) => t.id === tid)?.name || tid)
                     .join(', ');
 
@@ -988,6 +1628,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
                   Trainees must be within this perimeter (currently {settingsForm.campusLocation.radiusMeters}m) to self-mark attendance.
                 </span>
               </div>
+
+              <div className="pt-2 border-t border-slate-200">
+                <label className="block text-slate-700 font-semibold mb-1">Institute Active Default Session</label>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={settingsForm.currentSessionId || ''}
+                    onChange={(e) => setSettingsForm({ ...settingsForm, currentSessionId: e.target.value })}
+                    className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded font-medium text-slate-800"
+                  >
+                    <option value="">-- No Default Session (Cleared) --</option>
+                    {sessions.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({s.status.toUpperCase()})
+                      </option>
+                    ))}
+                  </select>
+                  {settingsForm.currentSessionId && (
+                    <button
+                      type="button"
+                      onClick={() => setSettingsForm({ ...settingsForm, currentSessionId: '' })}
+                      className="px-2.5 py-2 text-rose-700 border border-rose-200 bg-rose-50 hover:bg-rose-100 rounded text-xs font-semibold whitespace-nowrap"
+                    >
+                      Clear Default
+                    </button>
+                  )}
+                </div>
+                <span className="text-[11px] text-slate-500 mt-1 block">
+                  Select the institution-wide default active session or leave cleared.
+                </span>
+              </div>
             </div>
 
             {/* Attendance Window & Leave Rules */}
@@ -1117,6 +1787,76 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
                 </div>
               </div>
             </div>
+
+            {/* Card 3: Administrator Security & Credentials */}
+            <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 space-y-4 md:col-span-2">
+              <div className="flex items-center gap-2 font-bold text-xs text-slate-800 border-b border-slate-200 pb-2">
+                <Shield className="w-4 h-4 text-blue-700" />
+                <span>Administrator Account Credentials</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                <div>
+                  <label className="block text-slate-600 mb-1">Admin / Principal Name</label>
+                  <input
+                    type="text"
+                    value={settingsForm.adminAccount?.name || 'Shri S. K. Patel (Principal / Admin)'}
+                    onChange={(e) =>
+                      setSettingsForm({
+                        ...settingsForm,
+                        adminAccount: {
+                          email: settingsForm.adminAccount?.email || 'admin.iti.raigarh@cg.gov.in',
+                          password: settingsForm.adminAccount?.password || 'admin123',
+                          name: e.target.value,
+                          mobile: settingsForm.adminAccount?.mobile || '+91 98261 45210',
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded font-medium text-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-600 mb-1">Official Login Email ID</label>
+                  <input
+                    type="email"
+                    value={settingsForm.adminAccount?.email || 'admin.iti.raigarh@cg.gov.in'}
+                    onChange={(e) =>
+                      setSettingsForm({
+                        ...settingsForm,
+                        adminAccount: {
+                          name: settingsForm.adminAccount?.name || 'Shri S. K. Patel (Principal / Admin)',
+                          password: settingsForm.adminAccount?.password || 'admin123',
+                          email: e.target.value,
+                          mobile: settingsForm.adminAccount?.mobile || '+91 98261 45210',
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded font-mono text-slate-800"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Used for Administrator portal login and secure password recovery tokens.
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-slate-600 mb-1">Admin Portal Password</label>
+                  <input
+                    type="text"
+                    value={settingsForm.adminAccount?.password || 'admin123'}
+                    onChange={(e) =>
+                      setSettingsForm({
+                        ...settingsForm,
+                        adminAccount: {
+                          name: settingsForm.adminAccount?.name || 'Shri S. K. Patel (Principal / Admin)',
+                          email: settingsForm.adminAccount?.email || 'admin.iti.raigarh@cg.gov.in',
+                          password: e.target.value,
+                          mobile: settingsForm.adminAccount?.mobile || '+91 98261 45210',
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded font-mono text-slate-800"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="flex justify-end pt-2">
@@ -1239,7 +1979,41 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
                 </div>
               </div>
 
+              <div className="pt-1">
+                <label className="flex items-start gap-2 cursor-pointer p-2.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={sessionForm.setAsDefault}
+                    onChange={(e) => setSessionForm({ ...sessionForm, setAsDefault: e.target.checked })}
+                    className="mt-0.5 rounded text-blue-600 focus:ring-blue-500"
+                  />
+                  <div className="text-[11px] leading-tight">
+                    <span className="font-semibold text-slate-800 block">Set as Institute Active Default Session</span>
+                    <span className="text-slate-500">
+                      Trainees and Training Officers will use this academic session by default upon logging in.
+                    </span>
+                  </div>
+                </label>
+              </div>
+
               <div className="pt-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSessionForm({
+                      name: '',
+                      startDate: '',
+                      endDate: '',
+                      totalWorkingDays: 240,
+                      status: 'active',
+                      setAsDefault: false,
+                    })
+                  }
+                  className="px-3 py-2 border border-slate-300 rounded hover:bg-slate-100 text-slate-600"
+                  title="Clear all fields"
+                >
+                  Clear Form
+                </button>
                 <button
                   type="button"
                   onClick={() => setSessionModalOpen(false)}
@@ -1249,7 +2023,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2 px-3 bg-blue-700 text-white rounded hover:bg-blue-800"
+                  className="flex-1 py-2 px-3 bg-blue-700 text-white font-medium rounded hover:bg-blue-800"
                 >
                   Save Session
                 </button>
@@ -1429,7 +2203,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
                 <label className="block font-medium mb-1">Assigned Trade(s)</label>
                 <div className="space-y-1.5 max-h-32 overflow-y-auto p-2 border border-slate-300 rounded bg-slate-50">
                   {trades.map((t) => {
-                    const isSelected = officerForm.assignedTradeIds.includes(t.id);
+                    const isSelected = (officerForm.assignedTradeIds || []).includes(t.id);
                     return (
                       <label key={t.id} className="flex items-center gap-2 cursor-pointer">
                         <input

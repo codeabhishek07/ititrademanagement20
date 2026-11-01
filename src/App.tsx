@@ -55,31 +55,8 @@ export default function App() {
     loadInitialData();
   }, []);
 
-  // Handle Demo / Role Selection
-  const handleSelectRole = async (role: UserRole, extra?: { officerId?: string; traineeId?: string }) => {
-    try {
-      setLoading(true);
-      const res = await loginApi({
-        role,
-        officerId: extra?.officerId,
-        traineeId: extra?.traineeId,
-      });
-
-      const user = res.user;
-      if (role === 'trainee') {
-        const trTrade = trades.find((t) => t.id === user.tradeId);
-        user.tradeName = trTrade?.name || 'Electrician';
-      }
-      setCurrentUser(user);
-    } catch (err: any) {
-      alert(err.message || 'Login failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Handle Custom Credentials Login
-  const handleCustomLogin = async (params: { role: UserRole; email: string; password?: string }) => {
+  // Handle Real Credentials Login
+  const handleLogin = async (params: { role: UserRole; email: string; password?: string }) => {
     try {
       setLoading(true);
       const res = await loginApi(params);
@@ -90,7 +67,7 @@ export default function App() {
       }
       setCurrentUser(user);
     } catch (err: any) {
-      alert(err.message || 'Login failed');
+      throw err;
     } finally {
       setLoading(false);
     }
@@ -129,7 +106,6 @@ export default function App() {
       <Header
         currentUser={currentUser}
         onLogout={handleLogout}
-        onSwitchRole={(role) => handleSelectRole(role)}
         onNavigateTraineeTab={(tab) => setTraineeActiveTab(tab)}
       />
 
@@ -137,8 +113,7 @@ export default function App() {
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6">
         {!currentUser ? (
           <LandingPage
-            onSelectRole={handleSelectRole}
-            onCustomLogin={handleCustomLogin}
+            onLogin={handleLogin}
             trades={trades}
             sessions={sessions}
           />
@@ -159,10 +134,14 @@ export default function App() {
                   email: currentUser.email,
                   employeeId: currentUser.employeeId,
                   assignedTradeIds: currentUser.assignedTradeIds || [trades[0]?.id || 'trade_elec'],
+                  mobile: currentUser.mobile,
                 }}
                 trades={trades}
                 sessions={sessions}
                 settings={settings}
+                onOfficerUpdate={(updated) => {
+                  setCurrentUser((prev) => (prev ? { ...prev, ...updated } : null));
+                }}
               />
             )}
 
@@ -183,6 +162,9 @@ export default function App() {
                 settings={settings}
                 selectedTab={traineeActiveTab}
                 onTabChange={setTraineeActiveTab}
+                onTraineeUpdate={(updated) => {
+                  setCurrentUser((prev) => (prev ? { ...prev, ...updated } : null));
+                }}
               />
             )}
           </div>
@@ -194,9 +176,9 @@ export default function App() {
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3 text-center md:text-left">
           <div className="flex flex-col sm:flex-row items-center gap-2">
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-slate-700">Government ITI Raigarh</span>
+              <span className="font-semibold text-slate-700">शासकीय आईटीआई रायगढ़ (Govt. ITI Raigarh)</span>
               <span>·</span>
-              <span>Directorate of Employment &amp; Training, Chhattisgarh</span>
+              <span>रोजगार एवं प्रशिक्षण संचालनालय, छत्तीसगढ़</span>
             </div>
             <span className="hidden sm:inline text-slate-300">|</span>
             <div className="w-[424.364px] max-w-full font-medium bg-amber-50/90 text-amber-900 border border-amber-300/80 px-2.5 py-1 rounded shadow-xs text-xs">

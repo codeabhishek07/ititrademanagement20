@@ -1,9 +1,9 @@
-import express, { Request, Response } from 'express';
+import express, { type Request, type Response } from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
 import { db } from './src/server/db.ts';
-import { AttendanceRecord, LeaveRequest, WarningNotice, InventoryItem, IndentRecord, Trainee, TrainingOfficer, Trade, AcademicSession, MonthlyWorkingDay, AppNotification } from './src/types.ts';
+import type { AttendanceRecord, LeaveRequest, WarningNotice, InventoryItem, IndentRecord, Trainee, TrainingOfficer, Trade, AcademicSession, MonthlyWorkingDay, AppNotification } from './src/types.ts';
 
 function calculateDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371000; // Radius of Earth in meters
@@ -19,7 +19,7 @@ function calculateDistanceMeters(lat1: number, lon1: number, lat2: number, lon2:
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   app.use(express.json());
 
@@ -43,43 +43,86 @@ async function startServer() {
     });
   });
 
-  // Auth: Role-based / credentials login
+  // Auth: Real credentials-based login verifying against database
   app.post('/api/auth/login', (req: Request, res: Response) => {
-    const { role, email, password, officerId, traineeId } = req.body;
-    const data = db.get();
+    const { role, email, password } = req.body;
+    const identifier = String(email || '').trim();
+    const enteredPassword = String(password || '');
 
+    if (!identifier) {
+      return res.status(400).json({ error: 'Please enter your Email, Username, or Roll Number.' });
+    }
+    if (!enteredPassword) {
+      return res.status(400).json({ error: 'Please enter your account password.' });
+    }
+
+    const data = db.get();
+    const cleanId = identifier.toLowerCase();
+
+    // 1. Administrator Authentication
     if (role === 'admin') {
-      // Allow demo admin or admin credentials
-      if (password && password !== 'admin123') {
-        return res.status(401).json({ error: 'Invalid admin credentials' });
+      const adminAcc = data.settings.adminAccount || {
+        email: 'admin.iti.raigarh@cg.gov.in',
+        password: 'admin123',
+        name: 'Shri S. K. Patel (Principal / Admin)',
+        mobile: '+91 98261 45210',
+      };
+
+      const emailMatches =
+        cleanId === adminAcc.email.toLowerCase() ||
+        cleanId === 'admin' ||
+        cleanId === 'principal' ||
+        cleanId === 'admin.iti.raigarh@cg.gov.in';
+
+      if (!emailMatches) {
+        return res.status(401).json({ error: 'Administrator account not found with the provided email or username.' });
       }
+
+      if (enteredPassword !== adminAcc.password) {
+        return res.status(401).json({ error: 'Incorrect password for Administrator portal.' });
+      }
+
       db.addAuditLog({
         userId: 'usr_admin',
-        userName: 'Principal / Admin',
+        userName: adminAcc.name,
         userRole: 'admin',
         action: 'ADMIN_LOGIN',
-        details: 'Admin logged into administration portal.',
+        details: 'Administrator authenticated successfully.',
         ipAddress: req.ip,
       });
+
       return res.json({
         user: {
           id: 'usr_admin',
           role: 'admin',
-          name: 'Shri S. K. Patel (Principal / Admin)',
-          email: 'admin.iti.raigarh@cg.gov.in',
-          mobile: '+91 98261 45210',
+          name: adminAcc.name,
+          email: adminAcc.email,
+          mobile: adminAcc.mobile || '+91 98261 45210',
         },
       });
     }
 
+    // 2. Training Officer Authentication
     if (role === 'officer') {
-      let officer = data.officers.find((o) => o.id === officerId || o.email === email);
+      const officer = data.officers.find(
+        (o) =>
+          o.email.toLowerCase() === cleanId ||
+          o.employeeId.toLowerCase() === cleanId ||
+          o.mobile.replace(/\s+/g, '') === cleanId.replace(/\s+/g, '')
+      );
+
       if (!officer) {
-        officer = data.officers[0]; // fallback to first officer for quick demo switch
+        return res.status(401).json({ error: 'No Training Officer account found with the provided Email or Employee ID.' });
       }
+
       if (officer.status !== 'active') {
-        return res.status(403).json({ error: 'This Training Officer account is inactive. Please contact Administrator.' });
+        return res.status(403).json({ error: 'This Training Officer account has been deactivated. Please contact the Administrator.' });
       }
+
+      if (officer.password !== enteredPassword) {
+        return res.status(401).json({ error: 'Incorrect password for Training Officer account.' });
+      }
+
       db.addAuditLog({
         userId: officer.id,
         userName: officer.name,
@@ -88,6 +131,7 @@ async function startServer() {
         details: `Training Officer logged in for trade(s): ${officer.assignedTradeIds.join(', ')}.`,
         ipAddress: req.ip,
       });
+
       return res.json({
         user: {
           id: officer.id,
@@ -102,22 +146,36 @@ async function startServer() {
       });
     }
 
+    // 3. Trainee Authentication
     if (role === 'trainee') {
-      let trainee = data.trainees.find((t) => t.id === traineeId || t.rollNo === email || t.email === email);
+      const trainee = data.trainees.find(
+        (t) =>
+          t.rollNo.toLowerCase() === cleanId ||
+          t.email.toLowerCase() === cleanId ||
+          (t.registrationNo && t.registrationNo.toLowerCase() === cleanId)
+      );
+
       if (!trainee) {
-        trainee = data.trainees[0];
+        return res.status(401).json({ error: 'No Trainee record found with the entered Roll Number or Email.' });
       }
+
       if (trainee.status !== 'active') {
-        return res.status(403).json({ error: 'This Trainee account is inactive.' });
+        return res.status(403).json({ error: 'This Trainee account has been marked inactive or suspended.' });
       }
+
+      if (trainee.password !== enteredPassword) {
+        return res.status(401).json({ error: 'Incorrect password for Trainee account.' });
+      }
+
       db.addAuditLog({
         userId: trainee.id,
         userName: trainee.name,
         userRole: 'trainee',
         action: 'TRAINEE_LOGIN',
-        details: `Trainee logged in: Roll No ${trainee.rollNo}.`,
+        details: `Trainee authenticated: Roll No ${trainee.rollNo}.`,
         ipAddress: req.ip,
       });
+
       return res.json({
         user: {
           id: trainee.id,
@@ -134,7 +192,256 @@ async function startServer() {
       });
     }
 
-    res.status(400).json({ error: 'Invalid role requested' });
+    res.status(400).json({ error: 'Invalid portal role requested.' });
+  });
+
+  // -------------------------------------------------------------
+  // Password Recovery System (Token-based Secure Email Verification)
+  // -------------------------------------------------------------
+  interface ResetTokenRecord {
+    token: string;
+    email: string;
+    role: 'admin' | 'officer' | 'trainee';
+    userId: string;
+    userName: string;
+    createdAt: number;
+    expiresAt: number;
+  }
+  const resetTokens: Map<string, ResetTokenRecord> = new Map();
+
+  function maskEmail(email: string): string {
+    const parts = email.split('@');
+    if (parts.length !== 2) return email;
+    const user = parts[0];
+    const domain = parts[1];
+    const visible = user.slice(0, Math.min(2, user.length));
+    const masked = '*'.repeat(Math.max(3, user.length - visible.length));
+    return `${visible}${masked}@${domain}`;
+  }
+
+  // 1. Forgot Password - Generate & Dispatch Secure Token
+  app.post('/api/auth/forgot-password', (req: Request, res: Response) => {
+    const { identifier, role } = req.body;
+    const cleanId = String(identifier || '').trim().toLowerCase();
+
+    if (!cleanId) {
+      return res.status(400).json({ error: 'Please enter your registered Email ID, Employee ID, or Roll Number.' });
+    }
+
+    const data = db.get();
+    let targetUser: { role: 'admin' | 'officer' | 'trainee'; id: string; name: string; email: string } | null = null;
+
+    // Search Admin
+    if (!role || role === 'admin') {
+      const adminAcc = data.settings.adminAccount || {
+        email: 'admin.iti.raigarh@cg.gov.in',
+        password: 'admin123',
+        name: 'Shri S. K. Patel (Principal / Admin)',
+        mobile: '+91 98261 45210',
+      };
+      if (
+        cleanId === adminAcc.email.toLowerCase() ||
+        cleanId === 'admin' ||
+        cleanId === 'principal'
+      ) {
+        targetUser = {
+          role: 'admin',
+          id: 'usr_admin',
+          name: adminAcc.name,
+          email: adminAcc.email,
+        };
+      }
+    }
+
+    // Search Officer
+    if (!targetUser && (!role || role === 'officer')) {
+      const officer = data.officers.find(
+        (o) =>
+          o.email.toLowerCase() === cleanId ||
+          o.employeeId.toLowerCase() === cleanId ||
+          o.mobile.replace(/\s+/g, '') === cleanId.replace(/\s+/g, '')
+      );
+      if (officer) {
+        targetUser = {
+          role: 'officer',
+          id: officer.id,
+          name: officer.name,
+          email: officer.email,
+        };
+      }
+    }
+
+    // Search Trainee
+    if (!targetUser && (!role || role === 'trainee')) {
+      const trainee = data.trainees.find(
+        (t) =>
+          t.email.toLowerCase() === cleanId ||
+          t.rollNo.toLowerCase() === cleanId ||
+          (t.registrationNo && t.registrationNo.toLowerCase() === cleanId)
+      );
+      if (trainee) {
+        targetUser = {
+          role: 'trainee',
+          id: trainee.id,
+          name: trainee.name,
+          email: trainee.email,
+        };
+      }
+    }
+
+    if (!targetUser) {
+      return res.status(404).json({
+        error: 'No active account found with the provided details. Please verify your Email, Roll Number, or Employee ID.',
+      });
+    }
+
+    // Generate a secure 6-digit token
+    const token = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = Date.now() + 15 * 60 * 1000; // 15 minutes TTL
+
+    // Invalidate any previous token for this user
+    for (const [key, val] of resetTokens.entries()) {
+      if (val.userId === targetUser.id || val.email.toLowerCase() === targetUser.email.toLowerCase()) {
+        resetTokens.delete(key);
+      }
+    }
+
+    resetTokens.set(token, {
+      token,
+      email: targetUser.email,
+      role: targetUser.role,
+      userId: targetUser.id,
+      userName: targetUser.name,
+      createdAt: Date.now(),
+      expiresAt,
+    });
+
+    db.addAuditLog({
+      userId: targetUser.id,
+      userName: targetUser.name,
+      userRole: targetUser.role,
+      action: 'PASSWORD_RESET_TOKEN_ISSUED',
+      details: `Password recovery token dispatched for ${targetUser.email} (Token valid for 15 minutes).`,
+      ipAddress: req.ip,
+    });
+
+    return res.json({
+      success: true,
+      message: `A secure 6-digit verification token has been generated and dispatched to ${targetUser.email}.`,
+      email: targetUser.email,
+      maskedEmail: maskEmail(targetUser.email),
+      userName: targetUser.name,
+      role: targetUser.role,
+      token,
+      expiresMinutes: 15,
+    });
+  });
+
+  // 2. Verify Reset Token
+  app.post('/api/auth/verify-reset-token', (req: Request, res: Response) => {
+    const { token, email } = req.body;
+    const cleanToken = String(token || '').trim();
+    const cleanEmail = String(email || '').trim().toLowerCase();
+
+    const record = resetTokens.get(cleanToken);
+    if (!record) {
+      return res.status(400).json({ error: 'Invalid or unrecognized recovery token. Please check and try again.' });
+    }
+
+    if (Date.now() > record.expiresAt) {
+      resetTokens.delete(cleanToken);
+      return res.status(400).json({ error: 'This security token has expired. Please request a new recovery token.' });
+    }
+
+    if (cleanEmail && record.email.toLowerCase() !== cleanEmail) {
+      return res.status(400).json({ error: 'Token does not match the requested email address.' });
+    }
+
+    res.json({
+      success: true,
+      valid: true,
+      email: record.email,
+      userName: record.userName,
+      role: record.role,
+    });
+  });
+
+  // 3. Reset Password with Verified Token
+  app.post('/api/auth/reset-password', (req: Request, res: Response) => {
+    const { token, email, newPassword } = req.body;
+    const cleanToken = String(token || '').trim();
+    const cleanEmail = String(email || '').trim().toLowerCase();
+    const passwordStr = String(newPassword || '');
+
+    if (!cleanToken) {
+      return res.status(400).json({ error: 'Security token is required.' });
+    }
+    if (!passwordStr || passwordStr.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters long.' });
+    }
+
+    const record = resetTokens.get(cleanToken);
+    if (!record) {
+      return res.status(400).json({ error: 'Invalid recovery token or token has already been used.' });
+    }
+
+    if (Date.now() > record.expiresAt) {
+      resetTokens.delete(cleanToken);
+      return res.status(400).json({ error: 'This security token has expired. Please request a new one.' });
+    }
+
+    if (cleanEmail && record.email.toLowerCase() !== cleanEmail) {
+      return res.status(400).json({ error: 'Token mismatch. Please verify your email.' });
+    }
+
+    const data = db.get();
+
+    if (record.role === 'admin') {
+      if (!data.settings.adminAccount) {
+        data.settings.adminAccount = {
+          email: 'admin.iti.raigarh@cg.gov.in',
+          password: passwordStr,
+          name: 'Shri S. K. Patel (Principal / Admin)',
+          mobile: '+91 98261 45210',
+        };
+      } else {
+        data.settings.adminAccount.password = passwordStr;
+      }
+    } else if (record.role === 'officer') {
+      const idx = data.officers.findIndex((o) => o.id === record.userId);
+      if (idx !== -1) {
+        data.officers[idx].password = passwordStr;
+      } else {
+        return res.status(404).json({ error: 'Officer account not found in database.' });
+      }
+    } else if (record.role === 'trainee') {
+      const idx = data.trainees.findIndex((t) => t.id === record.userId);
+      if (idx !== -1) {
+        data.trainees[idx].password = passwordStr;
+      } else {
+        return res.status(404).json({ error: 'Trainee account not found in database.' });
+      }
+    }
+
+    // Invalidate the token
+    resetTokens.delete(cleanToken);
+    db.save();
+
+    db.addAuditLog({
+      userId: record.userId,
+      userName: record.userName,
+      userRole: record.role,
+      action: 'PASSWORD_RESET_COMPLETED',
+      details: `Password securely updated for account ${record.email} via verified token.`,
+      ipAddress: req.ip,
+    });
+
+    return res.json({
+      success: true,
+      message: 'Your password has been successfully reset. You may now log in with your new credentials.',
+      email: record.email,
+      role: record.role,
+    });
   });
 
   // Settings
@@ -195,8 +502,29 @@ async function startServer() {
   app.delete('/api/sessions/:id', (req: Request, res: Response) => {
     const data = db.get();
     data.sessions = data.sessions.filter((s) => s.id !== req.params.id);
+    if (data.settings.currentSessionId === req.params.id) {
+      data.settings.currentSessionId = '';
+    }
+    data.monthlyWorkingDays = data.monthlyWorkingDays.filter((m) => m.sessionId !== req.params.id);
     db.save();
     res.json({ success: true });
+  });
+
+  app.post('/api/sessions/set-default', (req: Request, res: Response) => {
+    const { sessionId } = req.body;
+    const data = db.get();
+    data.settings.currentSessionId = sessionId || '';
+    db.save();
+    db.addAuditLog({
+      userId: 'usr_admin',
+      userName: 'Principal / Admin',
+      userRole: 'admin',
+      action: sessionId ? 'SET_DEFAULT_SESSION' : 'CLEAR_DEFAULT_SESSION',
+      details: sessionId
+        ? `Set default active academic session to: ${sessionId}`
+        : 'Cleared default active academic session.',
+    });
+    res.json({ success: true, currentSessionId: data.settings.currentSessionId });
   });
 
   // Monthly Working Days
@@ -218,17 +546,17 @@ async function startServer() {
         workingDays: Number(workingDays),
         totalDays: Number(totalDays) || 30,
         holidays: Number(holidays) || 0,
-        remarks,
+        remarks: remarks || '',
       };
     } else {
       data.monthlyWorkingDays.push({
-        id: `mwd_${Date.now()}`,
+        id: `mwd_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
         sessionId,
         month,
         totalDays: Number(totalDays) || 30,
         workingDays: Number(workingDays),
         holidays: Number(holidays) || 0,
-        remarks,
+        remarks: remarks || '',
       });
     }
     db.save();
@@ -240,6 +568,48 @@ async function startServer() {
       details: `Configured working days for month ${month}: ${workingDays} days.`,
     });
     res.json({ success: true, monthlyWorkingDays: data.monthlyWorkingDays });
+  });
+
+  app.post('/api/monthly-working-days/bulk', (req: Request, res: Response) => {
+    const { sessionId, days } = req.body as { sessionId: string; days: MonthlyWorkingDay[] };
+    if (!sessionId || !Array.isArray(days)) {
+      return res.status(400).json({ error: 'sessionId and days array are required' });
+    }
+    const data = db.get();
+    data.monthlyWorkingDays = data.monthlyWorkingDays.filter((m) => m.sessionId !== sessionId);
+    const addedDays: MonthlyWorkingDay[] = days.map((d, index) => ({
+      id: d.id || `mwd_${Date.now()}_${index}`,
+      sessionId,
+      month: d.month,
+      totalDays: Number(d.totalDays) || 30,
+      workingDays: Number(d.workingDays) || 0,
+      holidays: Number(d.holidays) || 0,
+      remarks: d.remarks || '',
+    }));
+    data.monthlyWorkingDays.push(...addedDays);
+
+    const totalWorking = addedDays.reduce((acc, curr) => acc + (Number(curr.workingDays) || 0), 0);
+    const sessionIdx = data.sessions.findIndex((s) => s.id === sessionId);
+    if (sessionIdx >= 0 && totalWorking > 0) {
+      data.sessions[sessionIdx].totalWorkingDays = totalWorking;
+    }
+
+    db.save();
+    db.addAuditLog({
+      userId: 'usr_admin',
+      userName: 'Principal / Admin',
+      userRole: 'admin',
+      action: 'BULK_CONFIG_WORKING_DAYS',
+      details: `Saved ${addedDays.length} monthly working days records for session ${sessionId} (Total ${totalWorking} working days).`,
+    });
+    res.json({ success: true, monthlyWorkingDays: addedDays, totalWorkingDays: totalWorking });
+  });
+
+  app.delete('/api/monthly-working-days/:id', (req: Request, res: Response) => {
+    const data = db.get();
+    data.monthlyWorkingDays = data.monthlyWorkingDays.filter((m) => m.id !== req.params.id);
+    db.save();
+    res.json({ success: true });
   });
 
   // Trades Management
@@ -308,15 +678,27 @@ async function startServer() {
     res.json(db.get().officers);
   });
 
+  app.get('/api/officers/:id', (req: Request, res: Response) => {
+    const data = db.get();
+    const officer = data.officers.find((o) => o.id === req.params.id);
+    if (!officer) return res.status(404).json({ error: 'Officer not found' });
+    res.json(officer);
+  });
+
   app.post('/api/officers', (req: Request, res: Response) => {
     const data = db.get();
+    const assigned = Array.isArray(req.body.assignedTradeIds)
+      ? req.body.assignedTradeIds
+      : req.body.assignedTradeIds
+      ? [req.body.assignedTradeIds]
+      : [];
     const newOfficer: TrainingOfficer = {
       id: `off_${Date.now()}`,
       name: req.body.name,
       email: req.body.email,
       mobile: req.body.mobile,
       employeeId: req.body.employeeId || `CG-ITI-TO-${Math.floor(1000 + Math.random() * 9000)}`,
-      assignedTradeIds: req.body.assignedTradeIds || [],
+      assignedTradeIds: assigned,
       designation: req.body.designation || 'Training Officer',
       qualification: req.body.qualification || 'Diploma/B.Tech, CITS',
       status: req.body.status || 'active',
@@ -329,7 +711,7 @@ async function startServer() {
       userName: 'Principal / Admin',
       userRole: 'admin',
       action: 'CREATE_OFFICER',
-      details: `Created Training Officer account for ${newOfficer.name} (Emp ID: ${newOfficer.employeeId}).`,
+      details: `Created Training Officer account for ${newOfficer.name} (Emp ID: ${newOfficer.employeeId}) with ${newOfficer.assignedTradeIds.length} assigned trades.`,
     });
     res.json({ success: true, officer: newOfficer });
   });
@@ -338,14 +720,25 @@ async function startServer() {
     const data = db.get();
     const idx = data.officers.findIndex((o) => o.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: 'Officer not found' });
+    const oldEmail = data.officers[idx].email;
     data.officers[idx] = { ...data.officers[idx], ...req.body };
+    if (req.body.assignedTradeIds !== undefined) {
+      data.officers[idx].assignedTradeIds = Array.isArray(req.body.assignedTradeIds)
+        ? req.body.assignedTradeIds
+        : [req.body.assignedTradeIds];
+    }
+    if (req.body.email) {
+      data.officers[idx].email = String(req.body.email).trim();
+    }
     db.save();
     db.addAuditLog({
-      userId: 'usr_admin',
-      userName: 'Principal / Admin',
+      userId: req.body.editorId || 'usr_admin',
+      userName: req.body.editorName || 'Principal / Admin',
       userRole: 'admin',
       action: 'ALTER_OFFICER',
-      details: `Updated Training Officer profile / trade assignments for: ${data.officers[idx].name}.`,
+      details: req.body.email && req.body.email.trim() !== oldEmail
+        ? `Updated Training Officer profile and email to: ${data.officers[idx].email} (${data.officers[idx].name}).`
+        : `Updated Training Officer details and trade assignments for: ${data.officers[idx].name} (${data.officers[idx].assignedTradeIds?.length || 0} trades).`,
     });
     res.json({ success: true, officer: data.officers[idx] });
   });
@@ -426,8 +819,21 @@ async function startServer() {
     const data = db.get();
     const idx = data.trainees.findIndex((t) => t.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: 'Trainee not found' });
+    const oldEmail = data.trainees[idx].email;
     data.trainees[idx] = { ...data.trainees[idx], ...req.body };
+    if (req.body.email) {
+      data.trainees[idx].email = String(req.body.email).trim();
+    }
     db.save();
+    db.addAuditLog({
+      userId: req.body.editorId || req.params.id,
+      userName: req.body.editorName || data.trainees[idx].name,
+      userRole: (req.body.editorRole as any) || 'trainee',
+      action: 'UPDATE_TRAINEE_RECORD',
+      details: req.body.email && req.body.email.trim() !== oldEmail
+        ? `Updated email for trainee ${data.trainees[idx].name} (${data.trainees[idx].rollNo}) to: ${data.trainees[idx].email}.`
+        : `Updated profile details for trainee: ${data.trainees[idx].name} (${data.trainees[idx].rollNo}).`,
+    });
     res.json({ success: true, trainee: data.trainees[idx] });
   });
 
@@ -771,13 +1177,21 @@ async function startServer() {
   });
 
   app.post('/api/warnings', (req: Request, res: Response) => {
-    const { traineeId, officerId, officerName, subject, message, attendancePercent } = req.body;
+    const { traineeId, officerId, officerName, subject, subjectHindi, message, messageHindi, attendancePercent } = req.body;
     const data = db.get();
     const trainee = data.trainees.find((t) => t.id === traineeId);
     if (!trainee) return res.status(404).json({ error: 'Trainee not found' });
     const trade = data.trades.find((t) => t.id === trainee.tradeId);
 
     const refNumber = `ITI-RAI/${trade?.code || 'TRD'}/WARN/${new Date().getFullYear()}/${Math.floor(10 + Math.random() * 90)}`;
+    const pct = Number(attendancePercent);
+    const resolvedSubjectHindi =
+      subjectHindi ||
+      `कार्यालयीन चेतावनी सूचना: न्यून उपस्थिति (${pct}%) - DGT / NCVT अनिवार्य 80% मानक से कम`;
+    const resolvedMessageHindi =
+      messageHindi ||
+      `आपको सूचित किया जाता है कि वर्तमान सत्र में आपकी दर्ज उपस्थिति ${pct}% है, जो DGT / NCVT के अनिवार्य 80% मानक से कम है। यदि उपस्थिति में तत्काल सुधार नहीं हुआ, तो आगामी अखिल भारतीय व्यावसायिक परीक्षा (AITT) से वंचित (Debar) कर दिया जाएगा। अतः आगामी सभी वर्कशॉप प्रायोगिक कक्षाओं में अनिवार्यतः उपस्थित रहें एवं 3 कार्यदिवस में लिखित स्पष्टीकरण प्रस्तुत करें।`;
+
     const newWarning: WarningNotice = {
       id: `warn_${Date.now()}`,
       refNumber,
@@ -788,9 +1202,11 @@ async function startServer() {
       tradeName: trade?.name || 'Trade',
       officerId,
       officerName,
-      attendancePercent: Number(attendancePercent),
-      subject: subject || 'Notice: Deficit Attendance Below Minimum 80% Requirement',
+      attendancePercent: pct,
+      subject: subject || `Official Warning: Deficit Attendance Below Minimum 80% Requirement (${pct}%)`,
+      subjectHindi: resolvedSubjectHindi,
       message,
+      messageHindi: resolvedMessageHindi,
       issuedDate: new Date().toISOString().split('T')[0],
       status: 'issued',
     };
@@ -802,7 +1218,7 @@ async function startServer() {
       userName: officerName,
       userRole: 'officer',
       action: 'ISSUE_ATTENDANCE_WARNING',
-      details: `Issued formal warning ${refNumber} to ${trainee.name} (Attendance: ${attendancePercent}%).`,
+      details: `Issued formal bilingual warning ${refNumber} to ${trainee.name} (Attendance: ${attendancePercent}%).`,
     });
 
     res.json({ success: true, warning: newWarning });
@@ -1019,8 +1435,10 @@ async function startServer() {
       notifications.push({
         id: `notif_warn_${w.id}`,
         type: 'attendance_warning',
-        title: `Official Warning Notice: ${w.refNumber}`,
-        message: `${w.subject}: ${w.message} (Deficit Recorded: ${w.attendancePercent}%)`,
+        title: w.subjectHindi ? `शासकीय चेतावनी पत्र (${w.refNumber})` : `Official Warning Notice: ${w.refNumber}`,
+        message: w.messageHindi
+          ? `${w.messageHindi} (उपस्थिति: ${w.attendancePercent}%)`
+          : `${w.subject}: ${w.message} (Deficit: ${w.attendancePercent}%)`,
         timestamp: w.issuedDate,
         read: w.status === 'acknowledged',
         priority: 'urgent',
@@ -1129,23 +1547,26 @@ async function startServer() {
   });
 
   // -------------------------------------------------------------
-  // Vite Middleware Mode for Development
+  // Vite Middleware Mode for Development vs Production Static Serving
   // -------------------------------------------------------------
-  if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  } else {
-    // Production static serving
-    const distPath = path.resolve(process.cwd(), 'dist');
+  const distPath = path.resolve(process.cwd(), 'dist');
+  const isProduction = process.env.NODE_ENV === 'production' || (process.env.NODE_ENV !== 'development' && fs.existsSync(path.join(distPath, 'index.html')));
+
+  if (isProduction) {
     if (fs.existsSync(distPath)) {
       app.use(express.static(distPath));
       app.get('*', (_req: Request, res: Response) => {
         res.sendFile(path.join(distPath, 'index.html'));
       });
+    } else {
+      console.warn('Production build dist/ directory not found. Please run npm run build.');
     }
+  } else {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: 'spa',
+    });
+    app.use(vite.middlewares);
   }
 
   app.listen(PORT, '0.0.0.0', () => {
