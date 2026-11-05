@@ -3,7 +3,7 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
 import { db } from './src/server/db.ts';
-import type { AttendanceRecord, LeaveRequest, WarningNotice, InventoryItem, IndentRecord, Trainee, TrainingOfficer, Trade, AcademicSession, MonthlyWorkingDay, AppNotification } from './src/types.ts';
+import type { AttendanceRecord, LeaveRequest, WarningNotice, InventoryItem, IndentRecord, Trainee, TrainingOfficer, Trade, AcademicSession, MonthlyWorkingDay, AppNotification, LessonPlan, DemonstrationPlan, WeeklyPlan, TraineeAssessment } from './src/types.ts';
 
 function calculateDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371000; // Radius of Earth in meters
@@ -815,6 +815,62 @@ async function startServer() {
     res.json({ success: true, trainee: newTrainee });
   });
 
+  app.post('/api/trainees/bulk', (req: Request, res: Response) => {
+    const { trainees, tradeId, sessionId, officerId, officerName } = req.body;
+    if (!Array.isArray(trainees) || trainees.length === 0) {
+      return res.status(400).json({ error: 'No trainee records provided for bulk import.' });
+    }
+    const data = db.get();
+    const targetTradeId = tradeId || data.trades[0]?.id;
+    const targetSessionId = sessionId || data.settings.currentSessionId;
+    const addedTrainees: Trainee[] = [];
+
+    trainees.forEach((item, index) => {
+      const name = String(item.name || '').trim();
+      if (!name) return;
+      const rollNo = String(item.rollNo || item.roll || `ITI/RAI/2026/TRD-${Math.floor(100 + Math.random() * 900)}`).trim();
+      const registrationNo = String(item.registrationNo || item.regNo || `NCVT2026${Math.floor(1000 + Math.random() * 9000)}`).trim();
+      const fatherName = String(item.fatherName || item.father || '').trim();
+      const email = String(item.email || `${name.toLowerCase().replace(/\s+/g, '.')}@student.iti.cg.in`).trim();
+      const mobile = String(item.mobile || item.phone || '+91 98260 00000').trim();
+      const category = (['GEN', 'OBC', 'SC', 'ST', 'EWS'].includes(item.category) ? item.category : 'OBC') as any;
+      const gender = (['Male', 'Female', 'Other'].includes(item.gender) ? item.gender : 'Male') as any;
+      const dob = String(item.dob || '2005-01-01').trim();
+
+      const newTrainee: Trainee = {
+        id: `tr_bulk_${Date.now()}_${index}_${Math.floor(Math.random() * 1000)}`,
+        rollNo,
+        registrationNo,
+        name,
+        fatherName,
+        email,
+        mobile,
+        tradeId: targetTradeId,
+        sessionId: targetSessionId,
+        dob,
+        gender,
+        category,
+        status: 'active',
+        admissionDate: new Date().toISOString().split('T')[0],
+        password: item.password || 'trainee123',
+      };
+
+      data.trainees.push(newTrainee);
+      addedTrainees.push(newTrainee);
+    });
+
+    db.save();
+    db.addAuditLog({
+      userId: officerId || 'usr_officer',
+      userName: officerName || 'Training Officer',
+      userRole: 'officer',
+      action: 'BULK_IMPORT_TRAINEES',
+      details: `Bulk imported ${addedTrainees.length} trainees via Excel/CSV for trade ${targetTradeId}.`,
+    });
+
+    res.json({ success: true, count: addedTrainees.length, trainees: addedTrainees });
+  });
+
   app.put('/api/trainees/:id', (req: Request, res: Response) => {
     const data = db.get();
     const idx = data.trainees.findIndex((t) => t.id === req.params.id);
@@ -897,7 +953,9 @@ async function startServer() {
     // Geofencing verification
     const campus = data.settings.campusLocation;
     let distance = calculateDistanceMeters(userLat, userLng, campus.lat, campus.lng);
-    let isWithinCampus = distance <= campus.radiusMeters;
+    const accuracyBuffer = Math.min(Number(accuracy) || 0, 150);
+    const effectiveDistance = Math.max(0, distance - accuracyBuffer);
+    let isWithinCampus = distance <= campus.radiusMeters || effectiveDistance <= campus.radiusMeters;
 
     // Optional test simulator for demo if tester is outside campus
     if (forceSimulation) {
@@ -1535,6 +1593,246 @@ async function startServer() {
     res.json(notifications);
   });
 
+  // -------------------------------------------------------------
+  // Training Officer Academic & Administrative Routine APIs
+  // -------------------------------------------------------------
+  // 1. Lesson Plans
+  app.get('/api/lesson-plans', (req: Request, res: Response) => {
+    const tradeId = req.query.tradeId as string;
+    const list = db.get().lessonPlans || [];
+    if (tradeId) {
+      return res.json(list.filter((lp) => lp.tradeId === tradeId));
+    }
+    res.json(list);
+  });
+
+  app.post('/api/lesson-plans', (req: Request, res: Response) => {
+    const body = req.body;
+    const newPlan: LessonPlan = {
+      id: `lp_${Date.now()}`,
+      tradeId: body.tradeId || 'trade_elec',
+      unitName: body.unitName || 'New Module',
+      syllabusRef: body.syllabusRef || 'NCVT Syllabus',
+      startDate: body.startDate || new Date().toISOString().split('T')[0],
+      endDate: body.endDate || new Date().toISOString().split('T')[0],
+      status: body.status || 'Pending',
+      objectives: body.objectives || '',
+      teachingAid: body.teachingAid || '',
+      keyLearningPoints: body.keyLearningPoints || '',
+      assignment: body.assignment || '',
+      reference: body.reference || '',
+      officerName: body.officerName || 'Training Officer',
+    };
+    db.get().lessonPlans.unshift(newPlan);
+    db.save();
+    res.json({ success: true, lessonPlan: newPlan });
+  });
+
+  app.put('/api/lesson-plans/:id', (req: Request, res: Response) => {
+    const id = req.params.id;
+    const body = req.body;
+    const list = db.get().lessonPlans;
+    const index = list.findIndex((lp) => lp.id === id);
+    if (index === -1) return res.status(404).json({ error: 'Lesson plan not found' });
+    list[index] = { ...list[index], ...body };
+    db.save();
+    res.json({ success: true, lessonPlan: list[index] });
+  });
+
+  app.delete('/api/lesson-plans/:id', (req: Request, res: Response) => {
+    const id = req.params.id;
+    const data = db.get();
+    data.lessonPlans = data.lessonPlans.filter((lp) => lp.id !== id);
+    db.save();
+    res.json({ success: true });
+  });
+
+  // 2. Demonstration Plans
+  app.get('/api/demonstration-plans', (req: Request, res: Response) => {
+    const tradeId = req.query.tradeId as string;
+    const list = db.get().demonstrationPlans || [];
+    if (tradeId) {
+      return res.json(list.filter((dp) => dp.tradeId === tradeId));
+    }
+    res.json(list);
+  });
+
+  app.post('/api/demonstration-plans', (req: Request, res: Response) => {
+    const body = req.body;
+    const newDemo: DemonstrationPlan = {
+      id: `dp_${Date.now()}`,
+      tradeId: body.tradeId || 'trade_elec',
+      practicalTitle: body.practicalTitle || 'Practical Demonstration',
+      toolsRequired: body.toolsRequired || 'Standard Tools',
+      allottedHours: Number(body.allottedHours || 4),
+      targetDate: body.targetDate || new Date().toISOString().split('T')[0],
+      status: body.status || 'Pending',
+      objectives: body.objectives || '',
+      procedureSteps: body.procedureSteps || ['Prepare workstation', 'Execute step by step', 'Verify results'],
+      hints: body.hints || 'Follow safety guidelines.',
+      officerName: body.officerName || 'Training Officer',
+    };
+    db.get().demonstrationPlans.unshift(newDemo);
+    db.save();
+    res.json({ success: true, demonstrationPlan: newDemo });
+  });
+
+  app.put('/api/demonstration-plans/:id', (req: Request, res: Response) => {
+    const id = req.params.id;
+    const body = req.body;
+    const list = db.get().demonstrationPlans;
+    const index = list.findIndex((dp) => dp.id === id);
+    if (index === -1) return res.status(404).json({ error: 'Demonstration plan not found' });
+    list[index] = { ...list[index], ...body };
+    db.save();
+    res.json({ success: true, demonstrationPlan: list[index] });
+  });
+
+  app.delete('/api/demonstration-plans/:id', (req: Request, res: Response) => {
+    const id = req.params.id;
+    const data = db.get();
+    data.demonstrationPlans = data.demonstrationPlans.filter((dp) => dp.id !== id);
+    db.save();
+    res.json({ success: true });
+  });
+
+  // 3. Weekly Plans
+  app.get('/api/weekly-plans', (req: Request, res: Response) => {
+    const tradeId = req.query.tradeId as string;
+    const list = db.get().weeklyPlans || [];
+    if (tradeId) {
+      return res.json(list.filter((wp) => wp.tradeId === tradeId));
+    }
+    res.json(list);
+  });
+
+  app.post('/api/weekly-plans', (req: Request, res: Response) => {
+    const body = req.body;
+    const newWeekly: WeeklyPlan = {
+      id: `wp_${Date.now()}`,
+      tradeId: body.tradeId || 'trade_elec',
+      weekNumber: Number(body.weekNumber || 1),
+      dateRange: body.dateRange || 'Current Week',
+      dailyBreakdown: body.dailyBreakdown || [],
+      summaryTheoryDone: Number(body.summaryTheoryDone || 0),
+      summaryTheoryPlanned: Number(body.summaryTheoryPlanned || 5),
+      summaryPracticalDone: Number(body.summaryPracticalDone || 0),
+      summaryPracticalPlanned: Number(body.summaryPracticalPlanned || 5),
+      officerName: body.officerName || 'Training Officer',
+    };
+    db.get().weeklyPlans.unshift(newWeekly);
+    db.save();
+    res.json({ success: true, weeklyPlan: newWeekly });
+  });
+
+  app.put('/api/weekly-plans/:id', (req: Request, res: Response) => {
+    const id = req.params.id;
+    const body = req.body;
+    const list = db.get().weeklyPlans;
+    const index = list.findIndex((wp) => wp.id === id);
+    if (index === -1) return res.status(404).json({ error: 'Weekly plan not found' });
+    list[index] = { ...list[index], ...body };
+    db.save();
+    res.json({ success: true, weeklyPlan: list[index] });
+  });
+
+  app.delete('/api/weekly-plans/:id', (req: Request, res: Response) => {
+    const id = req.params.id;
+    const data = db.get();
+    data.weeklyPlans = data.weeklyPlans.filter((wp) => wp.id !== id);
+    db.save();
+    res.json({ success: true });
+  });
+
+  // 4. Trainee Assessments & Progress Cards
+  app.get('/api/assessments', (req: Request, res: Response) => {
+    const traineeId = req.query.traineeId as string;
+    const list = db.get().assessments || [];
+    if (traineeId) {
+      return res.json(list.filter((asm) => asm.traineeId === traineeId));
+    }
+    res.json(list);
+  });
+
+  const handleAssessmentUpsert = (body: any, targetId?: string) => {
+    const list = db.get().assessments;
+    const idToLookFor = targetId || body.id;
+    let existingIndex = -1;
+
+    if (idToLookFor) {
+      existingIndex = list.findIndex((asm) => asm.id === idToLookFor);
+    }
+    if (existingIndex === -1 && body.traineeId && body.month) {
+      existingIndex = list.findIndex(
+        (asm) => asm.traineeId === body.traineeId && asm.month === body.month
+      );
+    }
+
+    if (existingIndex !== -1) {
+      list[existingIndex] = {
+        ...list[existingIndex],
+        ...body,
+        id: list[existingIndex].id,
+      };
+      db.save();
+      return list[existingIndex];
+    }
+
+    const newAsm: TraineeAssessment = {
+      id: idToLookFor || `asm_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      traineeId: body.traineeId,
+      sessionId: body.sessionId || 'session_2025_2026',
+      month: body.month || new Date().toISOString().substring(0, 7),
+      testMarks: Number(body.testMarks || 0),
+      attendancePercent: Number(body.attendancePercent || 85),
+      parameters: body.parameters || {
+        jobCarriedOut: 8,
+        recordBook: 8,
+        answerSheet: 16,
+        vivaVoce: 8,
+        progressChart: 8,
+        attendancePunctuality: 8,
+        assignment: 4,
+        projectWork: 4,
+        cbtExam: 8,
+        practicalExam: 8,
+      },
+      remarks: body.remarks || 'Satisfactory progress.',
+    };
+
+    list.unshift(newAsm);
+    db.save();
+    return newAsm;
+  };
+
+  app.post('/api/assessments', (req: Request, res: Response) => {
+    try {
+      const saved = handleAssessmentUpsert(req.body);
+      res.json({ success: true, assessment: saved });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to save assessment' });
+    }
+  });
+
+  app.put('/api/assessments/:id', (req: Request, res: Response) => {
+    try {
+      const saved = handleAssessmentUpsert(req.body, req.params.id);
+      res.json({ success: true, assessment: saved });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to update assessment' });
+    }
+  });
+
+  app.delete('/api/assessments/:id', (req: Request, res: Response) => {
+    const id = req.params.id;
+    const list = db.get().assessments || [];
+    const index = list.findIndex((asm) => asm.id === id);
+    if (index === -1) return res.status(404).json({ error: 'Assessment not found' });
+    list.splice(index, 1);
+    db.save();
+    res.json({ success: true, message: 'Assessment deleted' });
+  });
+
   // Audit Logs
   app.get('/api/audit-logs', (_req: Request, res: Response) => {
     res.json(db.get().auditLogs);
@@ -1547,9 +1845,33 @@ async function startServer() {
   });
 
   // -------------------------------------------------------------
-  // Vite Middleware Mode for Development vs Production Static Serving
+  // Service Worker and Web App Manifest Handlers
   // -------------------------------------------------------------
   const distPath = path.resolve(process.cwd(), 'dist');
+  const publicPath = path.resolve(process.cwd(), 'public');
+
+  app.get('/sw.js', (_req: Request, res: Response) => {
+    const swPath = fs.existsSync(path.join(distPath, 'sw.js'))
+      ? path.join(distPath, 'sw.js')
+      : path.join(publicPath, 'sw.js');
+    res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    res.setHeader('Service-Worker-Allowed', '/');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.sendFile(swPath);
+  });
+
+  app.get('/manifest.json', (_req: Request, res: Response) => {
+    const mPath = fs.existsSync(path.join(distPath, 'manifest.json'))
+      ? path.join(distPath, 'manifest.json')
+      : path.join(publicPath, 'manifest.json');
+    res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.sendFile(mPath);
+  });
+
+  // -------------------------------------------------------------
+  // Vite Middleware Mode for Development vs Production Static Serving
+  // -------------------------------------------------------------
   const isProduction = process.env.NODE_ENV === 'production' || (process.env.NODE_ENV !== 'development' && fs.existsSync(path.join(distPath, 'index.html')));
 
   if (isProduction) {

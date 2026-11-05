@@ -9,3 +9,93 @@
     font-variant-numeric: tabular-nums;
   }
 }
+
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 4mm 5mm;
+  }
+
+  html, body {
+    width: 287mm !important;
+    height: 202mm !important;
+    max-width: 287mm !important;
+    max-height: 202mm !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide app navigation, vertical sidebars, headers, footers, action buttons */
+  nav,
+  aside,
+  header,
+  footer,
+  .print\:hidden,
+  .no-print,
+  button,
+  select {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  /* Progress Card single A4 landscape print styling */
+  #printable-progress-card {
+    display: block !important;
+    visibility: visible !important;
+    position: relative !important;
+    width: 287mm !important;
+    max-width: 287mm !important;
+    height: auto !important;
+    max-height: 202mm !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+    overflow: hidden !important;
+  }
+
+  #printable-progress-card * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Force exact landscape grid styling in print */
+  .progress-card-middle-grid {
+    display: grid !important;
+    grid-template-columns: 7fr 5fr !important;
+    gap: 8px !important;
+  }
+  .progress-card-left-col {
+    grid-column: span 1 !important;
+  }
+  .progress-card-right-col {
+    grid-column: span 1 !important;
+  }
+  .progress-card-summary-grid {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 6px !important;
+  }
+  .progress-card-params-grid {
+    display: grid !important;
+    grid-template-columns: repeat(5, 1fr) !important;
+    gap: 4px !important;
+  }
+  .progress-card-leave-grid {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 4px !important;
+  }
+}
+
+

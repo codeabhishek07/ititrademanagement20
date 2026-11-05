@@ -14,12 +14,67 @@ import {
   AttendanceStatus,
   LeaveType,
   AppNotification,
+  LessonPlan,
+  DemonstrationPlan,
+  WeeklyPlan,
+  TraineeAssessment,
 } from './types.ts';
+import {
+  getCachedData,
+  setCachedData,
+  enqueueOfflineAction,
+} from './offline/indexedDb.ts';
+
+/**
+ * Helper to fetch data with network-first strategy, falling back to IndexedDB cache
+ * when offline or when connection drops, and saving fresh network responses to IndexedDB.
+ */
+async function fetchWithOfflineCache<T>(
+  cacheKey: string,
+  fetcher: () => Promise<Response>,
+  defaultFallback?: T
+): Promise<T> {
+  // 1. If navigator is explicitly offline, return cached value immediately
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    const cached = await getCachedData<T>(cacheKey);
+    if (cached !== null && cached !== undefined) {
+      return cached;
+    }
+  }
+
+  // 2. Try network fetch
+  try {
+    const res = await fetcher();
+    if (res.ok) {
+      const data = (await res.json()) as T;
+      // Persist to IndexedDB asynchronously
+      setCachedData(cacheKey, data).catch((err) =>
+        console.warn(`IndexedDB save failed for ${cacheKey}:`, err)
+      );
+      return data;
+    }
+
+    // Server returned non-ok error: check IndexedDB cache
+    const cached = await getCachedData<T>(cacheKey);
+    if (cached !== null && cached !== undefined) {
+      return cached;
+    }
+    throw new Error(`Request failed with status ${res.status}`);
+  } catch (netErr) {
+    // Network failure (offline, connection lost, timeout) -> retrieve from IndexedDB
+    const cached = await getCachedData<T>(cacheKey);
+    if (cached !== null && cached !== undefined) {
+      return cached;
+    }
+    if (defaultFallback !== undefined) {
+      return defaultFallback;
+    }
+    throw netErr;
+  }
+}
 
 export async function fetchBootstrap() {
-  const res = await fetch('/api/bootstrap');
-  if (!res.ok) throw new Error('Failed to load bootstrap data');
-  return res.json() as Promise<{
+  return fetchWithOfflineCache<{
     settings: SystemSettings;
     sessions: AcademicSession[];
     trades: Trade[];
@@ -29,7 +84,7 @@ export async function fetchBootstrap() {
       totalTrainees: number;
       totalInventoryItems: number;
     };
-  }>;
+  }>('iti_cache_bootstrap', () => fetch('/api/bootstrap'));
 }
 
 export async function loginApi(params: {
@@ -52,8 +107,7 @@ export async function loginApi(params: {
 }
 
 export async function fetchSettings(): Promise<SystemSettings> {
-  const res = await fetch('/api/settings');
-  return res.json();
+  return fetchWithOfflineCache<SystemSettings>('iti_cache_settings', () => fetch('/api/settings'));
 }
 
 export async function updateSettings(settings: Partial<SystemSettings>) {
@@ -63,12 +117,14 @@ export async function updateSettings(settings: Partial<SystemSettings>) {
     body: JSON.stringify(settings),
   });
   if (!res.ok) throw new Error('Failed to update settings');
-  return res.json();
+  const updated = await res.json();
+  // Sync to IndexedDB cache
+  setCachedData('iti_cache_settings', updated).catch(() => {});
+  return updated;
 }
 
 export async function fetchSessions(): Promise<AcademicSession[]> {
-  const res = await fetch('/api/sessions');
-  return res.json();
+  return fetchWithOfflineCache<AcademicSession[]>('iti_cache_sessions', () => fetch('/api/sessions'), []);
 }
 
 export async function createSession(session: Partial<AcademicSession>) {
@@ -109,8 +165,11 @@ export async function setDefaultSession(sessionId: string) {
 
 export async function fetchMonthlyWorkingDays(sessionId?: string): Promise<MonthlyWorkingDay[]> {
   const url = sessionId ? `/api/monthly-working-days?sessionId=${sessionId}` : '/api/monthly-working-days';
-  const res = await fetch(url);
-  return res.json();
+  return fetchWithOfflineCache<MonthlyWorkingDay[]>(
+    `iti_cache_mwd_${sessionId || 'all'}`,
+    () => fetch(url),
+    []
+  );
 }
 
 export async function saveMonthlyWorkingDay(payload: Partial<MonthlyWorkingDay>) {
@@ -140,8 +199,7 @@ export async function deleteMonthlyWorkingDay(id: string) {
 }
 
 export async function fetchTrades(): Promise<Trade[]> {
-  const res = await fetch('/api/trades');
-  return res.json();
+  return fetchWithOfflineCache<Trade[]>('iti_cache_trades', () => fetch('/api/trades'), []);
 }
 
 export async function createTrade(trade: Partial<Trade>) {
@@ -171,14 +229,11 @@ export async function deleteTrade(id: string) {
 }
 
 export async function fetchOfficers(): Promise<TrainingOfficer[]> {
-  const res = await fetch('/api/officers');
-  return res.json();
+  return fetchWithOfflineCache<TrainingOfficer[]>('iti_cache_officers', () => fetch('/api/officers'), []);
 }
 
 export async function fetchOfficer(id: string): Promise<TrainingOfficer> {
-  const res = await fetch(`/api/officers/${id}`);
-  if (!res.ok) throw new Error('Failed to fetch officer details');
-  return res.json();
+  return fetchWithOfflineCache<TrainingOfficer>(`iti_cache_officer_${id}`, () => fetch(`/api/officers/${id}`));
 }
 
 export async function createOfficer(officer: Partial<TrainingOfficer>) {
@@ -221,8 +276,12 @@ export async function fetchTrainees(tradeId?: string, sessionId?: string): Promi
   const params = new URLSearchParams();
   if (tradeId) params.append('tradeId', tradeId);
   if (sessionId) params.append('sessionId', sessionId);
-  const res = await fetch(`/api/trainees?${params.toString()}`);
-  return res.json();
+  const qs = params.toString();
+  return fetchWithOfflineCache<Trainee[]>(
+    `iti_cache_trainees_${qs || 'all'}`,
+    () => fetch(`/api/trainees?${qs}`),
+    []
+  );
 }
 
 export async function createTrainee(trainee: Partial<Trainee> & { officerId?: string; officerName?: string }) {
@@ -260,8 +319,11 @@ export async function fetchAttendance(params?: {
   month?: string;
 }): Promise<AttendanceRecord[]> {
   const qs = new URLSearchParams(params as any).toString();
-  const res = await fetch(`/api/attendance?${qs}`);
-  return res.json();
+  return fetchWithOfflineCache<AttendanceRecord[]>(
+    `iti_cache_attendance_${qs || 'all'}`,
+    () => fetch(`/api/attendance?${qs}`),
+    []
+  );
 }
 
 export async function markTraineeAttendance(payload: {
@@ -271,14 +333,70 @@ export async function markTraineeAttendance(payload: {
   accuracy?: number;
   forceSimulation?: boolean;
 }) {
-  const res = await fetch('/api/attendance/mark-trainee', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Failed to mark attendance');
-  return data;
+  // 1. If explicitly offline, enqueue in IndexedDB and return optimistic record
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    await enqueueOfflineAction({
+      url: '/api/attendance/mark-trainee',
+      method: 'POST',
+      body: payload,
+      label: 'Mark Trainee Attendance',
+    });
+    return {
+      success: true,
+      offline: true,
+      queued: true,
+      message: 'Attendance saved offline in IndexedDB. Will automatically sync to server once reconnected.',
+      record: {
+        id: 'offline_' + Date.now(),
+        traineeId: payload.traineeId,
+        date: new Date().toISOString().split('T')[0],
+        status: 'P' as AttendanceStatus,
+        timestamp: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }),
+        method: 'geofence',
+        verifiedLocation: { lat: payload.userLat, lng: payload.userLng, distanceMeters: 0 },
+        remarks: 'Recorded offline in local database (IndexedDB queued)',
+      },
+    };
+  }
+
+  // 2. Try network call
+  try {
+    const res = await fetch('/api/attendance/mark-trainee', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to mark attendance');
+    return data;
+  } catch (err: any) {
+    // If connection dropped during flight, queue offline
+    if (typeof navigator !== 'undefined' && (!navigator.onLine || err.message?.includes('Failed to fetch') || err.name === 'TypeError')) {
+      await enqueueOfflineAction({
+        url: '/api/attendance/mark-trainee',
+        method: 'POST',
+        body: payload,
+        label: 'Mark Trainee Attendance',
+      });
+      return {
+        success: true,
+        offline: true,
+        queued: true,
+        message: 'Connection dropped: Attendance saved offline in IndexedDB and queued for sync.',
+        record: {
+          id: 'offline_' + Date.now(),
+          traineeId: payload.traineeId,
+          date: new Date().toISOString().split('T')[0],
+          status: 'P' as AttendanceStatus,
+          timestamp: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }),
+          method: 'geofence',
+          verifiedLocation: { lat: payload.userLat, lng: payload.userLng, distanceMeters: 0 },
+          remarks: 'Recorded offline in local database (IndexedDB queued)',
+        },
+      };
+    }
+    throw err;
+  }
 }
 
 export async function batchSaveAttendance(payload: {
@@ -287,13 +405,46 @@ export async function batchSaveAttendance(payload: {
   officerName: string;
   records: Array<{ traineeId: string; status: AttendanceStatus; remarks?: string }>;
 }) {
-  const res = await fetch('/api/attendance/batch-officer', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) throw new Error('Failed to update attendance');
-  return res.json();
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    await enqueueOfflineAction({
+      url: '/api/attendance/batch-officer',
+      method: 'POST',
+      body: payload,
+      label: `Batch Attendance (${payload.records.length} trainees)`,
+    });
+    return {
+      success: true,
+      offline: true,
+      queued: true,
+      message: `${payload.records.length} attendance record(s) queued offline. Will sync when back online.`,
+    };
+  }
+
+  try {
+    const res = await fetch('/api/attendance/batch-officer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error('Failed to update attendance');
+    return res.json();
+  } catch (err: any) {
+    if (typeof navigator !== 'undefined' && (!navigator.onLine || err.message?.includes('Failed to fetch') || err.name === 'TypeError')) {
+      await enqueueOfflineAction({
+        url: '/api/attendance/batch-officer',
+        method: 'POST',
+        body: payload,
+        label: `Batch Attendance (${payload.records.length} trainees)`,
+      });
+      return {
+        success: true,
+        offline: true,
+        queued: true,
+        message: 'Connection lost: Batch attendance queued offline in IndexedDB.',
+      };
+    }
+    throw err;
+  }
 }
 
 export async function triggerAutoAbsent(date?: string, tradeId?: string) {
@@ -307,8 +458,11 @@ export async function triggerAutoAbsent(date?: string, tradeId?: string) {
 
 export async function fetchLeaves(params?: { traineeId?: string; tradeId?: string; status?: string }): Promise<LeaveRequest[]> {
   const qs = new URLSearchParams(params as any).toString();
-  const res = await fetch(`/api/leaves?${qs}`);
-  return res.json();
+  return fetchWithOfflineCache<LeaveRequest[]>(
+    `iti_cache_leaves_${qs || 'all'}`,
+    () => fetch(`/api/leaves?${qs}`),
+    []
+  );
 }
 
 export async function applyLeave(payload: {
@@ -319,13 +473,71 @@ export async function applyLeave(payload: {
   days: number;
   reason: string;
 }) {
-  const res = await fetch('/api/leaves/apply', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) throw new Error('Failed to submit leave application');
-  return res.json();
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    await enqueueOfflineAction({
+      url: '/api/leaves/apply',
+      method: 'POST',
+      body: payload,
+      label: `Leave Application (${payload.leaveType})`,
+    });
+    return {
+      success: true,
+      offline: true,
+      queued: true,
+      message: 'Offline Mode: Leave application queued in local IndexedDB. Will sync when reconnected.',
+      leave: {
+        id: 'offline_leave_' + Date.now(),
+        traineeId: payload.traineeId,
+        leaveType: payload.leaveType,
+        fromDate: payload.fromDate,
+        toDate: payload.toDate,
+        days: payload.days,
+        reason: payload.reason,
+        status: 'pending',
+        appliedAt: new Date().toISOString(),
+      },
+    };
+  }
+
+  try {
+    const res = await fetch('/api/leaves/apply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to submit leave' }));
+      throw new Error(err.error || 'Failed to submit leave application');
+    }
+    return res.json();
+  } catch (err: any) {
+    if (typeof navigator !== 'undefined' && (!navigator.onLine || err.message?.includes('Failed to fetch') || err.name === 'TypeError')) {
+      await enqueueOfflineAction({
+        url: '/api/leaves/apply',
+        method: 'POST',
+        body: payload,
+        label: `Leave Application (${payload.leaveType})`,
+      });
+      return {
+        success: true,
+        offline: true,
+        queued: true,
+        message: 'Connection interrupted: Leave application queued in IndexedDB.',
+        leave: {
+          id: 'offline_leave_' + Date.now(),
+          traineeId: payload.traineeId,
+          leaveType: payload.leaveType,
+          fromDate: payload.fromDate,
+          toDate: payload.toDate,
+          days: payload.days,
+          reason: payload.reason,
+          status: 'pending',
+          appliedAt: new Date().toISOString(),
+        },
+      };
+    }
+    throw err;
+  }
 }
 
 export async function reviewLeave(id: string, payload: {
@@ -344,8 +556,11 @@ export async function reviewLeave(id: string, payload: {
 
 export async function fetchWarnings(params?: { traineeId?: string; tradeId?: string }): Promise<WarningNotice[]> {
   const qs = new URLSearchParams(params as any).toString();
-  const res = await fetch(`/api/warnings?${qs}`);
-  return res.json();
+  return fetchWithOfflineCache<WarningNotice[]>(
+    `iti_cache_warnings_${qs || 'all'}`,
+    () => fetch(`/api/warnings?${qs}`),
+    []
+  );
 }
 
 export async function issueWarning(payload: {
@@ -374,8 +589,11 @@ export async function acknowledgeWarning(id: string) {
 
 export async function fetchInventory(params?: { tradeId?: string; category?: string }): Promise<InventoryItem[]> {
   const qs = new URLSearchParams(params as any).toString();
-  const res = await fetch(`/api/inventory?${qs}`);
-  return res.json();
+  return fetchWithOfflineCache<InventoryItem[]>(
+    `iti_cache_inventory_${qs || 'all'}`,
+    () => fetch(`/api/inventory?${qs}`),
+    []
+  );
 }
 
 export async function saveInventoryItem(item: Partial<InventoryItem> & { officerId?: string; officerName?: string }) {
@@ -398,8 +616,11 @@ export async function deleteInventoryItem(id: string) {
 
 export async function fetchIndents(params?: { tradeId?: string; traineeId?: string; status?: string }): Promise<IndentRecord[]> {
   const qs = new URLSearchParams(params as any).toString();
-  const res = await fetch(`/api/indent?${qs}`);
-  return res.json();
+  return fetchWithOfflineCache<IndentRecord[]>(
+    `iti_cache_indents_${qs || 'all'}`,
+    () => fetch(`/api/indent?${qs}`),
+    []
+  );
 }
 
 export async function issueIndent(payload: {
@@ -437,8 +658,7 @@ export async function returnIndent(id: string, payload: {
 }
 
 export async function fetchAuditLogs(): Promise<AuditLog[]> {
-  const res = await fetch('/api/audit-logs');
-  return res.json();
+  return fetchWithOfflineCache<AuditLog[]>('iti_cache_audit_logs', () => fetch('/api/audit-logs'), []);
 }
 
 export async function resetDatabase() {
@@ -448,9 +668,11 @@ export async function resetDatabase() {
 
 export async function fetchNotifications(traineeId?: string): Promise<AppNotification[]> {
   const params = traineeId ? `?traineeId=${encodeURIComponent(traineeId)}` : '';
-  const res = await fetch(`/api/notifications${params}`);
-  if (!res.ok) return [];
-  return res.json();
+  return fetchWithOfflineCache<AppNotification[]>(
+    `iti_cache_notifications_${traineeId || 'all'}`,
+    () => fetch(`/api/notifications${params}`),
+    []
+  );
 }
 
 // -------------------------------------------------------------
@@ -524,4 +746,121 @@ export async function resetPasswordWithToken(params: {
   }
   return data;
 }
+
+// -------------------------------------------------------------
+// Training Officer Academic & Administrative Routine APIs
+// -------------------------------------------------------------
+export async function fetchLessonPlans(tradeId?: string): Promise<LessonPlan[]> {
+  const qs = tradeId ? `?tradeId=${encodeURIComponent(tradeId)}` : '';
+  return fetchWithOfflineCache<LessonPlan[]>(`iti_cache_lesson_plans_${tradeId || 'all'}`, () => fetch(`/api/lesson-plans${qs}`), []);
+}
+
+export async function saveLessonPlan(payload: Partial<LessonPlan>) {
+  const method = payload.id ? 'PUT' : 'POST';
+  const url = payload.id ? `/api/lesson-plans/${payload.id}` : '/api/lesson-plans';
+  const res = await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error('Failed to save lesson plan');
+  return res.json();
+}
+
+export async function deleteLessonPlan(id: string) {
+  const res = await fetch(`/api/lesson-plans/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to delete lesson plan');
+  return res.json();
+}
+
+export async function fetchDemonstrationPlans(tradeId?: string): Promise<DemonstrationPlan[]> {
+  const qs = tradeId ? `?tradeId=${encodeURIComponent(tradeId)}` : '';
+  return fetchWithOfflineCache<DemonstrationPlan[]>(`iti_cache_demo_plans_${tradeId || 'all'}`, () => fetch(`/api/demonstration-plans${qs}`), []);
+}
+
+export async function saveDemonstrationPlan(payload: Partial<DemonstrationPlan>) {
+  const method = payload.id ? 'PUT' : 'POST';
+  const url = payload.id ? `/api/demonstration-plans/${payload.id}` : '/api/demonstration-plans';
+  const res = await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error('Failed to save demonstration plan');
+  return res.json();
+}
+
+export async function deleteDemonstrationPlan(id: string) {
+  const res = await fetch(`/api/demonstration-plans/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to delete demonstration plan');
+  return res.json();
+}
+
+export async function fetchWeeklyPlans(tradeId?: string): Promise<WeeklyPlan[]> {
+  const qs = tradeId ? `?tradeId=${encodeURIComponent(tradeId)}` : '';
+  return fetchWithOfflineCache<WeeklyPlan[]>(`iti_cache_weekly_plans_${tradeId || 'all'}`, () => fetch(`/api/weekly-plans${qs}`), []);
+}
+
+export async function saveWeeklyPlan(payload: Partial<WeeklyPlan>) {
+  const method = payload.id ? 'PUT' : 'POST';
+  const url = payload.id ? `/api/weekly-plans/${payload.id}` : '/api/weekly-plans';
+  const res = await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error('Failed to save weekly plan');
+  return res.json();
+}
+
+export async function deleteWeeklyPlan(id: string) {
+  const res = await fetch(`/api/weekly-plans/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to delete weekly plan');
+  return res.json();
+}
+
+export async function fetchAssessments(traineeId?: string): Promise<TraineeAssessment[]> {
+  const qs = traineeId ? `?traineeId=${encodeURIComponent(traineeId)}` : '';
+  return fetchWithOfflineCache<TraineeAssessment[]>(`iti_cache_assessments_${traineeId || 'all'}`, () => fetch(`/api/assessments${qs}`), []);
+}
+
+export async function saveAssessment(payload: Partial<TraineeAssessment>) {
+  const method = payload.id ? 'PUT' : 'POST';
+  const url = payload.id ? `/api/assessments/${payload.id}` : '/api/assessments';
+  const res = await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.error || 'Failed to save assessment');
+  }
+  return res.json();
+}
+
+export async function deleteAssessment(id: string) {
+  const res = await fetch(`/api/assessments/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to delete assessment');
+  return res.json();
+}
+
+export async function bulkImportTrainees(payload: {
+  trainees: Partial<Trainee>[];
+  tradeId: string;
+  sessionId: string;
+  officerId: string;
+  officerName: string;
+}) {
+  const res = await fetch('/api/trainees/bulk', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to bulk import trainees');
+  return data;
+}
+
+
 

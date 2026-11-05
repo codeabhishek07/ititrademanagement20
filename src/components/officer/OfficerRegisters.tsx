@@ -692,18 +692,18 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
   return (
     <div className="space-y-6">
       {/* Top Registers Control Banner */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-5">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-slate-200 pb-4">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-4 sm:p-5">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 border-b border-slate-200 pb-4">
           <div>
             <div className="flex items-center gap-2">
-              <span className="p-1.5 bg-amber-100 text-amber-800 rounded-md">
+              <span className="p-1.5 bg-amber-100 text-amber-800 rounded-md shrink-0">
                 <BookOpen className="w-5 h-5" />
               </span>
               <div>
-                <h2 className="text-base sm:text-lg font-bold text-slate-900">
+                <h2 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">
                   Official NCVT / DGT Registers &amp; Reports
                 </h2>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-500 mt-0.5">
                   Government Industrial Training Institute Raigarh · Trade: {currentTrade?.name} ({currentTrade?.code})
                 </p>
               </div>
@@ -711,28 +711,28 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
           </div>
 
           {/* Action Buttons: Export & Print */}
-          <div className="flex items-center gap-2 self-start lg:self-auto">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
             <button
               onClick={handleExportRegisterCSV}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-medium rounded-lg text-xs transition-colors shadow-xs"
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg text-xs transition-colors shadow-xs whitespace-nowrap cursor-pointer active:scale-95"
               title="Download clean CSV / Excel formatted spreadsheet for active register"
             >
-              <Download className="w-3.5 h-3.5" />
+              <Download className="w-3.5 h-3.5 shrink-0" />
               <span>Export Excel / CSV</span>
             </button>
             <button
               onClick={() => setPrintModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-medium rounded-lg text-xs transition-colors shadow-xs"
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-lg text-xs transition-colors shadow-xs whitespace-nowrap cursor-pointer active:scale-95"
               title="Print formal signed government format register PDF"
             >
-              <Printer className="w-3.5 h-3.5" />
+              <Printer className="w-3.5 h-3.5 shrink-0" />
               <span>Print Official Register</span>
             </button>
           </div>
         </div>
 
         {/* 7-Segment Register Switcher Bar - Bold High-Contrast Menu */}
-        <div className="pt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2.5">
+        <div className="pt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2 sm:gap-2.5">
           {registerTabs.map((tab) => {
             const Icon = tab.icon;
             const isCurrent = activeRegister === tab.id;
@@ -743,15 +743,15 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
                   setActiveRegister(tab.id);
                   setSearchQuery('');
                 }}
-                className={`flex flex-col text-left p-3 rounded-xl border-2 transition-all cursor-pointer ${
+                className={`flex flex-col text-left p-2.5 sm:p-3 rounded-xl border-2 transition-all cursor-pointer min-h-[72px] sm:min-h-[82px] justify-between ${
                   isCurrent
                     ? 'bg-slate-950 text-white border-amber-400 shadow-md ring-2 ring-amber-400/20'
                     : 'bg-white hover:bg-slate-50 text-slate-800 border-slate-200 hover:border-slate-400 shadow-xs'
                 }`}
               >
-                <div className="flex items-center justify-between w-full mb-1.5">
+                <div className="flex items-center justify-between w-full mb-1">
                   <span
-                    className={`text-[10px] font-black px-2 py-0.5 rounded font-mono ${
+                    className={`text-[9px] sm:text-[10px] font-black px-1.5 sm:px-2 py-0.5 rounded font-mono ${
                       isCurrent
                         ? 'bg-amber-400 text-slate-950 shadow-xs'
                         : 'bg-slate-100 text-slate-800 border border-slate-300'
@@ -760,25 +760,27 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
                     {tab.formNo}
                   </span>
                   <Icon
-                    className={`w-4 h-4 ${
+                    className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 ${
                       isCurrent ? 'text-amber-400' : 'text-slate-500'
                     }`}
                   />
                 </div>
-                <span
-                  className={`text-xs leading-snug line-clamp-1 ${
-                    isCurrent ? 'text-white font-extrabold' : 'text-slate-900 font-bold'
-                  }`}
-                >
-                  {tab.name}
-                </span>
-                <span
-                  className={`text-[10px] line-clamp-1 mt-0.5 font-medium ${
-                    isCurrent ? 'text-amber-300' : 'text-slate-500'
-                  }`}
-                >
-                  {tab.hindiName}
-                </span>
+                <div>
+                  <span
+                    className={`text-[11px] sm:text-xs leading-tight line-clamp-1 block ${
+                      isCurrent ? 'text-white font-extrabold' : 'text-slate-900 font-bold'
+                    }`}
+                  >
+                    {tab.name}
+                  </span>
+                  <span
+                    className={`text-[9px] sm:text-[10px] line-clamp-1 mt-0.5 font-medium block ${
+                      isCurrent ? 'text-amber-300' : 'text-slate-500'
+                    }`}
+                  >
+                    {tab.hindiName}
+                  </span>
+                </div>
               </button>
             );
           })}
@@ -826,19 +828,19 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
         {/* ---------------- REGISTER 1: DAILY ATTENDANCE REGISTER ---------------- */}
         {activeRegister === 'daily_attendance' && (
           <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200 pb-3">
               <div>
                 <h4 className="font-bold text-sm text-slate-900 flex items-center gap-2">
                   <span>FORM IV: Daily Muster Roll &amp; GPS Attendance Register</span>
-                  <span className="text-xs font-normal text-slate-500">(दैनिक उपस्थिति पंजी)</span>
+                  <span className="text-xs font-normal text-slate-500 hidden sm:inline">(दैनिक उपस्थिति पंजी)</span>
                 </h4>
                 <p className="text-xs text-slate-500">
                   Daily muster roll recording physical GPS check-ins, manual officer verification, and leave credits.
                 </p>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 text-xs w-full sm:w-auto">
+                <div className="flex items-center justify-between sm:justify-start gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5">
                   <span className="text-slate-500 font-medium">Select Date:</span>
                   <input
                     type="date"
@@ -847,21 +849,21 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
                     className="bg-transparent font-mono font-semibold text-slate-900 focus:outline-hidden"
                   />
                 </div>
-                <div className="relative">
+                <div className="relative w-full sm:w-auto">
                   <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search trainee name or roll no..."
-                    className="pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs w-48 sm:w-60 focus:outline-hidden focus:border-amber-400"
+                    className="pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs w-full sm:w-60 focus:outline-hidden focus:border-amber-400"
                   />
                 </div>
               </div>
             </div>
 
             {/* Daily Summary Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3 text-xs">
               <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
                 <span className="text-slate-500 text-[11px]">Enrolled Strength</span>
                 <div className="text-lg font-bold text-slate-900 font-mono mt-0.5">
@@ -893,7 +895,7 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
                   }
                 </div>
               </div>
-              <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+              <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 col-span-2 sm:col-span-1">
                 <span className="text-blue-800 text-[11px]">Day Turnout Ratio</span>
                 <div className="text-lg font-bold text-blue-700 font-mono mt-0.5">
                   {trainees.length > 0
@@ -914,8 +916,12 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
             </div>
 
             {/* Daily Table */}
-            <div className="overflow-x-auto border border-slate-200 rounded-lg">
-              <table className="w-full text-left text-xs border-collapse">
+            <div className="overflow-x-auto border border-slate-200 rounded-lg max-w-full">
+              <div className="sm:hidden flex items-center justify-between text-[11px] text-slate-500 bg-slate-50 px-3 py-1.5 border-b border-slate-200">
+                <span>← Scroll table sideways to view all columns →</span>
+                <span className="font-mono text-[10px]">NCVT Muster Roll</span>
+              </div>
+              <table className="w-full text-left text-xs border-collapse min-w-[750px]">
                 <thead>
                   <tr className="bg-slate-100/80 border-b border-slate-200 text-slate-700">
                     <th className="py-2.5 px-3 font-semibold text-center w-12">S.No.</th>
@@ -1003,20 +1009,20 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
         {/* ---------------- REGISTER 2: MONTHLY ATTENDANCE REGISTER (1-31 MATRIX) ---------------- */}
         {activeRegister === 'monthly_attendance' && (
           <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200 pb-3">
               <div>
                 <h4 className="font-bold text-sm text-slate-900 flex items-center gap-2">
                   <span>FORM V: Monthly Comprehensive Trainee Attendance Register</span>
-                  <span className="text-xs font-normal text-slate-500">(मासिक उपस्थिति पत्रक 1-31 दिन)</span>
+                  <span className="text-xs font-normal text-slate-500 hidden sm:inline">(मासिक उपस्थिति पत्रक 1-31 दिन)</span>
                 </h4>
                 <p className="text-xs text-slate-500">
                   Official NCVT full-month matrix with day-by-day attendance codes (P=Present, A=Absent, CL=Casual Leave, ML=Medical Leave, H=Holiday).
                 </p>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 text-xs">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 text-xs w-full sm:w-auto">
                 {/* Month Navigator */}
-                <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1 border border-slate-200">
+                <div className="flex items-center justify-between sm:justify-start gap-1 bg-slate-100 rounded-lg p-1 border border-slate-200">
                   <button
                     onClick={handlePrevMonth}
                     className="p-1 hover:bg-white rounded transition-colors text-slate-700 cursor-pointer"
@@ -1039,14 +1045,14 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
                   </button>
                 </div>
 
-                <div className="relative">
+                <div className="relative w-full sm:w-auto">
                   <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search roll no or trainee..."
-                    className="pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs w-48 sm:w-60 focus:outline-hidden focus:border-amber-400"
+                    className="pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs w-full sm:w-60 focus:outline-hidden focus:border-amber-400"
                   />
                 </div>
               </div>
@@ -1083,8 +1089,12 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
             </div>
 
             {/* Matrix Table (Wide Scrollable) */}
-            <div className="overflow-x-auto border border-slate-200 rounded-lg">
-              <table className="w-full text-left text-xs border-collapse">
+            <div className="overflow-x-auto border border-slate-200 rounded-lg max-w-full">
+              <div className="sm:hidden flex items-center justify-between text-[11px] text-slate-500 bg-slate-50 px-3 py-1.5 border-b border-slate-200">
+                <span>← Scroll table sideways to view all 31 days →</span>
+                <span className="font-mono text-[10px]">Matrix</span>
+              </div>
+              <table className="w-full text-left text-xs border-collapse min-w-[950px]">
                 <thead>
                   <tr className="bg-slate-100 border-b border-slate-300 text-slate-700">
                     <th className="py-2 px-2.5 font-semibold text-center sticky left-0 bg-slate-100 z-10 w-10">
@@ -1208,19 +1218,19 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
         {/* ---------------- REGISTER 3: LEAVE REGISTER ---------------- */}
         {activeRegister === 'leave_register' && (
           <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200 pb-3">
               <div>
                 <h4 className="font-bold text-sm text-slate-900 flex items-center gap-2">
                   <span>FORM VII: Trainee Leave Sanction &amp; Registration Register</span>
-                  <span className="text-xs font-normal text-slate-500">(प्रशिक्षु अवकाश पंजी)</span>
+                  <span className="text-xs font-normal text-slate-500 hidden sm:inline">(प्रशिक्षु अवकाश पंजी)</span>
                 </h4>
                 <p className="text-xs text-slate-500">
                   Comprehensive register of all Casual Leave (CL), Medical Leave (ML), and Half-Day applications with sanction orders.
                 </p>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 text-xs w-full sm:w-auto">
+                <div className="flex items-center justify-between sm:justify-start gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5">
                   <span className="text-slate-500 font-medium">Status:</span>
                   <select
                     value={leaveStatusFilter}
@@ -1233,21 +1243,21 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
                     <option value="rejected">Rejected</option>
                   </select>
                 </div>
-                <div className="relative">
+                <div className="relative w-full sm:w-auto">
                   <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search roll no, trainee..."
-                    className="pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs w-48 sm:w-60 focus:outline-hidden focus:border-amber-400"
+                    className="pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs w-full sm:w-60 focus:outline-hidden focus:border-amber-400"
                   />
                 </div>
               </div>
             </div>
 
             {/* Leave Metrics */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 text-xs">
               <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
                 <span className="text-slate-500 text-[11px]">Total Applications</span>
                 <div className="text-lg font-bold text-slate-900 font-mono mt-0.5">
@@ -1275,8 +1285,12 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
             </div>
 
             {/* Leave Table */}
-            <div className="overflow-x-auto border border-slate-200 rounded-lg">
-              <table className="w-full text-left text-xs border-collapse">
+            <div className="overflow-x-auto border border-slate-200 rounded-lg max-w-full">
+              <div className="sm:hidden flex items-center justify-between text-[11px] text-slate-500 bg-slate-50 px-3 py-1.5 border-b border-slate-200">
+                <span>← Scroll table sideways to view all columns →</span>
+                <span className="font-mono text-[10px]">Form VII</span>
+              </div>
+              <table className="w-full text-left text-xs border-collapse min-w-[750px]">
                 <thead>
                   <tr className="bg-slate-100 border-b border-slate-200 text-slate-700">
                     <th className="py-2.5 px-3 font-semibold text-center w-12">S.No.</th>
@@ -1338,19 +1352,19 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
         {/* ---------------- REGISTER 4: WORKSHOP INVENTORY REGISTER ---------------- */}
         {activeRegister === 'workshop_inventory' && (
           <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200 pb-3">
               <div>
                 <h4 className="font-bold text-sm text-slate-900 flex items-center gap-2">
                   <span>FORM VIII: Workshop Inventory &amp; Consumable Stock Register</span>
-                  <span className="text-xs font-normal text-slate-500">(कार्यशाला सामग्री स्टॉक पंजी)</span>
+                  <span className="text-xs font-normal text-slate-500 hidden sm:inline">(कार्यशाला सामग्री स्टॉक पंजी)</span>
                 </h4>
                 <p className="text-xs text-slate-500">
                   Physical stock reconciliation: total holdings, items issued to floor, damaged stock, and shelf availability.
                 </p>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 text-xs w-full sm:w-auto">
+                <div className="flex items-center justify-between sm:justify-start gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5">
                   <span className="text-slate-500 font-medium">Category:</span>
                   <select
                     value={inventoryCategoryFilter}
@@ -1364,21 +1378,21 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
                     <option value="Consumables & Raw Materials">Consumables & Raw Materials</option>
                   </select>
                 </div>
-                <div className="relative">
+                <div className="relative w-full sm:w-auto">
                   <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search tool code or item..."
-                    className="pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs w-48 sm:w-60 focus:outline-hidden focus:border-amber-400"
+                    className="pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs w-full sm:w-60 focus:outline-hidden focus:border-amber-400"
                   />
                 </div>
               </div>
             </div>
 
             {/* Inventory KPI Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 text-xs">
               <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
                 <span className="text-slate-500 text-[11px]">Total Tool Master Items</span>
                 <div className="text-lg font-bold text-slate-900 font-mono mt-0.5">
@@ -1406,8 +1420,12 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
             </div>
 
             {/* Inventory Table */}
-            <div className="overflow-x-auto border border-slate-200 rounded-lg">
-              <table className="w-full text-left text-xs border-collapse">
+            <div className="overflow-x-auto border border-slate-200 rounded-lg max-w-full">
+              <div className="sm:hidden flex items-center justify-between text-[11px] text-slate-500 bg-slate-50 px-3 py-1.5 border-b border-slate-200">
+                <span>← Scroll table sideways to view all columns →</span>
+                <span className="font-mono text-[10px]">Form VIII</span>
+              </div>
+              <table className="w-full text-left text-xs border-collapse min-w-[750px]">
                 <thead>
                   <tr className="bg-slate-100 border-b border-slate-200 text-slate-700">
                     <th className="py-2.5 px-3 font-semibold text-center w-12">S.No.</th>
@@ -1463,34 +1481,38 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
         {/* ---------------- REGISTER 5: TOOLS & EQUIPMENTS REGISTER (DGT COMPLIANCE) ---------------- */}
         {activeRegister === 'tools_equipments' && (
           <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200 pb-3">
               <div>
                 <h4 className="font-bold text-sm text-slate-900 flex items-center gap-2">
                   <span>FORM IX: DGT Tools, Machinery &amp; Testing Equipment Compliance Register</span>
-                  <span className="text-xs font-normal text-slate-500">(औजार एवं उपकरण रजिस्टर)</span>
+                  <span className="text-xs font-normal text-slate-500 hidden sm:inline">(औजार एवं उपकरण रजिस्टर)</span>
                 </h4>
                 <p className="text-xs text-slate-500">
                   Mandatory workshop standard equipment register conforming to DGT syllabus norms, condition, and maintenance tracking.
                 </p>
               </div>
 
-              <div className="flex items-center gap-2 text-xs">
-                <div className="relative">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 text-xs w-full sm:w-auto">
+                <div className="relative w-full sm:w-auto">
                   <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search equipment name or specification..."
-                    className="pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs w-60 focus:outline-hidden focus:border-amber-400"
+                    className="pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs w-full sm:w-60 focus:outline-hidden focus:border-amber-400"
                   />
                 </div>
               </div>
             </div>
 
             {/* Tools Table */}
-            <div className="overflow-x-auto border border-slate-200 rounded-lg">
-              <table className="w-full text-left text-xs border-collapse">
+            <div className="overflow-x-auto border border-slate-200 rounded-lg max-w-full">
+              <div className="sm:hidden flex items-center justify-between text-[11px] text-slate-500 bg-slate-50 px-3 py-1.5 border-b border-slate-200">
+                <span>← Scroll table sideways to view all columns →</span>
+                <span className="font-mono text-[10px]">Form IX</span>
+              </div>
+              <table className="w-full text-left text-xs border-collapse min-w-[780px]">
                 <thead>
                   <tr className="bg-slate-100 border-b border-slate-200 text-slate-700">
                     <th className="py-2.5 px-3 font-semibold text-center w-12">S.No.</th>
@@ -1549,19 +1571,19 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
         {/* ---------------- REGISTER 6: INDENT REGISTER (ISSUE & RETURN) ---------------- */}
         {activeRegister === 'indent_register' && (
           <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200 pb-3">
               <div>
                 <h4 className="font-bold text-sm text-slate-900 flex items-center gap-2">
                   <span>FORM X: Workshop Tool Indent &amp; Issue-Return Register</span>
-                  <span className="text-xs font-normal text-slate-500">(टूल निर्गमन-वापसी पंजी)</span>
+                  <span className="text-xs font-normal text-slate-500 hidden sm:inline">(टूल निर्गमन-वापसी पंजी)</span>
                 </h4>
                 <p className="text-xs text-slate-500">
                   Permanent accountability log of tools issued to trainees during practical training shifts, with return condition verification.
                 </p>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 text-xs w-full sm:w-auto">
+                <div className="flex items-center justify-between sm:justify-start gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5">
                   <span className="text-slate-500 font-medium">Status:</span>
                   <select
                     value={indentStatusFilter}
@@ -1574,22 +1596,26 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
                     <option value="damaged">Reported Damaged</option>
                   </select>
                 </div>
-                <div className="relative">
+                <div className="relative w-full sm:w-auto">
                   <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search indent no, trainee, tool..."
-                    className="pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs w-48 sm:w-60 focus:outline-hidden focus:border-amber-400"
+                    className="pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs w-full sm:w-60 focus:outline-hidden focus:border-amber-400"
                   />
                 </div>
               </div>
             </div>
 
             {/* Indent Table */}
-            <div className="overflow-x-auto border border-slate-200 rounded-lg">
-              <table className="w-full text-left text-xs border-collapse">
+            <div className="overflow-x-auto border border-slate-200 rounded-lg max-w-full">
+              <div className="sm:hidden flex items-center justify-between text-[11px] text-slate-500 bg-slate-50 px-3 py-1.5 border-b border-slate-200">
+                <span>← Scroll table sideways to view all columns →</span>
+                <span className="font-mono text-[10px]">Form X</span>
+              </div>
+              <table className="w-full text-left text-xs border-collapse min-w-[750px]">
                 <thead>
                   <tr className="bg-slate-100 border-b border-slate-200 text-slate-700">
                     <th className="py-2.5 px-3 font-semibold text-center w-12">S.No.</th>
@@ -1655,19 +1681,19 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
         {/* ---------------- REGISTER 7: TRAINEE ROSTER / ADMISSION REGISTER ---------------- */}
         {activeRegister === 'trainee_roster' && (
           <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200 pb-3">
               <div>
                 <h4 className="font-bold text-sm text-slate-900 flex items-center gap-2">
                   <span>FORM I: Master Trainee Admission Roster &amp; Record Register</span>
-                  <span className="text-xs font-normal text-slate-500">(प्रशिक्षु मास्टर प्रवेश पंजी)</span>
+                  <span className="text-xs font-normal text-slate-500 hidden sm:inline">(प्रशिक्षु मास्टर प्रवेश पंजी)</span>
                 </h4>
                 <p className="text-xs text-slate-500">
                   Official batch nominal roll: DGT registration, social category, demographic records, and active training standing.
                 </p>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 text-xs w-full sm:w-auto">
+                <div className="flex items-center justify-between sm:justify-start gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5">
                   <span className="text-slate-500 font-medium">Category:</span>
                   <select
                     value={rosterCategoryFilter}
@@ -1682,21 +1708,21 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
                     <option value="EWS">EWS</option>
                   </select>
                 </div>
-                <div className="relative">
+                <div className="relative w-full sm:w-auto">
                   <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search name, roll no, father..."
-                    className="pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs w-48 sm:w-60 focus:outline-hidden focus:border-amber-400"
+                    className="pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs w-full sm:w-60 focus:outline-hidden focus:border-amber-400"
                   />
                 </div>
               </div>
             </div>
 
             {/* Roster Demographics Summary */}
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3 text-xs">
               <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
                 <span className="text-slate-500 text-[11px]">Enrolled Batch Size</span>
                 <div className="text-lg font-bold text-slate-900 font-mono mt-0.5">
@@ -1722,7 +1748,7 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
                   {trainees.filter((t) => t.category === 'GEN' || t.category === 'EWS').length}
                 </div>
               </div>
-              <div className="p-3 bg-indigo-50 rounded-lg border border-indigo-200">
+              <div className="p-3 bg-indigo-50 rounded-lg border border-indigo-200 col-span-2 sm:col-span-1">
                 <span className="text-indigo-800 text-[11px]">Trade Unit</span>
                 <div className="text-lg font-bold text-indigo-700 font-mono mt-0.5">
                   Unit 1 &amp; 2
@@ -1732,8 +1758,12 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
             </div>
 
             {/* Roster Table */}
-            <div className="overflow-x-auto border border-slate-200 rounded-lg">
-              <table className="w-full text-left text-xs border-collapse">
+            <div className="overflow-x-auto border border-slate-200 rounded-lg max-w-full">
+              <div className="sm:hidden flex items-center justify-between text-[11px] text-slate-500 bg-slate-50 px-3 py-1.5 border-b border-slate-200">
+                <span>← Scroll table sideways to view all columns →</span>
+                <span className="font-mono text-[10px]">Form I</span>
+              </div>
+              <table className="w-full text-left text-xs border-collapse min-w-[850px]">
                 <thead>
                   <tr className="bg-slate-100 border-b border-slate-200 text-slate-700">
                     <th className="py-2.5 px-3 font-semibold text-center w-12">S.No.</th>
@@ -1804,58 +1834,76 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
 
       {/* ---------------- FORMAL GOVERNMENT PRINT PREVIEW MODAL ---------------- */}
       {printModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/75 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-2xl border border-slate-300 max-w-5xl w-full p-8 text-slate-900 space-y-6 my-8 print:p-0 print:m-0 print:border-none print:shadow-none">
+        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-2xl border border-slate-300 max-w-5xl w-full p-3.5 sm:p-6 md:p-8 text-slate-900 space-y-4 sm:space-y-6 my-2 sm:my-8 max-w-full overflow-hidden print:p-0 print:m-0 print:border-none print:shadow-none print:max-w-none">
             {/* Print Dialog Action Header */}
-            <div className="flex items-center justify-between border-b border-slate-300 pb-4 print:hidden">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-300 pb-3 sm:pb-4 print:hidden">
               <div className="flex items-center gap-2">
-                <Printer className="w-5 h-5 text-emerald-700" />
-                <h3 className="font-bold text-base text-slate-900">
-                  Official Register Print Preview &amp; PDF Generation
-                </h3>
+                <Printer className="w-5 h-5 text-emerald-700 shrink-0" />
+                <div>
+                  <h3 className="font-bold text-sm sm:text-base text-slate-900 leading-tight">
+                    Official Register Print Preview &amp; PDF Generation
+                  </h3>
+                  <p className="text-[10px] sm:text-xs text-slate-500">
+                    Formally formatted government register for DGT / NCVT compliance
+                  </p>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
                 <button
                   onClick={() => window.print()}
-                  className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-medium rounded-lg text-xs shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                  className="flex-1 sm:flex-initial px-3.5 sm:px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-lg text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap active:scale-95"
                 >
-                  <Printer className="w-4 h-4" />
-                  <span>Print Document / Save as PDF</span>
+                  <Printer className="w-3.5 h-3.5 shrink-0" />
+                  <span>Print / Save PDF</span>
+                </button>
+                <button
+                  onClick={handleExportRegisterCSV}
+                  className="flex-1 sm:flex-initial px-3.5 sm:px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap active:scale-95"
+                  title="Download clean CSV / Excel formatted spreadsheet for active register"
+                >
+                  <Download className="w-3.5 h-3.5 shrink-0" />
+                  <span>Download CSV</span>
                 </button>
                 <button
                   onClick={() => setPrintModalOpen(false)}
-                  className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg text-xs hover:bg-slate-100 transition-colors cursor-pointer"
+                  className="px-3.5 py-2 border border-slate-300 text-slate-700 rounded-lg text-xs hover:bg-slate-100 transition-colors cursor-pointer text-center whitespace-nowrap active:scale-95"
                 >
                   Close Preview
                 </button>
               </div>
             </div>
 
+            {/* Mobile helper notice */}
+            <div className="sm:hidden flex items-center gap-1.5 text-[11px] text-amber-900 bg-amber-50 border border-amber-300 px-3 py-1.5 rounded-lg print:hidden">
+              <span>↔ Swipe table horizontally to preview. Tap "Print / Save PDF" to produce formal NCVT sheets.</span>
+            </div>
+
             {/* Printable Area with Official Govt ITI Raigarh Letterhead */}
-            <div className="space-y-6 border border-slate-400 p-6 rounded-lg bg-white">
+            <div className="space-y-4 sm:space-y-6 border border-slate-400 p-3.5 sm:p-6 rounded-lg bg-white overflow-hidden print:border-none print:p-0">
               {/* Header */}
-              <div className="text-center border-b-2 border-slate-900 pb-4 space-y-1">
-                <div className="flex items-center justify-center gap-3">
+              <div className="text-center border-b-2 border-slate-900 pb-3 sm:pb-4 space-y-1">
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3 text-center sm:text-left">
                   <img
                     src="/assets/aistudio/iti-logo_b32addc6.png"
                     alt="Emblem"
-                    className="w-14 h-14 object-contain"
+                    className="w-12 h-12 sm:w-14 sm:h-14 object-contain shrink-0"
                   />
                   <div>
-                    <h2 className="text-sm font-bold text-amber-900">
+                    <h2 className="text-xs sm:text-sm font-bold text-amber-900 leading-tight">
                       शासकीय औद्योगिक प्रशिक्षण संस्था, रायगढ़ (छ.ग.)
                     </h2>
-                    <h1 className="text-lg font-black tracking-wide text-slate-900 uppercase">
+                    <h1 className="text-sm sm:text-lg font-black tracking-wide text-slate-900 uppercase leading-tight mt-0.5">
                       GOVERNMENT INDUSTRIAL TRAINING INSTITUTE, RAIGARH (C.G.)
                     </h1>
-                    <p className="text-[11px] font-medium text-slate-700">
+                    <p className="text-[10px] sm:text-[11px] font-medium text-slate-700 leading-tight">
                       Directorate of Employment &amp; Training, Chhattisgarh · NCVT Code: ITI-RAI-CG-04
                     </p>
                   </div>
                 </div>
 
                 <div className="pt-2">
-                  <div className="inline-block px-3 py-1 bg-slate-100 border border-slate-300 rounded font-bold uppercase text-xs tracking-wider text-slate-900 font-mono">
+                  <div className="inline-block px-2.5 sm:px-3 py-1 bg-slate-100 border border-slate-300 rounded font-bold uppercase text-[11px] sm:text-xs tracking-wider text-slate-900 font-mono">
                     {activeRegister === 'daily_attendance' && `FORM IV: DAILY ATTENDANCE MUSTER ROLL (${dailyDate})`}
                     {activeRegister === 'monthly_attendance' && `FORM V: MONTHLY ATTENDANCE REGISTER MATRIX (${selectedMonth})`}
                     {activeRegister === 'leave_register' && 'FORM VII: TRAINEE LEAVE SANCTION & RECORD REGISTER'}
@@ -1866,14 +1914,14 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 text-xs text-slate-700 pt-2 font-mono">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 sm:gap-2 print:grid-cols-3 text-[11px] sm:text-xs text-slate-700 pt-2 font-mono text-center sm:text-left">
                   <div className="text-left">
                     <span className="font-semibold">Trade:</span> {currentTrade?.name} ({currentTrade?.code})
                   </div>
-                  <div className="text-center">
+                  <div className="text-left sm:text-center">
                     <span className="font-semibold">Session:</span> {activeSessionObj?.name}
                   </div>
-                  <div className="text-right">
+                  <div className="text-left sm:text-right">
                     <span className="font-semibold">Date of Report:</span> {new Date().toLocaleDateString('en-IN')}
                   </div>
                 </div>
@@ -1882,39 +1930,41 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
               {/* Printable Table Content Preview */}
               <div className="text-xs">
                 {activeRegister === 'daily_attendance' && (
-                  <table className="w-full border-collapse border border-slate-400 text-left">
-                    <thead>
-                      <tr className="bg-slate-100 border-b border-slate-400">
-                        <th className="p-1.5 border border-slate-400 text-center w-10">S.No</th>
-                        <th className="p-1.5 border border-slate-400">Roll No</th>
-                        <th className="p-1.5 border border-slate-400">Trainee Name</th>
-                        <th className="p-1.5 border border-slate-400 text-center">Category</th>
-                        <th className="p-1.5 border border-slate-400 text-center">Status</th>
-                        <th className="p-1.5 border border-slate-400">Marked Time</th>
-                        <th className="p-1.5 border border-slate-400">GPS Verification</th>
-                        <th className="p-1.5 border border-slate-400 text-right">Remarks</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {dailyAttendanceData.map((d, i) => (
-                        <tr key={d.trainee.id}>
-                          <td className="p-1.5 border border-slate-400 text-center font-mono">{i + 1}</td>
-                          <td className="p-1.5 border border-slate-400 font-mono font-semibold">{d.trainee.rollNo}</td>
-                          <td className="p-1.5 border border-slate-400">{d.trainee.name}</td>
-                          <td className="p-1.5 border border-slate-400 text-center font-mono">{d.trainee.category}</td>
-                          <td className="p-1.5 border border-slate-400 text-center font-bold font-mono">{d.status}</td>
-                          <td className="p-1.5 border border-slate-400 font-mono">{d.record?.timestamp || '—'}</td>
-                          <td className="p-1.5 border border-slate-400">{d.record?.geotag ? 'GPS Verified' : 'Manual'}</td>
-                          <td className="p-1.5 border border-slate-400 text-right text-[10px]">{d.record?.remarks || 'NCVT Compliant'}</td>
+                  <div className="overflow-x-auto print:overflow-visible -mx-1 sm:mx-0 max-w-full">
+                    <table className="w-full border-collapse border border-slate-400 text-left min-w-[650px] print:min-w-0">
+                      <thead>
+                        <tr className="bg-slate-100 border-b border-slate-400">
+                          <th className="p-1.5 border border-slate-400 text-center w-10">S.No</th>
+                          <th className="p-1.5 border border-slate-400">Roll No</th>
+                          <th className="p-1.5 border border-slate-400">Trainee Name</th>
+                          <th className="p-1.5 border border-slate-400 text-center">Category</th>
+                          <th className="p-1.5 border border-slate-400 text-center">Status</th>
+                          <th className="p-1.5 border border-slate-400">Marked Time</th>
+                          <th className="p-1.5 border border-slate-400">GPS Verification</th>
+                          <th className="p-1.5 border border-slate-400 text-right">Remarks</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {dailyAttendanceData.map((d, i) => (
+                          <tr key={d.trainee.id}>
+                            <td className="p-1.5 border border-slate-400 text-center font-mono">{i + 1}</td>
+                            <td className="p-1.5 border border-slate-400 font-mono font-semibold">{d.trainee.rollNo}</td>
+                            <td className="p-1.5 border border-slate-400">{d.trainee.name}</td>
+                            <td className="p-1.5 border border-slate-400 text-center font-mono">{d.trainee.category}</td>
+                            <td className="p-1.5 border border-slate-400 text-center font-bold font-mono">{d.status}</td>
+                            <td className="p-1.5 border border-slate-400 font-mono">{d.record?.timestamp || '—'}</td>
+                            <td className="p-1.5 border border-slate-400">{d.record?.geotag ? 'GPS Verified' : 'Manual'}</td>
+                            <td className="p-1.5 border border-slate-400 text-right text-[10px]">{d.record?.remarks || 'NCVT Compliant'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
 
                 {activeRegister === 'monthly_attendance' && (
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse border border-slate-400 text-left text-[10px]">
+                  <div className="overflow-x-auto print:overflow-visible -mx-1 sm:mx-0 max-w-full">
+                    <table className="w-full border-collapse border border-slate-400 text-left text-[10px] min-w-[850px] print:min-w-0">
                       <thead>
                         <tr className="bg-slate-100 border-b border-slate-400">
                           <th className="p-1 border border-slate-400 text-center">#</th>
@@ -1956,192 +2006,202 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
                 )}
 
                 {activeRegister === 'leave_register' && (
-                  <table className="w-full border-collapse border border-slate-400 text-left">
-                    <thead>
-                      <tr className="bg-slate-100 border-b border-slate-400">
-                        <th className="p-1.5 border border-slate-400 text-center w-10">S.No</th>
-                        <th className="p-1.5 border border-slate-400">Roll No</th>
-                        <th className="p-1.5 border border-slate-400">Trainee Name</th>
-                        <th className="p-1.5 border border-slate-400">Type</th>
-                        <th className="p-1.5 border border-slate-400">Period</th>
-                        <th className="p-1.5 border border-slate-400 text-center">Days</th>
-                        <th className="p-1.5 border border-slate-400">Reason</th>
-                        <th className="p-1.5 border border-slate-400 text-center">Status</th>
-                        <th className="p-1.5 border border-slate-400">Remarks</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredLeaves.map((l, i) => (
-                        <tr key={l.id}>
-                          <td className="p-1.5 border border-slate-400 text-center font-mono">{i + 1}</td>
-                          <td className="p-1.5 border border-slate-400 font-mono">{l.rollNo}</td>
-                          <td className="p-1.5 border border-slate-400 font-semibold">{l.traineeName}</td>
-                          <td className="p-1.5 border border-slate-400">{l.leaveType}</td>
-                          <td className="p-1.5 border border-slate-400 font-mono text-[11px]">{l.fromDate} to {l.toDate}</td>
-                          <td className="p-1.5 border border-slate-400 text-center font-bold">{l.days}</td>
-                          <td className="p-1.5 border border-slate-400">{l.reason}</td>
-                          <td className="p-1.5 border border-slate-400 text-center font-bold">{l.status.toUpperCase()}</td>
-                          <td className="p-1.5 border border-slate-400 text-[11px]">{l.reviewerRemarks || 'Sanctioned'}</td>
+                  <div className="overflow-x-auto print:overflow-visible -mx-1 sm:mx-0 max-w-full">
+                    <table className="w-full border-collapse border border-slate-400 text-left min-w-[680px] print:min-w-0">
+                      <thead>
+                        <tr className="bg-slate-100 border-b border-slate-400">
+                          <th className="p-1.5 border border-slate-400 text-center w-10">S.No</th>
+                          <th className="p-1.5 border border-slate-400">Roll No</th>
+                          <th className="p-1.5 border border-slate-400">Trainee Name</th>
+                          <th className="p-1.5 border border-slate-400">Type</th>
+                          <th className="p-1.5 border border-slate-400">Period</th>
+                          <th className="p-1.5 border border-slate-400 text-center">Days</th>
+                          <th className="p-1.5 border border-slate-400">Reason</th>
+                          <th className="p-1.5 border border-slate-400 text-center">Status</th>
+                          <th className="p-1.5 border border-slate-400">Remarks</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {filteredLeaves.map((l, i) => (
+                          <tr key={l.id}>
+                            <td className="p-1.5 border border-slate-400 text-center font-mono">{i + 1}</td>
+                            <td className="p-1.5 border border-slate-400 font-mono">{l.rollNo}</td>
+                            <td className="p-1.5 border border-slate-400 font-semibold">{l.traineeName}</td>
+                            <td className="p-1.5 border border-slate-400">{l.leaveType}</td>
+                            <td className="p-1.5 border border-slate-400 font-mono text-[11px]">{l.fromDate} to {l.toDate}</td>
+                            <td className="p-1.5 border border-slate-400 text-center font-bold">{l.days}</td>
+                            <td className="p-1.5 border border-slate-400">{l.reason}</td>
+                            <td className="p-1.5 border border-slate-400 text-center font-bold">{l.status.toUpperCase()}</td>
+                            <td className="p-1.5 border border-slate-400 text-[11px]">{l.reviewerRemarks || 'Sanctioned'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
 
                 {activeRegister === 'workshop_inventory' && (
-                  <table className="w-full border-collapse border border-slate-400 text-left">
-                    <thead>
-                      <tr className="bg-slate-100 border-b border-slate-400">
-                        <th className="p-1.5 border border-slate-400 text-center w-10">S.No</th>
-                        <th className="p-1.5 border border-slate-400">Code</th>
-                        <th className="p-1.5 border border-slate-400">Item Name &amp; Specification</th>
-                        <th className="p-1.5 border border-slate-400">Category</th>
-                        <th className="p-1.5 border border-slate-400 text-center">Total</th>
-                        <th className="p-1.5 border border-slate-400 text-center">Issued</th>
-                        <th className="p-1.5 border border-slate-400 text-center">Damaged</th>
-                        <th className="p-1.5 border border-slate-400 text-center">Available</th>
-                        <th className="p-1.5 border border-slate-400">Rack Location</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredInventory.map((item, i) => (
-                        <tr key={item.id}>
-                          <td className="p-1.5 border border-slate-400 text-center font-mono">{i + 1}</td>
-                          <td className="p-1.5 border border-slate-400 font-mono font-bold">{item.toolCode}</td>
-                          <td className="p-1.5 border border-slate-400 font-semibold">{item.name} ({item.specification})</td>
-                          <td className="p-1.5 border border-slate-400">{item.category}</td>
-                          <td className="p-1.5 border border-slate-400 text-center font-mono">{item.totalStock}</td>
-                          <td className="p-1.5 border border-slate-400 text-center font-mono">{item.issuedCount}</td>
-                          <td className="p-1.5 border border-slate-400 text-center font-mono">{item.damagedCount}</td>
-                          <td className="p-1.5 border border-slate-400 text-center font-mono font-bold">{item.availableStock}</td>
-                          <td className="p-1.5 border border-slate-400">{item.binLocation}</td>
+                  <div className="overflow-x-auto print:overflow-visible -mx-1 sm:mx-0 max-w-full">
+                    <table className="w-full border-collapse border border-slate-400 text-left min-w-[700px] print:min-w-0">
+                      <thead>
+                        <tr className="bg-slate-100 border-b border-slate-400">
+                          <th className="p-1.5 border border-slate-400 text-center w-10">S.No</th>
+                          <th className="p-1.5 border border-slate-400">Code</th>
+                          <th className="p-1.5 border border-slate-400">Item Name &amp; Specification</th>
+                          <th className="p-1.5 border border-slate-400">Category</th>
+                          <th className="p-1.5 border border-slate-400 text-center">Total</th>
+                          <th className="p-1.5 border border-slate-400 text-center">Issued</th>
+                          <th className="p-1.5 border border-slate-400 text-center">Damaged</th>
+                          <th className="p-1.5 border border-slate-400 text-center">Available</th>
+                          <th className="p-1.5 border border-slate-400">Rack Location</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {filteredInventory.map((item, i) => (
+                          <tr key={item.id}>
+                            <td className="p-1.5 border border-slate-400 text-center font-mono">{i + 1}</td>
+                            <td className="p-1.5 border border-slate-400 font-mono font-bold">{item.toolCode}</td>
+                            <td className="p-1.5 border border-slate-400 font-semibold">{item.name} ({item.specification})</td>
+                            <td className="p-1.5 border border-slate-400">{item.category}</td>
+                            <td className="p-1.5 border border-slate-400 text-center font-mono">{item.totalStock}</td>
+                            <td className="p-1.5 border border-slate-400 text-center font-mono">{item.issuedCount}</td>
+                            <td className="p-1.5 border border-slate-400 text-center font-mono">{item.damagedCount}</td>
+                            <td className="p-1.5 border border-slate-400 text-center font-mono font-bold">{item.availableStock}</td>
+                            <td className="p-1.5 border border-slate-400">{item.binLocation}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
 
                 {activeRegister === 'tools_equipments' && (
-                  <table className="w-full border-collapse border border-slate-400 text-left">
-                    <thead>
-                      <tr className="bg-slate-100 border-b border-slate-400">
-                        <th className="p-1.5 border border-slate-400 text-center w-10">S.No</th>
-                        <th className="p-1.5 border border-slate-400">Tool Code</th>
-                        <th className="p-1.5 border border-slate-400">Equipment Description</th>
-                        <th className="p-1.5 border border-slate-400">Category</th>
-                        <th className="p-1.5 border border-slate-400 text-center">Stock Qty</th>
-                        <th className="p-1.5 border border-slate-400 text-center">Operational Condition</th>
-                        <th className="p-1.5 border border-slate-400">Custodian</th>
-                        <th className="p-1.5 border border-slate-400 text-right">Inspection</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredToolsAndEquipments.map((t, i) => (
-                        <tr key={t.id}>
-                          <td className="p-1.5 border border-slate-400 text-center font-mono">{i + 1}</td>
-                          <td className="p-1.5 border border-slate-400 font-mono font-bold">{t.toolCode}</td>
-                          <td className="p-1.5 border border-slate-400 font-semibold">{t.name}</td>
-                          <td className="p-1.5 border border-slate-400">{t.category}</td>
-                          <td className="p-1.5 border border-slate-400 text-center font-mono">{t.totalStock}</td>
-                          <td className="p-1.5 border border-slate-400 text-center">{t.condition}</td>
-                          <td className="p-1.5 border border-slate-400">{t.custodian}</td>
-                          <td className="p-1.5 border border-slate-400 text-right font-mono">{t.lastInspected}</td>
+                  <div className="overflow-x-auto print:overflow-visible -mx-1 sm:mx-0 max-w-full">
+                    <table className="w-full border-collapse border border-slate-400 text-left min-w-[700px] print:min-w-0">
+                      <thead>
+                        <tr className="bg-slate-100 border-b border-slate-400">
+                          <th className="p-1.5 border border-slate-400 text-center w-10">S.No</th>
+                          <th className="p-1.5 border border-slate-400">Tool Code</th>
+                          <th className="p-1.5 border border-slate-400">Equipment Description</th>
+                          <th className="p-1.5 border border-slate-400">Category</th>
+                          <th className="p-1.5 border border-slate-400 text-center">Stock Qty</th>
+                          <th className="p-1.5 border border-slate-400 text-center">Operational Condition</th>
+                          <th className="p-1.5 border border-slate-400">Custodian</th>
+                          <th className="p-1.5 border border-slate-400 text-right">Inspection</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {filteredToolsAndEquipments.map((t, i) => (
+                          <tr key={t.id}>
+                            <td className="p-1.5 border border-slate-400 text-center font-mono">{i + 1}</td>
+                            <td className="p-1.5 border border-slate-400 font-mono font-bold">{t.toolCode}</td>
+                            <td className="p-1.5 border border-slate-400 font-semibold">{t.name}</td>
+                            <td className="p-1.5 border border-slate-400">{t.category}</td>
+                            <td className="p-1.5 border border-slate-400 text-center font-mono">{t.totalStock}</td>
+                            <td className="p-1.5 border border-slate-400 text-center">{t.condition}</td>
+                            <td className="p-1.5 border border-slate-400">{t.custodian}</td>
+                            <td className="p-1.5 border border-slate-400 text-right font-mono">{t.lastInspected}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
 
                 {activeRegister === 'indent_register' && (
-                  <table className="w-full border-collapse border border-slate-400 text-left">
-                    <thead>
-                      <tr className="bg-slate-100 border-b border-slate-400">
-                        <th className="p-1.5 border border-slate-400 text-center w-10">S.No</th>
-                        <th className="p-1.5 border border-slate-400">Indent No</th>
-                        <th className="p-1.5 border border-slate-400">Roll No &amp; Trainee</th>
-                        <th className="p-1.5 border border-slate-400">Tool / Item</th>
-                        <th className="p-1.5 border border-slate-400 text-center">Qty</th>
-                        <th className="p-1.5 border border-slate-400">Issue Date</th>
-                        <th className="p-1.5 border border-slate-400">Due Date</th>
-                        <th className="p-1.5 border border-slate-400 text-center">Status</th>
-                        <th className="p-1.5 border border-slate-400">Condition</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredIndents.map((ind, i) => (
-                        <tr key={ind.id}>
-                          <td className="p-1.5 border border-slate-400 text-center font-mono">{i + 1}</td>
-                          <td className="p-1.5 border border-slate-400 font-mono font-bold">{ind.indentNo}</td>
-                          <td className="p-1.5 border border-slate-400">{ind.traineeName} ({ind.rollNo})</td>
-                          <td className="p-1.5 border border-slate-400 font-semibold">{ind.itemName}</td>
-                          <td className="p-1.5 border border-slate-400 text-center font-mono font-bold">{ind.quantity}</td>
-                          <td className="p-1.5 border border-slate-400 font-mono">{ind.issueDate}</td>
-                          <td className="p-1.5 border border-slate-400 font-mono">{ind.expectedReturnDate}</td>
-                          <td className="p-1.5 border border-slate-400 text-center font-bold">{ind.status.toUpperCase()}</td>
-                          <td className="p-1.5 border border-slate-400">{ind.returnCondition || 'Good'}</td>
+                  <div className="overflow-x-auto print:overflow-visible -mx-1 sm:mx-0 max-w-full">
+                    <table className="w-full border-collapse border border-slate-400 text-left min-w-[720px] print:min-w-0">
+                      <thead>
+                        <tr className="bg-slate-100 border-b border-slate-400">
+                          <th className="p-1.5 border border-slate-400 text-center w-10">S.No</th>
+                          <th className="p-1.5 border border-slate-400">Indent No</th>
+                          <th className="p-1.5 border border-slate-400">Roll No &amp; Trainee</th>
+                          <th className="p-1.5 border border-slate-400">Tool / Item</th>
+                          <th className="p-1.5 border border-slate-400 text-center">Qty</th>
+                          <th className="p-1.5 border border-slate-400">Issue Date</th>
+                          <th className="p-1.5 border border-slate-400">Due Date</th>
+                          <th className="p-1.5 border border-slate-400 text-center">Status</th>
+                          <th className="p-1.5 border border-slate-400">Condition</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {filteredIndents.map((ind, i) => (
+                          <tr key={ind.id}>
+                            <td className="p-1.5 border border-slate-400 text-center font-mono">{i + 1}</td>
+                            <td className="p-1.5 border border-slate-400 font-mono font-bold">{ind.indentNo}</td>
+                            <td className="p-1.5 border border-slate-400">{ind.traineeName} ({ind.rollNo})</td>
+                            <td className="p-1.5 border border-slate-400 font-semibold">{ind.itemName}</td>
+                            <td className="p-1.5 border border-slate-400 text-center font-mono font-bold">{ind.quantity}</td>
+                            <td className="p-1.5 border border-slate-400 font-mono">{ind.issueDate}</td>
+                            <td className="p-1.5 border border-slate-400 font-mono">{ind.expectedReturnDate}</td>
+                            <td className="p-1.5 border border-slate-400 text-center font-bold">{ind.status.toUpperCase()}</td>
+                            <td className="p-1.5 border border-slate-400">{ind.returnCondition || 'Good'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
 
                 {activeRegister === 'trainee_roster' && (
-                  <table className="w-full border-collapse border border-slate-400 text-left">
-                    <thead>
-                      <tr className="bg-slate-100 border-b border-slate-400">
-                        <th className="p-1.5 border border-slate-400 text-center w-10">S.No</th>
-                        <th className="p-1.5 border border-slate-400">Roll No</th>
-                        <th className="p-1.5 border border-slate-400">Registration No</th>
-                        <th className="p-1.5 border border-slate-400">Trainee Name</th>
-                        <th className="p-1.5 border border-slate-400">Father Name</th>
-                        <th className="p-1.5 border border-slate-400 text-center">Cat</th>
-                        <th className="p-1.5 border border-slate-400">Mobile</th>
-                        <th className="p-1.5 border border-slate-400 text-center">Adm Date</th>
-                        <th className="p-1.5 border border-slate-400 text-center">Att %</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredRoster.map((tr, i) => {
-                        const stat = traineeStatsMap.get(tr.id);
-                        return (
-                          <tr key={tr.id}>
-                            <td className="p-1.5 border border-slate-400 text-center font-mono">{i + 1}</td>
-                            <td className="p-1.5 border border-slate-400 font-mono font-bold">{tr.rollNo}</td>
-                            <td className="p-1.5 border border-slate-400 font-mono text-[10px]">{tr.registrationNo}</td>
-                            <td className="p-1.5 border border-slate-400 font-semibold">{tr.name}</td>
-                            <td className="p-1.5 border border-slate-400">{tr.fatherName || '—'}</td>
-                            <td className="p-1.5 border border-slate-400 text-center font-mono">{tr.category}</td>
-                            <td className="p-1.5 border border-slate-400 font-mono">{tr.mobile}</td>
-                            <td className="p-1.5 border border-slate-400 text-center font-mono">{tr.admissionDate}</td>
-                            <td className="p-1.5 border border-slate-400 text-center font-mono font-bold">
-                              {stat?.percent ?? 100}%
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                  <div className="overflow-x-auto print:overflow-visible -mx-1 sm:mx-0 max-w-full">
+                    <table className="w-full border-collapse border border-slate-400 text-left min-w-[750px] print:min-w-0">
+                      <thead>
+                        <tr className="bg-slate-100 border-b border-slate-400">
+                          <th className="p-1.5 border border-slate-400 text-center w-10">S.No</th>
+                          <th className="p-1.5 border border-slate-400">Roll No</th>
+                          <th className="p-1.5 border border-slate-400">Registration No</th>
+                          <th className="p-1.5 border border-slate-400">Trainee Name</th>
+                          <th className="p-1.5 border border-slate-400">Father Name</th>
+                          <th className="p-1.5 border border-slate-400 text-center">Cat</th>
+                          <th className="p-1.5 border border-slate-400">Mobile</th>
+                          <th className="p-1.5 border border-slate-400 text-center">Adm Date</th>
+                          <th className="p-1.5 border border-slate-400 text-center">Att %</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredRoster.map((tr, i) => {
+                          const stat = traineeStatsMap.get(tr.id);
+                          return (
+                            <tr key={tr.id}>
+                              <td className="p-1.5 border border-slate-400 text-center font-mono">{i + 1}</td>
+                              <td className="p-1.5 border border-slate-400 font-mono font-bold">{tr.rollNo}</td>
+                              <td className="p-1.5 border border-slate-400 font-mono text-[10px]">{tr.registrationNo}</td>
+                              <td className="p-1.5 border border-slate-400 font-semibold">{tr.name}</td>
+                              <td className="p-1.5 border border-slate-400">{tr.fatherName || '—'}</td>
+                              <td className="p-1.5 border border-slate-400 text-center font-mono">{tr.category}</td>
+                              <td className="p-1.5 border border-slate-400 font-mono">{tr.mobile}</td>
+                              <td className="p-1.5 border border-slate-400 text-center font-mono">{tr.admissionDate}</td>
+                              <td className="p-1.5 border border-slate-400 text-center font-mono font-bold">
+                                {stat?.percent ?? 100}%
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </div>
 
               {/* Official 3-Tier Signatory Block for ITI Raigarh */}
-              <div className="grid grid-cols-3 pt-12 pb-4 text-center text-xs font-serif border-t border-slate-300">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-4 pt-8 sm:pt-12 pb-4 text-center text-xs font-serif border-t border-slate-300 print:grid-cols-3">
                 <div className="space-y-1">
-                  <div className="h-10 border-b border-dashed border-slate-400 w-48 mx-auto" />
+                  <div className="h-10 border-b border-dashed border-slate-400 w-36 sm:w-48 mx-auto" />
                   <div className="font-bold text-slate-900">{officer.name}</div>
                   <div className="text-[11px] text-slate-600">हस्ताक्षर प्रशिक्षण अधिकारी / Training Officer</div>
                   <div className="text-[10px] text-slate-400 font-sans">Govt. ITI Raigarh (C.G.)</div>
                 </div>
 
                 <div className="space-y-1">
-                  <div className="h-10 border-b border-dashed border-slate-400 w-48 mx-auto" />
+                  <div className="h-10 border-b border-dashed border-slate-400 w-36 sm:w-48 mx-auto" />
                   <div className="font-bold text-slate-900">कार्यशाला अधीक्षक / Group Instructor</div>
                   <div className="text-[11px] text-slate-600">Workshop Superintendent</div>
                   <div className="text-[10px] text-slate-400 font-sans">Govt. ITI Raigarh (C.G.)</div>
                 </div>
 
                 <div className="space-y-1">
-                  <div className="h-10 border-b border-dashed border-slate-400 w-48 mx-auto" />
+                  <div className="h-10 border-b border-dashed border-slate-400 w-36 sm:w-48 mx-auto" />
                   <div className="font-bold text-slate-900">प्राचार्य / Principal</div>
                   <div className="text-[11px] text-slate-600">Seal &amp; Signature of Head of Institute</div>
                   <div className="text-[10px] text-slate-400 font-sans">Govt. ITI Raigarh (C.G.)</div>
@@ -2151,6 +2211,26 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
           </div>
         </div>
       )}
+
+      {/* Mobile Quick Action Floating Bar for Download and Print */}
+      <div className="lg:hidden fixed bottom-4 right-4 z-40 flex items-center gap-2 bg-slate-950/95 text-white p-1.5 rounded-2xl shadow-2xl border border-slate-700 backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 duration-200">
+        <button
+          onClick={handleExportRegisterCSV}
+          className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap active:scale-95"
+          title="Download active register CSV"
+        >
+          <Download className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+          <span>Download</span>
+        </button>
+        <button
+          onClick={() => setPrintModalOpen(true)}
+          className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap active:scale-95"
+          title="Print official register"
+        >
+          <Printer className="w-3.5 h-3.5 shrink-0" />
+          <span>Print</span>
+        </button>
+      </div>
     </div>
   );
 };

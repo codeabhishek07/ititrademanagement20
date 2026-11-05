@@ -23,7 +23,9 @@ import {
   ShieldAlert,
   Mail,
   RefreshCw,
+  Upload,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import {
   Trade,
   Trainee,
@@ -57,8 +59,13 @@ import {
   fetchIndents,
   issueIndent,
   returnIndent,
+  bulkImportTrainees,
 } from '../../api.ts';
 import { OfficerRegisters, RegisterType } from './OfficerRegisters.tsx';
+import { LessonPlanManager } from './LessonPlanManager.tsx';
+import { DemonstrationPlanManager } from './DemonstrationPlanManager.tsx';
+import { WeeklyPlanManager } from './WeeklyPlanManager.tsx';
+import { DigitalProgressCardTracker } from './DigitalProgressCardTracker.tsx';
 
 interface OfficerDashboardProps {
   officer: {
@@ -75,7 +82,7 @@ interface OfficerDashboardProps {
   onOfficerUpdate?: (updated: { name?: string; email?: string; mobile?: string; assignedTradeIds?: string[] }) => void;
 }
 
-type OfficerTab = 'attendance' | 'trainees' | 'leaves' | 'warnings' | 'inventory' | 'indents' | 'reports';
+type OfficerTab = 'attendance' | 'trainees' | 'leaves' | 'warnings' | 'inventory' | 'indents' | 'reports' | 'lesson_plans' | 'demonstration_plans' | 'weekly_plans' | 'assessments';
 
 export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
   officer,
@@ -84,7 +91,23 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
   settings,
   onOfficerUpdate,
 }) => {
-  const [activeTab, setActiveTab] = useState<OfficerTab>('attendance');
+  // Persistent active tab across page refreshes
+  const [activeTab, setActiveTab] = useState<OfficerTab>(() => {
+    try {
+      const saved = localStorage.getItem('iti_officer_active_tab');
+      if (saved && ['attendance', 'trainees', 'leaves', 'warnings', 'inventory', 'indents', 'reports', 'lesson_plans', 'demonstration_plans', 'weekly_plans', 'assessments'].includes(saved)) {
+        return saved as OfficerTab;
+      }
+    } catch (e) {}
+    return 'attendance';
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('iti_officer_active_tab', activeTab);
+    } catch (e) {}
+  }, [activeTab]);
+
   const [selectedRegister, setSelectedRegister] = useState<RegisterType>('monthly_attendance');
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState('');
@@ -127,10 +150,23 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
   );
 
   const [selectedTradeId, setSelectedTradeId] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('iti_officer_selected_trade');
+      if (saved && officerTrades.some((t) => t.id === saved)) return saved;
+      if (saved && activeTradePool.some((t) => t.id === saved)) return saved;
+    } catch (e) {}
     if (officerTrades.length > 0) return officerTrades[0].id;
     if (activeTradePool.length > 0) return activeTradePool[0].id;
     return '';
   });
+
+  useEffect(() => {
+    if (selectedTradeId) {
+      try {
+        localStorage.setItem('iti_officer_selected_trade', selectedTradeId);
+      } catch (e) {}
+    }
+  }, [selectedTradeId]);
 
   // Re-sync with backend to get latest trade assignments made by admin
   const refreshOfficerAndTrades = async (silent = false) => {
@@ -192,7 +228,21 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
     }
   }, [currentOfficer.assignedTradeIds, officerTrades, selectedTradeId, activeTradePool]);
 
-  const [selectedSessionId, setSelectedSessionId] = useState(settings.currentSessionId || sessions[0]?.id || '');
+  const [selectedSessionId, setSelectedSessionId] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('iti_officer_selected_session');
+      if (saved && sessions.some((s) => s.id === saved)) return saved;
+    } catch (e) {}
+    return settings.currentSessionId || sessions[0]?.id || '';
+  });
+
+  useEffect(() => {
+    if (selectedSessionId) {
+      try {
+        localStorage.setItem('iti_officer_selected_session', selectedSessionId);
+      } catch (e) {}
+    }
+  }, [selectedSessionId]);
 
   // Main entity states
   const [trainees, setTrainees] = useState<Trainee[]>([]);
@@ -239,6 +289,86 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
   const [inventoryModalOpen, setInventoryModalOpen] = useState(false);
   const [editingInventory, setEditingInventory] = useState<InventoryItem | null>(null);
   const [indentModalOpen, setIndentModalOpen] = useState(false);
+
+  // Bulk Upload State & Handlers
+  const [bulkModalOpen, setBulkModalOpen] = useState(false);
+  const [bulkParsedRows, setBulkParsedRows] = useState<any[]>([]);
+  const [bulkUploading, setBulkUploading] = useState(false);
+
+  const handleDownloadExcelTemplate = () => {
+    const templateData = [
+      {
+        rollNo: 'ITI/RAI/2026/ELE-01',
+        name: 'Rohan Kumar Sahu',
+        fatherName: 'Shri Rameshwar Sahu',
+        email: 'rohan.sahu@student.iti.cg.in',
+        mobile: '+91 98260 12345',
+        category: 'OBC',
+        gender: 'Male',
+        dob: '2005-04-15',
+      },
+      {
+        rollNo: 'ITI/RAI/2026/ELE-02',
+        name: 'Pooja Verma',
+        fatherName: 'Shri Suresh Verma',
+        email: 'pooja.verma@student.iti.cg.in',
+        mobile: '+91 94252 67890',
+        category: 'GEN',
+        gender: 'Female',
+        dob: '2006-01-20',
+      },
+    ];
+    const ws = XLSX.utils.json_to_sheet(templateData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'TraineesTemplate');
+    XLSX.writeFile(wb, `ITI_Raigarh_${currentTrade?.code || 'Trade'}_Trainees_Bulk_Template.xlsx`);
+    showToast('Excel template downloaded successfully');
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data = XLSX.utils.sheet_to_json(ws);
+        setBulkParsedRows(data);
+        showToast(`Parsed ${data.length} trainee records from file successfully`);
+      } catch (err: any) {
+        alert('Failed to parse Excel/CSV file: ' + err.message);
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  const handleConfirmBulkUpload = async () => {
+    if (bulkParsedRows.length === 0) {
+      alert('No trainee records loaded to import.');
+      return;
+    }
+    try {
+      setBulkUploading(true);
+      const res = await bulkImportTrainees({
+        trainees: bulkParsedRows,
+        tradeId: selectedTradeId,
+        sessionId: selectedSessionId,
+        officerId: officer.id,
+        officerName: officer.name,
+      });
+      showToast(`Successfully bulk imported ${res.count} trainees!`);
+      setBulkModalOpen(false);
+      setBulkParsedRows([]);
+      loadData();
+    } catch (err: any) {
+      alert(err.message || 'Failed to bulk import trainees');
+    } finally {
+      setBulkUploading(false);
+    }
+  };
 
   // Search & filter
   const [searchQuery, setSearchQuery] = useState('');
@@ -903,67 +1033,153 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
         </div>
       </div>
 
-      {/* Officer Navigation Tabs - High-Contrast Bold Modern Menu Bar */}
-      <div className="bg-slate-950 p-2 rounded-2xl shadow-lg border border-slate-800 ring-1 ring-slate-800/80 flex items-center gap-2 overflow-x-auto scrollbar-none">
-        {[
-          { id: 'attendance', label: 'Daily Attendance', hindi: 'दैनिक उपस्थिति', icon: CalendarCheck2 },
-          { id: 'trainees', label: 'Trainees Roster', hindi: 'प्रशिक्षु सूची', icon: Users },
-          {
-            id: 'leaves',
-            label: 'Leave Approvals',
-            hindi: 'अवकाश अनुमोदन',
-            icon: FileCheck2,
-            badge: leaves.filter((l) => l.status === 'pending').length,
-            badgeType: 'warning',
-          },
-          { id: 'reports', label: 'Official Registers & Reports', hindi: 'सरकारी पंजी', icon: BookOpen },
-          {
-            id: 'warnings',
-            label: 'Warnings & Alerts',
-            hindi: 'चेतावनी नोटिस',
-            icon: AlertTriangle,
-            badge: warnings.length,
-            badgeType: 'danger',
-          },
-          { id: 'inventory', label: 'Workshop Inventory', hindi: 'सामग्री स्टॉक', icon: Wrench },
-          { id: 'indents', label: 'Indent Register', hindi: 'टूल निर्गमन', icon: BookOpen },
-        ].map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as OfficerTab)}
-              className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all duration-150 whitespace-nowrap shrink-0 cursor-pointer ${
-                isActive
-                  ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-extrabold shadow-md shadow-emerald-950/40 ring-2 ring-emerald-300/30 border border-emerald-400'
-                  : 'bg-slate-900/90 hover:bg-slate-850 text-slate-200 hover:text-white border border-slate-800 hover:border-slate-700'
-              }`}
-            >
-              <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} />
-              <div className="flex flex-col text-left">
-                <span className="tracking-tight text-xs leading-tight font-extrabold">{tab.label}</span>
-                <span className={`text-[10px] leading-tight font-normal ${isActive ? 'text-emerald-100 opacity-90' : 'text-slate-400'}`}>
-                  {tab.hindi}
-                </span>
+      {/* Government Portal Layout: Vertical Side Panel Navigation + Main Content */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Left Sidebar: Vertical Side Panel Navigation */}
+        <aside className="lg:col-span-3 bg-slate-900 rounded-2xl shadow-xl border border-slate-800 p-4 space-y-5 sticky top-6">
+          <div className="flex items-center gap-2.5 pb-3 border-b border-slate-800 px-2">
+            <span className="p-2 bg-emerald-600 text-white rounded-xl shadow-md">
+              <Users className="w-5 h-5" />
+            </span>
+            <div>
+              <h4 className="font-extrabold text-sm text-white">Officer Control Panel</h4>
+              <p className="text-[10px] text-emerald-400 font-mono">Govt. ITI Raigarh Portal</p>
+            </div>
+          </div>
+
+          <div className="space-y-4 text-xs">
+            {/* Section 1: Daily Operations */}
+            <div className="space-y-1">
+              <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 px-2 mb-1.5">
+                Daily Operations
               </div>
-              {tab.badge !== undefined && tab.badge > 0 && (
-                <span
-                  className={`ml-1 text-[11px] font-black px-2 py-0.5 rounded-full shadow-xs ${
-                    isActive
-                      ? 'bg-white text-emerald-950'
-                      : tab.badgeType === 'danger'
-                      ? 'bg-rose-500 text-white'
-                      : 'bg-amber-400 text-slate-950'
-                  }`}
-                >
-                  {tab.badge}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
+              {[
+                { id: 'attendance', label: 'Daily Attendance', hindi: 'दैनिक उपस्थिति', icon: CalendarCheck2 },
+                { id: 'trainees', label: 'Trainees Roster', hindi: 'प्रशिक्षु सूची', icon: Users },
+                {
+                  id: 'leaves',
+                  label: 'Leave Approvals',
+                  hindi: 'अवकाश अनुमोदन',
+                  icon: FileCheck2,
+                  badge: leaves.filter((l) => l.status === 'pending').length,
+                  badgeType: 'warning',
+                },
+              ].map((item) => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => setActiveTab(item.id as OfficerTab)}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-bold transition-all duration-150 cursor-pointer ${
+                      isActive
+                        ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-950/50 ring-1 ring-emerald-400'
+                        : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+                      <div className="flex flex-col text-left">
+                        <span className="text-xs leading-tight font-extrabold">{item.label}</span>
+                        <span className="text-[10px] leading-tight text-slate-400 font-normal">{item.hindi}</span>
+                      </div>
+                    </div>
+                    {item.badge !== undefined && item.badge > 0 && (
+                      <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 shadow-xs">
+                        {item.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Section 2: Official Registers & Workshop */}
+            <div className="space-y-1 pt-2 border-t border-slate-800">
+              <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 px-2 mb-1.5">
+                Registers &amp; Workshop
+              </div>
+              {[
+                { id: 'reports', label: 'Official Registers', hindi: 'सरकारी पंजी', icon: BookOpen },
+                {
+                  id: 'warnings',
+                  label: 'Warnings & Alerts',
+                  hindi: 'चेतावनी नोटिस',
+                  icon: AlertTriangle,
+                  badge: warnings.length,
+                  badgeType: 'danger',
+                },
+                { id: 'inventory', label: 'Workshop Inventory', hindi: 'सामग्री स्टॉक', icon: Wrench },
+                { id: 'indents', label: 'Indent Register', hindi: 'टूल निर्गमन', icon: BookOpen },
+              ].map((item) => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => setActiveTab(item.id as OfficerTab)}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-bold transition-all duration-150 cursor-pointer ${
+                      isActive
+                        ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-950/50 ring-1 ring-emerald-400'
+                        : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+                      <div className="flex flex-col text-left">
+                        <span className="text-xs leading-tight font-extrabold">{item.label}</span>
+                        <span className="text-[10px] leading-tight text-slate-400 font-normal">{item.hindi}</span>
+                      </div>
+                    </div>
+                    {item.badge !== undefined && item.badge > 0 && (
+                      <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-rose-500 text-white shadow-xs">
+                        {item.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Section 3: Training Officer Academic Routines */}
+            <div className="space-y-1 pt-2 border-t border-slate-800">
+              <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-emerald-400 px-2 mb-1.5 flex items-center gap-1">
+                <span>★ Academic Routines</span>
+              </div>
+              {[
+                { id: 'lesson_plans', label: 'Lesson Plan Generator', hindi: 'पाठ योजना जनरेटर', icon: BookOpen },
+                { id: 'demonstration_plans', label: 'Demo Plan Scheduler', hindi: 'प्रदर्शन योजना', icon: Wrench },
+                { id: 'weekly_plans', label: 'Weekly Teaching Plan', hindi: 'साप्ताहिक शिक्षण', icon: CalendarCheck2 },
+                { id: 'assessments', label: 'Digital Progress Card', hindi: 'डिजिटल प्रगति पत्रक', icon: BarChart3 },
+              ].map((item) => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => setActiveTab(item.id as OfficerTab)}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-bold transition-all duration-150 cursor-pointer ${
+                      isActive
+                        ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-950/50 ring-1 ring-emerald-400'
+                        : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-emerald-400'}`} />
+                      <div className="flex flex-col text-left">
+                        <span className="text-xs leading-tight font-extrabold">{item.label}</span>
+                        <span className="text-[10px] leading-tight text-slate-400 font-normal">{item.hindi}</span>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </aside>
+
+        {/* Right Main Content Area (lg:col-span-9) */}
+        <div className="lg:col-span-9 space-y-6">
 
       {/* TAB 1: DAILY ATTENDANCE */}
       {activeTab === 'attendance' && (
@@ -978,54 +1194,62 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <button
-                onClick={() => {
-                  setSelectedRegister('daily_attendance');
-                  setActiveTab('reports');
-                }}
-                className="px-2.5 py-1.5 bg-amber-50 text-amber-900 hover:bg-amber-100 border border-amber-300 rounded-lg font-medium transition-colors flex items-center gap-1.5 shadow-xs"
-                title="Open Official Form IV Daily Attendance Register"
-              >
-                <BookOpen className="w-3.5 h-3.5 text-amber-800" />
-                <span>Form IV Register</span>
-              </button>
-              <button
-                onClick={() => {
-                  setSelectedRegister('monthly_attendance');
-                  setActiveTab('reports');
-                }}
-                className="px-2.5 py-1.5 bg-slate-100 text-slate-800 hover:bg-slate-200 border border-slate-300 rounded-lg font-medium transition-colors flex items-center gap-1.5 shadow-xs"
-                title="Open Official Form V Monthly 1-31 Matrix"
-              >
-                <CalendarCheck2 className="w-3.5 h-3.5 text-slate-700" />
-                <span>Monthly 1-31 Matrix</span>
-              </button>
+            <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 text-xs w-full lg:w-auto">
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={() => {
+                    setSelectedRegister('daily_attendance');
+                    setActiveTab('reports');
+                  }}
+                  className="px-2.5 py-1.5 bg-amber-50 text-amber-900 hover:bg-amber-100 border border-amber-300 rounded-lg font-medium transition-colors flex items-center gap-1.5 shadow-xs whitespace-nowrap flex-1 sm:flex-initial justify-center"
+                  title="Open Official Form IV Daily Attendance Register"
+                >
+                  <BookOpen className="w-3.5 h-3.5 text-amber-800" />
+                  <span>Form IV Register</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setSelectedRegister('monthly_attendance');
+                    setActiveTab('reports');
+                  }}
+                  className="px-2.5 py-1.5 bg-slate-100 text-slate-800 hover:bg-slate-200 border border-slate-300 rounded-lg font-medium transition-colors flex items-center gap-1.5 shadow-xs whitespace-nowrap flex-1 sm:flex-initial justify-center"
+                  title="Open Official Form V Monthly 1-31 Matrix"
+                >
+                  <CalendarCheck2 className="w-3.5 h-3.5 text-slate-700" />
+                  <span>Monthly 1-31 Matrix</span>
+                </button>
+              </div>
 
-              <input
-                type="date"
-                value={attendanceDate}
-                onChange={(e) => setAttendanceDate(e.target.value)}
-                className="px-2.5 py-1.5 border border-slate-300 rounded-lg text-slate-800 bg-white font-mono"
-              />
-              <button
-                onClick={handleTriggerAutoAbsent}
-                className="px-3 py-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 rounded-lg font-medium transition-colors"
-                title="Marks all unmarked trainees past 10:00 AM as Absent automatically"
-              >
-                Run 10 AM Auto-Absent
-              </button>
-              <button
-                onClick={handleSaveAttendance}
-                className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-medium rounded-lg shadow-xs transition-colors"
-              >
-                Save Attendance Changes
-              </button>
+              <div className="flex items-center gap-2 flex-wrap">
+                <input
+                  type="date"
+                  value={attendanceDate}
+                  onChange={(e) => setAttendanceDate(e.target.value)}
+                  className="px-2.5 py-1.5 border border-slate-300 rounded-lg text-slate-800 bg-white font-mono flex-1 sm:flex-initial"
+                />
+                <button
+                  onClick={handleTriggerAutoAbsent}
+                  className="px-3 py-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 rounded-lg font-medium transition-colors whitespace-nowrap flex-1 sm:flex-initial text-center cursor-pointer"
+                  title="Marks all unmarked trainees past 10:00 AM as Absent automatically"
+                >
+                  10 AM Auto-Absent
+                </button>
+                <button
+                  onClick={handleSaveAttendance}
+                  className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-medium rounded-lg shadow-xs transition-colors whitespace-nowrap flex-1 sm:flex-initial text-center cursor-pointer active:scale-95"
+                >
+                  Save Changes
+                </button>
+              </div>
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
+          <div className="overflow-x-auto max-w-full border border-slate-200 rounded-lg">
+            <div className="sm:hidden flex items-center justify-between text-[11px] text-slate-500 bg-slate-50 px-3 py-1.5 border-b border-slate-200">
+              <span>← Scroll table horizontally to view trainee records →</span>
+              <span className="font-mono text-[10px]">Muster</span>
+            </div>
+            <table className="w-full text-left text-xs border-collapse min-w-[700px]">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-slate-600">
                   <th className="py-3 px-4 font-semibold">Roll No &amp; Trainee Name</th>
@@ -1158,6 +1382,14 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                   className="pl-8 pr-3 py-1.5 text-xs border border-slate-300 rounded-lg w-48 sm:w-60"
                 />
               </div>
+              <button
+                onClick={() => setBulkModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg transition-colors shadow-xs"
+                title="Bulk Import Trainees via Excel / CSV"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>Bulk Excel Upload</span>
+              </button>
               <button
                 onClick={() => handleOpenTraineeModal()}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg transition-colors"
@@ -1733,6 +1965,33 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
             </table>
           </div>
         </div>
+      )}
+
+      {/* TAB: LESSON PLAN GENERATOR */}
+      {activeTab === 'lesson_plans' && (
+        <LessonPlanManager tradeId={selectedTradeId} tradeName={currentTrade?.name || 'Trade'} officerName={currentOfficer.name} />
+      )}
+
+      {/* TAB: DEMONSTRATION PLAN SCHEDULER */}
+      {activeTab === 'demonstration_plans' && (
+        <DemonstrationPlanManager tradeId={selectedTradeId} tradeName={currentTrade?.name || 'Trade'} officerName={currentOfficer.name} />
+      )}
+
+      {/* TAB: WEEKLY TEACHING PLAN */}
+      {activeTab === 'weekly_plans' && (
+        <WeeklyPlanManager tradeId={selectedTradeId} tradeName={currentTrade?.name || 'Trade'} officerName={currentOfficer.name} />
+      )}
+
+      {/* TAB: DIGITAL PROGRESS CARD */}
+      {activeTab === 'assessments' && (
+        <DigitalProgressCardTracker
+          tradeId={selectedTradeId}
+          tradeName={currentTrade?.name || 'Trade'}
+          tradeCode={currentTrade?.code}
+          officerName={currentOfficer.name}
+          sessions={sessions}
+          settings={settings}
+        />
       )}
 
       {/* MODAL: CREATE / EDIT TRAINEE */}
@@ -2703,6 +2962,9 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
           </div>
         </div>
       )}
+        </div>
+      </div>
+
       {/* MODAL: OFFICER PROFILE & EMAIL EDIT */}
       {officerProfileModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
@@ -2793,6 +3055,104 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: BULK EXCEL UPLOAD */}
+      {bulkModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-2xl w-full p-6 text-xs text-slate-800 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-emerald-100 text-emerald-800 rounded-lg">
+                  <Upload className="w-4 h-4 text-emerald-700" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-slate-900">
+                    Bulk Import Trainees via Excel / CSV
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    एक्सेल फ़ाइल के माध्यम से एक साथ सभी प्रशिक्षुओं का डेटा अपलोड करें
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setBulkModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-amber-900 space-y-2">
+                <div className="font-semibold flex items-center gap-1.5">
+                  <Download className="w-4 h-4" />
+                  <span>Step 1: Download Standard Excel Template</span>
+                </div>
+                <p className="text-[11px] text-amber-800">
+                  Download our pre-formatted Excel template containing required columns (rollNo, name, fatherName, email, mobile, category, gender, dob).
+                </p>
+                <button
+                  type="button"
+                  onClick={handleDownloadExcelTemplate}
+                  className="px-3 py-1.5 bg-amber-700 hover:bg-amber-800 text-white font-medium rounded-lg text-xs flex items-center gap-1.5 transition-colors shadow-xs"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download Excel Template (.xlsx)</span>
+                </button>
+              </div>
+
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                <div className="font-semibold text-slate-900 flex items-center gap-1.5">
+                  <Upload className="w-4 h-4 text-emerald-700" />
+                  <span>Step 2: Upload Filled Excel or CSV File</span>
+                </div>
+                <input
+                  type="file"
+                  accept=".xlsx, .xls, .csv"
+                  onChange={handleFileUpload}
+                  className="w-full text-xs text-slate-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-150 cursor-pointer"
+                />
+                {bulkParsedRows.length > 0 && (
+                  <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-lg text-emerald-900 flex items-center justify-between">
+                    <span className="font-medium">
+                      ✓ Ready to import {bulkParsedRows.length} trainee records for trade: {currentTrade?.name}
+                    </span>
+                    <span className="text-[10px] font-mono bg-emerald-200/60 px-2 py-0.5 rounded text-emerald-800">
+                      {bulkParsedRows.length} records parsed
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="pt-2 flex gap-2 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => setBulkModalOpen(false)}
+                className="flex-1 py-2 px-3 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-100 font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={bulkUploading || bulkParsedRows.length === 0}
+                onClick={handleConfirmBulkUpload}
+                className="flex-1 py-2 px-3 bg-emerald-700 hover:bg-emerald-800 disabled:bg-emerald-300 text-white font-semibold rounded-lg shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                {bulkUploading ? (
+                  <span>Importing...</span>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>Confirm &amp; Import ({bulkParsedRows.length})</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

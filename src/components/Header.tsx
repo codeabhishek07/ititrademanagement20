@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { UserRole, AppNotification } from '../types.ts';
 import { fetchNotifications } from '../api.ts';
+import { PWAInstallButton } from './PWAInstallButton.tsx';
 
 interface HeaderProps {
   currentUser: {
@@ -432,6 +433,9 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
             </div>
 
+            {/* PWA In-App Install Prompt */}
+            <PWAInstallButton />
+
             {/* High-Contrast Bold Modern Logout button */}
             <button
               onClick={onLogout}
@@ -444,6 +448,7 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         ) : (
           <div className="flex items-center gap-2">
+            <PWAInstallButton />
             <span className="px-2.5 py-1 rounded-lg bg-slate-900 text-amber-300 text-xs font-bold border border-slate-800 shadow-xs">
               Portal v2.6
             </span>

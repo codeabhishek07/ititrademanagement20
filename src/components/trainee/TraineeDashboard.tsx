@@ -36,7 +36,6 @@ import {
   fetchWarnings,
   acknowledgeWarning,
   fetchIndents,
-  updateTrainee,
 } from '../../api.ts';
 
 interface TraineeDashboardProps {
@@ -108,41 +107,6 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
     reason: '',
   });
 
-  // Trainee Contact & Email Edit Modal State
-  const [profileModalOpen, setProfileModalOpen] = useState(false);
-  const [profileForm, setProfileForm] = useState({
-    email: trainee.email,
-    mobile: trainee.mobile,
-  });
-  const [savingProfile, setSavingProfile] = useState(false);
-
-  const handleSaveProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!profileForm.email.trim()) {
-      alert('Email address cannot be empty');
-      return;
-    }
-    try {
-      setSavingProfile(true);
-      await updateTrainee(trainee.id, {
-        email: profileForm.email.trim(),
-        mobile: profileForm.mobile.trim(),
-      });
-      trainee.email = profileForm.email.trim();
-      trainee.mobile = profileForm.mobile.trim();
-      onTraineeUpdate?.({
-        email: profileForm.email.trim(),
-        mobile: profileForm.mobile.trim(),
-      });
-      showToast('Contact details and email updated successfully');
-      setProfileModalOpen(false);
-    } catch (err: any) {
-      alert(err.message || 'Failed to update contact info');
-    } finally {
-      setSavingProfile(false);
-    }
-  };
-
   const todayStr = new Date().toISOString().split('T')[0];
   const todayRecord = attendanceList.find((a) => a.date === todayStr);
 
@@ -206,7 +170,7 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
     }
 
     if (!navigator.geolocation) {
-      setGpsError('Geolocation is not supported by your browser.');
+      setGpsError('Geolocation is not supported by your browser or device.');
       setGpsLoading(false);
       return;
     }
@@ -214,16 +178,28 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const { latitude, longitude, accuracy } = pos.coords;
-        setCurrentCoords({ lat: latitude, lng: longitude, accuracy: Math.round(accuracy) });
+        setCurrentCoords({
+          lat: parseFloat(latitude.toFixed(6)),
+          lng: parseFloat(longitude.toFixed(6)),
+          accuracy: Math.round(accuracy),
+        });
         const dist = computeMeters(latitude, longitude, settings.campusLocation.lat, settings.campusLocation.lng);
         setDistanceToCampus(dist);
         setGpsLoading(false);
       },
       (err) => {
-        setGpsError(`GPS permission required: ${err.message}. (You can toggle Test Simulator below if testing outside Raigarh)`);
+        let msg = err.message;
+        if (err.code === 1) {
+          msg = 'Location permission denied. Please allow Location access in your browser settings to mark attendance.';
+        } else if (err.code === 2) {
+          msg = 'GPS signal unavailable. Please ensure GPS/Location is enabled on your device and move near an open window.';
+        } else if (err.code === 3) {
+          msg = 'GPS satellite lock timed out. Click "Refresh GPS" to re-acquire.';
+        }
+        setGpsError(`GPS Status: ${msg}`);
         setGpsLoading(false);
       },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
     );
   };
 
@@ -309,8 +285,13 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
     (hours > win.startHour || (hours === win.startHour && minutes >= win.startMinute)) &&
     (hours < win.endHour || (hours === win.endHour && minutes <= win.endMinute));
 
+  // Account for mobile GPS accuracy tolerance in workshop buildings (up to 150m buffer)
+  const accuracyBuffer = currentCoords ? Math.min(currentCoords.accuracy, 150) : 0;
+  const effectiveDistance = distanceToCampus !== null ? Math.max(0, distanceToCampus - accuracyBuffer) : null;
   const isWithinCampusPerimeter =
-    distanceToCampus !== null && distanceToCampus <= settings.campusLocation.radiusMeters;
+    distanceToCampus !== null &&
+    (distanceToCampus <= settings.campusLocation.radiusMeters ||
+      (effectiveDistance !== null && effectiveDistance <= settings.campusLocation.radiusMeters));
 
   return (
     <div className="space-y-6">
@@ -339,21 +320,6 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
                 <span className="text-[11px] font-mono font-semibold bg-slate-100 text-slate-800 px-2 py-0.5 rounded border border-slate-200">
                   {trainee.rollNo}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setProfileForm({
-                      email: trainee.email,
-                      mobile: trainee.mobile,
-                    });
-                    setProfileModalOpen(true);
-                  }}
-                  className="px-2 py-0.5 text-[11px] font-semibold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-md flex items-center gap-1 cursor-pointer transition-colors"
-                  title="Edit your email and contact number"
-                >
-                  <Edit2 className="w-3 h-3 text-amber-700" />
-                  <span>Edit Email / Contact (ईमेल बदलें)</span>
-                </button>
               </div>
               <p className="text-xs text-slate-500 flex items-center flex-wrap gap-x-2 gap-y-0.5 mt-0.5">
                 <span>Trade: <span className="font-semibold text-slate-700">{trainee.tradeName || 'Electrician'}</span></span>
@@ -556,40 +522,80 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
                   </div>
 
                   {gpsError ? (
-                    <div className="p-3 bg-amber-50 border border-amber-200 rounded text-amber-800 text-xs">
-                      {gpsError}
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded text-amber-800 text-xs space-y-1">
+                      <div className="font-semibold">{gpsError}</div>
+                      <p className="text-[11px] text-amber-700">
+                        Tip: Open browser location permissions or click "Refresh GPS" near an open doorway or window.
+                      </p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div className="p-3 bg-white rounded border border-slate-200">
-                        <span className="text-slate-500 text-[10px]">Your Distance from ITI Raigarh</span>
-                        <div className="text-lg font-bold font-mono text-slate-900 mt-1">
-                          {distanceToCampus !== null ? `${distanceToCampus} meters` : 'Calculating...'}
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="p-3 bg-white rounded border border-slate-200">
+                          <span className="text-slate-500 text-[10px]">Your Distance from ITI Raigarh</span>
+                          <div className="text-lg font-bold font-mono text-slate-900 mt-1">
+                            {distanceToCampus !== null ? `${distanceToCampus} meters` : 'Calculating...'}
+                          </div>
+                          <span className="text-[10px] text-slate-400">
+                            Allowed: ≤ {settings.campusLocation.radiusMeters}m
+                          </span>
                         </div>
-                        <span className="text-[10px] text-slate-400">
-                          Allowed: ≤ {settings.campusLocation.radiusMeters}m
-                        </span>
+
+                        <div className="p-3 bg-white rounded border border-slate-200">
+                          <span className="text-slate-500 text-[10px]">GPS Accuracy / Precision</span>
+                          <div className="text-lg font-bold font-mono text-slate-900 mt-1">
+                            {currentCoords ? `±${currentCoords.accuracy}m` : 'Acquiring...'}
+                          </div>
+                          <span className="text-[10px] text-emerald-600 font-medium">
+                            {accuracyBuffer > 0 ? `+${accuracyBuffer}m indoor tolerance` : 'High Precision'}
+                          </span>
+                        </div>
+
+                        <div className="p-3 bg-white rounded border border-slate-200">
+                          <span className="text-slate-500 text-[10px]">Perimeter Check</span>
+                          <div className="text-lg font-bold mt-1">
+                            {isWithinCampusPerimeter || simulateOnCampus ? (
+                              <span className="text-emerald-700 flex items-center gap-1">
+                                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                                <span>INSIDE CAMPUS</span>
+                              </span>
+                            ) : (
+                              <span className="text-rose-600 flex items-center gap-1">
+                                <AlertTriangle className="w-4 h-4 text-rose-500" />
+                                <span>OUTSIDE CAMPUS</span>
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-slate-400">Geofence Boundary</span>
+                        </div>
                       </div>
 
-                      <div className="p-3 bg-white rounded border border-slate-200">
-                        <span className="text-slate-500 text-[10px]">GPS Accuracy</span>
-                        <div className="text-lg font-bold font-mono text-slate-900 mt-1">
-                          {currentCoords ? `± ${currentCoords.accuracy}m` : 'Acquiring...'}
+                      {/* Coordinates info strip */}
+                      {currentCoords && (
+                        <div className="px-3 py-2 bg-white rounded border border-slate-200/80 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-600 font-mono">
+                          <div>
+                            <span className="text-slate-400 font-sans">Your Position:</span>{' '}
+                            <span className="text-slate-800 font-semibold">{currentCoords.lat}°N, {currentCoords.lng}°E</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 font-sans">Campus Center:</span>{' '}
+                            <span className="text-slate-800 font-semibold">{settings.campusLocation.lat}°N, {settings.campusLocation.lng}°E</span>
+                          </div>
                         </div>
-                        <span className="text-[10px] text-slate-400">High Precision Mode</span>
-                      </div>
+                      )}
 
-                      <div className="p-3 bg-white rounded border border-slate-200">
-                        <span className="text-slate-500 text-[10px]">Perimeter Check</span>
-                        <div className="text-lg font-bold mt-1">
-                          {isWithinCampusPerimeter || simulateOnCampus ? (
-                            <span className="text-emerald-700">INSIDE CAMPUS</span>
-                          ) : (
-                            <span className="text-rose-600">OUTSIDE CAMPUS</span>
-                          )}
+                      {!isWithinCampusPerimeter && !simulateOnCampus && distanceToCampus !== null && (
+                        <div className="p-2.5 bg-amber-50 rounded-lg border border-amber-200 text-amber-900 text-[11px] space-y-1">
+                          <div className="font-semibold flex items-center gap-1">
+                            <Compass className="w-3.5 h-3.5 text-amber-600" />
+                            <span>GPS Positioning Tip for ITI Workshop Buildings:</span>
+                          </div>
+                          <p className="text-amber-800 leading-relaxed">
+                            Heavy metal roofs and workshop machinery can attenuate satellite signals, causing temporary GPS drift.
+                            Please step near a workshop window or entrance door, tap <strong>"Refresh GPS"</strong>, and wait 3–5 seconds for the location to refine.
+                          </p>
                         </div>
-                        <span className="text-[10px] text-slate-400">Geofence Boundary</span>
-                      </div>
+                      )}
                     </div>
                   )}
 
@@ -1264,98 +1270,6 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-      )}
-      {/* MODAL: TRAINEE CONTACT & EMAIL EDIT */}
-      {profileModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full p-6 text-xs text-slate-800 space-y-4 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 bg-amber-100 text-amber-800 rounded-lg">
-                  <Mail className="w-4 h-4 text-amber-700" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-sm text-slate-900">
-                    Edit Trainee Email &amp; Contact
-                  </h3>
-                  <p className="text-[11px] text-slate-500">
-                    प्रशिक्षु संपर्क विवरण एवं ईमेल पता संपादित करें
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setProfileModalOpen(false)}
-                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveProfile} className="space-y-3.5">
-              <div>
-                <label className="block font-semibold mb-1 text-slate-700">Trainee Name</label>
-                <input
-                  type="text"
-                  value={trainee.name}
-                  disabled
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-100 text-slate-500 cursor-not-allowed font-medium text-xs"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold mb-1 text-slate-700">Student Email Address (ईमेल पता)</label>
-                <input
-                  type="email"
-                  value={profileForm.email}
-                  onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
-                  placeholder="student@student.iti.cg.in"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-xs focus:ring-2 focus:ring-amber-500"
-                  required
-                />
-                <p className="text-[10px] text-slate-500 mt-1">
-                  Used for signing into your trainee dashboard and for password recovery tokens.
-                </p>
-              </div>
-
-              <div>
-                <label className="block font-semibold mb-1 text-slate-700">Mobile Phone Number (मोबाइल नंबर)</label>
-                <input
-                  type="text"
-                  value={profileForm.mobile}
-                  onChange={(e) => setProfileForm({ ...profileForm, mobile: e.target.value })}
-                  placeholder="+91 98260 00000"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-xs"
-                  required
-                />
-              </div>
-
-              <div className="pt-2 flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setProfileModalOpen(false)}
-                  className="flex-1 py-2 px-3 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-100 font-medium"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={savingProfile}
-                  className="flex-1 py-2 px-3 bg-amber-600 hover:bg-amber-700 disabled:bg-amber-300 text-white font-semibold rounded-lg shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  {savingProfile ? (
-                    <span>Saving...</span>
-                  ) : (
-                    <>
-                      <Check className="w-4 h-4" />
-                      <span>Save Changes (सहेजें)</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}

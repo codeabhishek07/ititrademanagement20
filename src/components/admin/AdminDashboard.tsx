@@ -66,7 +66,23 @@ interface AdminDashboardProps {
 type AdminTab = 'overview' | 'sessions' | 'working_days' | 'trades' | 'officers' | 'rules' | 'audit';
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSettingsUpdate }) => {
-  const [activeTab, setActiveTab] = useState<AdminTab>('overview');
+  // Persistent active tab across page refreshes
+  const [activeTab, setActiveTab] = useState<AdminTab>(() => {
+    try {
+      const saved = localStorage.getItem('iti_admin_active_tab');
+      if (saved && ['overview', 'sessions', 'working_days', 'trades', 'officers', 'rules', 'audit'].includes(saved)) {
+        return saved as AdminTab;
+      }
+    } catch (e) {}
+    return 'overview';
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('iti_admin_active_tab', activeTab);
+    } catch (e) {}
+  }, [activeTab]);
+
   const [loading, setLoading] = useState(false);
 
   // Data states
@@ -87,6 +103,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
   const [passwordOfficer, setPasswordOfficer] = useState<TrainingOfficer | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [successToast, setSuccessToast] = useState('');
+  const [calibratingGps, setCalibratingGps] = useState(false);
 
   // Selected session for monthly working days
   const [selectedSessionId, setSelectedSessionId] = useState(settings.currentSessionId || '');
@@ -140,6 +157,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
   const showToast = (msg: string) => {
     setSuccessToast(msg);
     setTimeout(() => setSuccessToast(''), 4000);
+  };
+
+  const handleCaptureAdminLocation = () => {
+    if (!navigator.geolocation) {
+      alert('Geolocation is not supported by your browser or device.');
+      return;
+    }
+    setCalibratingGps(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setCalibratingGps(false);
+        const lat = parseFloat(pos.coords.latitude.toFixed(6));
+        const lng = parseFloat(pos.coords.longitude.toFixed(6));
+        const acc = Math.round(pos.coords.accuracy);
+        setSettingsForm((prev) => ({
+          ...prev,
+          campusLocation: {
+            ...prev.campusLocation,
+            lat,
+            lng,
+          },
+        }));
+        showToast(`Captured precise GPS position: ${lat}°N, ${lng}°E (±${acc}m accuracy)`);
+      },
+      (err) => {
+        setCalibratingGps(false);
+        alert(`Could not acquire GPS position: ${err.message}. Please allow Location access in browser.`);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
   };
 
   const reloadData = async () => {
@@ -1562,9 +1609,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Campus Geofence */}
             <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 space-y-3">
-              <div className="flex items-center gap-2 font-semibold text-slate-900">
-                <Compass className="w-4 h-4 text-blue-600" />
-                <span>Campus Location &amp; Geofence Coordinates</span>
+              <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-2">
+                <div className="flex items-center gap-2 font-semibold text-slate-900">
+                  <Compass className="w-4 h-4 text-blue-600" />
+                  <span>Campus Location &amp; Geofence Coordinates</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCaptureAdminLocation}
+                  disabled={calibratingGps}
+                  className="px-2.5 py-1 text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-md flex items-center gap-1 cursor-pointer transition-colors shadow-xs disabled:opacity-50"
+                  title="Click to automatically capture your current GPS location as the campus center"
+                >
+                  <MapPin className={`w-3.5 h-3.5 text-blue-600 ${calibratingGps ? 'animate-bounce' : ''}`} />
+                  <span>{calibratingGps ? 'Acquiring GPS...' : '📍 Capture Current GPS'}</span>
+                </button>
               </div>
 
               <div>
@@ -1608,16 +1667,44 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
               </div>
 
               <div>
-                <label className="block text-slate-600 mb-1">Geofence Allowed Radius (Meters)</label>
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <label className="text-slate-600">Geofence Allowed Radius (Meters)</label>
+                  <div className="flex items-center gap-1">
+                    {[500, 1000, 1500, 2000, 3000].map((r) => (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() =>
+                          setSettingsForm({
+                            ...settingsForm,
+                            campusLocation: {
+                              ...settingsForm.campusLocation,
+                              radiusMeters: r,
+                            },
+                          })
+                        }
+                        className={`px-1.5 py-0.5 text-[10px] rounded border font-mono ${
+                          settingsForm.campusLocation.radiusMeters === r
+                            ? 'bg-blue-600 text-white border-blue-600 font-bold'
+                            : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {r}m
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <input
                   type="number"
+                  min="100"
+                  max="10000"
                   value={settingsForm.campusLocation.radiusMeters}
                   onChange={(e) =>
                     setSettingsForm({
                       ...settingsForm,
                       campusLocation: {
                         ...settingsForm.campusLocation,
-                        radiusMeters: parseInt(e.target.value) || 400,
+                        radiusMeters: parseInt(e.target.value) || 1500,
                       },
                     })
                   }
@@ -1625,7 +1712,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
                   required
                 />
                 <span className="text-[11px] text-slate-500 mt-1 block">
-                  Trainees must be within this perimeter (currently {settingsForm.campusLocation.radiusMeters}m) to self-mark attendance.
+                  Trainees must be within this perimeter (currently {settingsForm.campusLocation.radiusMeters}m) to self-mark attendance. Covers all workshop bays, classrooms, and grounds.
                 </span>
               </div>
 

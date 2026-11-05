@@ -1,0 +1,32 @@
+{
+  "id": "/",
+  "name": "Government ITI Raigarh - Technical Training & Attendance Portal",
+  "short_name": "Govt ITI",
+  "description": "Comprehensive NCVT trade management, biometric GPS attendance, and workshop inventory system for Government ITI Raigarh, Chhattisgarh.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#0f172a",
+  "background_color": "#f8fafc",
+  "icons": [
+    {
+      "src": "/assets/aistudio/iti-logo_b32addc6.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/aistudio/iti-logo_b32addc6.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/aistudio/iti-logo_b32addc6.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

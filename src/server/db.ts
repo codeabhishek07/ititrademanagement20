@@ -14,6 +14,10 @@ import type {
   InventoryItem,
   IndentRecord,
   AuditLog,
+  LessonPlan,
+  DemonstrationPlan,
+  WeeklyPlan,
+  TraineeAssessment,
 } from '../types.ts';
 
 export interface DatabaseSchema {
@@ -29,14 +33,18 @@ export interface DatabaseSchema {
   inventory: InventoryItem[];
   indents: IndentRecord[];
   auditLogs: AuditLog[];
+  lessonPlans: LessonPlan[];
+  demonstrationPlans: DemonstrationPlan[];
+  weeklyPlans: WeeklyPlan[];
+  assessments: TraineeAssessment[];
 }
 
 const DATA_DIR = path.resolve(process.cwd(), 'data');
 const DATA_FILE = path.join(DATA_DIR, 'iti_db.json');
 
-// Raigarh ITI Campus GPS Coords (approx Kirodimal / TV Tower Road Raigarh)
-const DEFAULT_CAMPUS_LAT = 21.8974;
-const DEFAULT_CAMPUS_LNG = 83.3956;
+// Raigarh ITI Campus GPS Coords (Chakradhar Nagar / Boirdadar ITI Campus Raigarh)
+const DEFAULT_CAMPUS_LAT = 21.8958;
+const DEFAULT_CAMPUS_LNG = 83.4133;
 
 function getInitialDatabase(): DatabaseSchema {
   const settings: SystemSettings = {
@@ -50,8 +58,8 @@ function getInitialDatabase(): DatabaseSchema {
       lat: DEFAULT_CAMPUS_LAT,
       lng: DEFAULT_CAMPUS_LNG,
       campusName: 'Government ITI Raigarh Campus',
-      address: 'Chakradhar Nagar Industrial Area Boirdadadr, Raigarh (C.G.) 496001',
-      radiusMeters: 400,
+      address: 'Chakradhar Nagar Industrial Area Boirdadar, Raigarh (C.G.) 496001',
+      radiusMeters: 1500,
     },
     attendanceWindow: {
       startHour: 7,
@@ -666,6 +674,105 @@ function getInitialDatabase(): DatabaseSchema {
     },
   ];
 
+  const lessonPlans: LessonPlan[] = [
+    {
+      id: 'lp_01',
+      tradeId: 'trade_elec',
+      unitName: 'Module (M1): Safety precautions, Hand & Power Tools, Systems of Measurement',
+      syllabusRef: 'NCVT CTS Syllabus 2025 - Unit 1',
+      startDate: '2026-08-10',
+      endDate: '2026-08-15',
+      status: 'Completed',
+      objectives: 'प्रशिक्षुार्थी Trade Scope, General Discipline & First Aid के सिद्धांतों एवं मुख्य संकल्पनाओं को पूर्ण रूप से समझ सकें तथा तकनीकी कार्यप्रणाली की व्याख्या कर सकेंगे।',
+      teachingAid: 'Whiteboard, Marker, कट-सेक्शन डीजल इंजन मॉडल, प्रिसिजन मापक यंत्र (माइक्रोमीटर, बोर गेज), एनआईएमआई चार्ट्स',
+      keyLearningPoints: 'Trade Scope, General Discipline & First Aid की परिभाषा, तकनीकी महत्ता, कार्यविधि एवं वास्तविक अनुप्रयोगों को चरणबद्ध उदाहरण सहित स्पष्ट करें।',
+      assignment: 'Trade Scope, General Discipline & First Aid पर आधारित विस्तृत एवं लघु उत्तरीय प्रश्नों के उत्तर अपनी Theory Notebook में लिखकर अगली कक्षा में प्रस्तुत करें।',
+      reference: 'DGT CTS Curriculum & Trade Theory Book (NSQF Level 3.5) published by NIMI, Chennai.',
+      officerName: 'Abhishek Swarnkar',
+    },
+    {
+      id: 'lp_02',
+      tradeId: 'trade_copa',
+      unitName: 'Module (M1): Computer Fundamentals & Operating Systems',
+      syllabusRef: 'NCVT COPA Syllabus 2025 - Module 1',
+      startDate: '2026-08-16',
+      endDate: '2026-08-22',
+      status: 'Completed',
+      objectives: 'Understand basic computer architecture, CPU, memory hierarchy, and Windows/Linux CLI fundamentals.',
+      teachingAid: 'Projector, PC Workstation, Motherboard cut-section, NIMI Digital Modules',
+      keyLearningPoints: 'Hardware vs Software, Booting Process, BIOS/UEFI configuration, File system structure.',
+      assignment: 'Write steps to format hard disk and create partition in lab record book.',
+      reference: 'DGT COPA Curriculum (NSQF Level 3.5) published by NIMI, Chennai.',
+      officerName: 'Smt. Priyanka Sharma',
+    },
+  ];
+
+  const demonstrationPlans: DemonstrationPlan[] = [
+    {
+      id: 'dp_01',
+      tradeId: 'trade_elec',
+      practicalTitle: 'Demonstration of machinery used in the trade & electrical safety measures',
+      toolsRequired: 'Safety Helmet, Goggles, Safety Shoes, Apron, CO2 Extinguisher, Steel Rule, Try Square, Combination Pliers, Insulation Tester',
+      allottedHours: 8,
+      targetDate: '2026-08-12',
+      status: 'Completed',
+      objectives: 'प्रशिक्षुार्थी "Demonstration of machinery used in the trade" को निर्धारित DGT मानक व सुरक्षा नियमों के अनुसार सफलतापूर्वक पूरा करना।',
+      procedureSteps: [
+        'कार्यस्थल (Workshop/Workstation) की सुरक्षा जाँच करें तथा आवश्यक टूल्स/उपकरण तैयार रखें।',
+        'अनुदेशक (Training Officer) द्वारा प्रदर्शित मानक प्रक्रिया के अनुसारचरणबद्ध रूप से निष्पादित करें।',
+        'परिणाम एवं रीडिंग का सत्यापन तथा रिकॉर्ड्स को नियत प्रारूप में दर्ज करें।',
+        'संपूर्ण कार्य को अपनी Trade Practical Record Book में सर्किट डायग्राम/रीडिंग्स सहित दर्ज करें।'
+      ],
+      hints: 'ऑटोमोबाइल वर्कशाप में सदैव सुरक्षा जूते और सुरक्षा चश्मा पहनें। गर्म इंजन और घूमते हुए पुर्जों से सुरक्षित दूरी बनाए रखें।',
+      officerName: 'Abhishek Swarnkar',
+    },
+  ];
+
+  const weeklyPlans: WeeklyPlan[] = [
+    {
+      id: 'wp_1',
+      tradeId: 'trade_copa',
+      weekNumber: 1,
+      dateRange: '10-Aug-2026 to 16-Aug-2026',
+      dailyBreakdown: [
+        { day: 'सोमवार', date: '10-Aug-2026', theoryTopic: 'Introduction to Computers & Safe Working Practices', practicalTopic: 'Visit COPA Lab and locate electrical connections with computer system setup', status: 'Completed' },
+        { day: 'मंगलवार', date: '11-Aug-2026', theoryTopic: 'Introduction to Computers & Safe Working Practices', practicalTopic: 'Identifying safety symbols and hazard identification in IT Lab', status: 'Completed' },
+        { day: 'बुधवार', date: '12-Aug-2026', theoryTopic: 'Introduction to Computers & Safe Working Practices', practicalTopic: 'Practice safe methods of fire fighting in case of electrical fire', status: 'Completed' },
+        { day: 'गुरुवार', date: '13-Aug-2026', theoryTopic: 'Introduction to Computers & Safe Working Practices', practicalTopic: 'Demonstration and Hands-on Use of Fire Extinguishers', status: 'Completed' },
+        { day: 'शुक्रवार', date: '14-Aug-2026', theoryTopic: 'Computer Hardware Architecture & Component Functions', practicalTopic: 'Identify computer peripherals and internal components of a desktop computer', status: 'Completed' },
+      ],
+      summaryTheoryDone: 5,
+      summaryTheoryPlanned: 5,
+      summaryPracticalDone: 5,
+      summaryPracticalPlanned: 5,
+      officerName: 'Shoaib Ahmad',
+    },
+  ];
+
+  const assessments: TraineeAssessment[] = [
+    {
+      id: 'asm_1',
+      traineeId: 'tr_1',
+      sessionId: 'session_2025_2026',
+      month: '2026-08',
+      testMarks: 81,
+      attendancePercent: 88,
+      parameters: {
+        jobCarriedOut: 8,
+        recordBook: 8,
+        answerSheet: 16,
+        vivaVoce: 8,
+        progressChart: 9,
+        attendancePunctuality: 8,
+        assignment: 5,
+        projectWork: 4,
+        cbtExam: 8,
+        practicalExam: 7,
+      },
+      remarks: 'Good progress and consistent practical attendance.',
+    },
+  ];
+
   return {
     settings,
     sessions,
@@ -679,6 +786,10 @@ function getInitialDatabase(): DatabaseSchema {
     inventory,
     indents,
     auditLogs,
+    lessonPlans,
+    demonstrationPlans,
+    weeklyPlans,
+    assessments,
   };
 }
 
@@ -697,7 +808,18 @@ class Database {
 
       if (fs.existsSync(DATA_FILE)) {
         const raw = fs.readFileSync(DATA_FILE, 'utf-8');
-        return JSON.parse(raw);
+        const parsed = JSON.parse(raw);
+        const initial = getInitialDatabase();
+        const merged: DatabaseSchema = {
+          ...initial,
+          ...parsed,
+          assessments: Array.isArray(parsed.assessments) && parsed.assessments.length > 0 ? parsed.assessments : (initial.assessments || []),
+          lessonPlans: Array.isArray(parsed.lessonPlans) ? parsed.lessonPlans : (initial.lessonPlans || []),
+          demonstrationPlans: Array.isArray(parsed.demonstrationPlans) ? parsed.demonstrationPlans : (initial.demonstrationPlans || []),
+          weeklyPlans: Array.isArray(parsed.weeklyPlans) ? parsed.weeklyPlans : (initial.weeklyPlans || []),
+        };
+        this.saveDirect(merged);
+        return merged;
       }
     } catch (err) {
       console.error('Error loading database file, initializing defaults:', err);
@@ -724,6 +846,10 @@ class Database {
   }
 
   public get(): DatabaseSchema {
+    if (!Array.isArray(this.data.assessments)) this.data.assessments = [];
+    if (!Array.isArray(this.data.lessonPlans)) this.data.lessonPlans = [];
+    if (!Array.isArray(this.data.demonstrationPlans)) this.data.demonstrationPlans = [];
+    if (!Array.isArray(this.data.weeklyPlans)) this.data.weeklyPlans = [];
     return this.data;
   }
 

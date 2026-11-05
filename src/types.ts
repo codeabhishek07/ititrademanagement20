@@ -246,3 +246,74 @@ export interface AppNotification {
   metadata?: Record<string, any>;
 }
 
+export interface LessonPlan {
+  id: string;
+  tradeId: string;
+  unitName: string;
+  syllabusRef: string;
+  startDate: string;
+  endDate: string;
+  status: 'Pending' | 'Completed';
+  objectives: string;
+  teachingAid: string;
+  keyLearningPoints: string;
+  assignment: string;
+  reference: string;
+  officerName: string;
+}
+
+export interface DemonstrationPlan {
+  id: string;
+  tradeId: string;
+  practicalTitle: string;
+  toolsRequired: string;
+  allottedHours: number;
+  targetDate: string;
+  status: 'Pending' | 'Completed';
+  objectives: string;
+  procedureSteps: string[];
+  hints: string;
+  officerName: string;
+}
+
+export interface WeeklyPlan {
+  id: string;
+  tradeId: string;
+  weekNumber: number;
+  dateRange: string;
+  dailyBreakdown: Array<{
+    day: string;
+    date: string;
+    theoryTopic: string;
+    practicalTopic: string;
+    status: 'Pending' | 'Completed';
+  }>;
+  summaryTheoryDone: number;
+  summaryTheoryPlanned: number;
+  summaryPracticalDone: number;
+  summaryPracticalPlanned: number;
+  officerName: string;
+}
+
+export interface TraineeAssessment {
+  id: string;
+  traineeId: string;
+  sessionId: string;
+  month: string; // YYYY-MM
+  testMarks: number; // out of 100
+  attendancePercent: number;
+  parameters: {
+    jobCarriedOut: number; // /10
+    recordBook: number; // /10
+    answerSheet: number; // /20
+    vivaVoce: number; // /10
+    progressChart: number; // /10
+    attendancePunctuality: number; // /10
+    assignment: number; // /5
+    projectWork: number; // /5
+    cbtExam: number; // /10
+    practicalExam: number; // /10
+  };
+  remarks: string;
+}
+

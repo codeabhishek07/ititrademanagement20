@@ -12,6 +12,7 @@ import {
 } from './types.ts';
 import { fetchBootstrap, loginApi, fetchTrades, fetchSessions } from './api.ts';
 import { RefreshCw } from 'lucide-react';
+import { OfflineIndicator } from './components/OfflineIndicator.tsx';
 
 interface CurrentUser {
   id: string;
@@ -32,10 +33,33 @@ interface CurrentUser {
 
 export default function App() {
   const [loading, setLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  // Restore persistent login session from localStorage
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(() => {
+    try {
+      const saved = localStorage.getItem('iti_session_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch (err) {
+      console.warn('Failed to parse saved session from localStorage:', err);
+      return null;
+    }
+  });
+
   const [settings, setSettings] = useState<SystemSettings | null>(null);
   const [trades, setTrades] = useState<Trade[]>([]);
   const [sessions, setSessions] = useState<AcademicSession[]>([]);
+
+  // Automatically save current session to localStorage whenever currentUser updates
+  useEffect(() => {
+    try {
+      if (currentUser) {
+        localStorage.setItem('iti_session_user', JSON.stringify(currentUser));
+      } else {
+        localStorage.removeItem('iti_session_user');
+      }
+    } catch (err) {
+      console.warn('Failed to persist session to localStorage:', err);
+    }
+  }, [currentUser]);
 
   const loadInitialData = async () => {
     try {
@@ -44,6 +68,18 @@ export default function App() {
       setSettings(data.settings);
       setSessions(data.sessions);
       setTrades(data.trades);
+
+      // If user is a trainee and tradeName is missing, resolve it from fresh trades list
+      setCurrentUser((prev) => {
+        if (!prev) return null;
+        if (prev.role === 'trainee' && prev.tradeId && (!prev.tradeName || prev.tradeName === 'Electrician')) {
+          const matchedTrade = data.trades.find((t) => t.id === prev.tradeId);
+          if (matchedTrade && matchedTrade.name !== prev.tradeName) {
+            return { ...prev, tradeName: matchedTrade.name };
+          }
+        }
+        return prev;
+      });
     } catch (err) {
       console.error('Failed to bootstrap applet:', err);
     } finally {
@@ -73,10 +109,33 @@ export default function App() {
     }
   };
 
-  const [traineeActiveTab, setTraineeActiveTab] = useState<'mark_attendance' | 'history' | 'leaves' | 'warnings' | 'tools'>('mark_attendance');
+  // Trainee active tab persistent state
+  const [traineeActiveTab, setTraineeActiveTab] = useState<'mark_attendance' | 'history' | 'leaves' | 'warnings' | 'tools'>(() => {
+    try {
+      const saved = localStorage.getItem('iti_trainee_active_tab');
+      if (saved && ['mark_attendance', 'history', 'leaves', 'warnings', 'tools'].includes(saved)) {
+        return saved as any;
+      }
+    } catch (e) {}
+    return 'mark_attendance';
+  });
+
+  useEffect(() => {
+    try {
+      if (traineeActiveTab) {
+        localStorage.setItem('iti_trainee_active_tab', traineeActiveTab);
+      }
+    } catch (e) {}
+  }, [traineeActiveTab]);
 
   const handleLogout = () => {
     setCurrentUser(null);
+    try {
+      localStorage.removeItem('iti_session_user');
+      localStorage.removeItem('iti_trainee_active_tab');
+      localStorage.removeItem('iti_officer_active_tab');
+      localStorage.removeItem('iti_admin_active_tab');
+    } catch (e) {}
   };
 
   if (loading && !settings) {
@@ -174,24 +233,23 @@ export default function App() {
       {/* Footer */}
       <footer className="bg-white border-t border-slate-200 py-4 px-4 sm:px-6 text-xs text-slate-500">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3 text-center md:text-left">
-          <div className="flex flex-col sm:flex-row items-center gap-2">
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-slate-700">शासकीय आईटीआई रायगढ़ (Govt. ITI Raigarh)</span>
-              <span>·</span>
-              <span>रोजगार एवं प्रशिक्षण संचालनालय, छत्तीसगढ़</span>
-            </div>
-            <span className="hidden sm:inline text-slate-300">|</span>
-            <div className="w-[424.364px] max-w-full font-medium bg-amber-50/90 text-amber-900 border border-amber-300/80 px-2.5 py-1 rounded shadow-xs text-xs">
-              Designed and develeped by Abhishek Swarnkar , Training Officer, ITI Raigarh CG
-            </div>
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-slate-700">शासकीय आईटीआई रायगढ़ (Govt. ITI Raigarh)</span>
+            <span>·</span>
+            <span>रोजगार एवं प्रशिक्षण संचालनालय, छत्तीसगढ़</span>
           </div>
           <div className="flex items-center gap-3 text-[11px] text-slate-400">
             <span>NCVT / DGT Compliant</span>
             <span>·</span>
-            <span>GPS Geofence: 21.8974° N, 83.3956° E</span>
+            <span>
+              GPS Geofence: {settings?.campusLocation?.lat || 21.8958}° N, {settings?.campusLocation?.lng || 83.4133}° E (±{settings?.campusLocation?.radiusMeters || 450}m)
+            </span>
           </div>
         </div>
       </footer>
+
+      {/* Floating Offline & Sync Status Indicator */}
+      <OfflineIndicator />
     </div>
   );
 }
