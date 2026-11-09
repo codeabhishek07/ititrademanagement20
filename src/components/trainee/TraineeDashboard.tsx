@@ -17,8 +17,9 @@ import {
   Building,
   Printer,
   X,
-  Edit2,
   Mail,
+  ChevronDown,
+  Menu,
 } from 'lucide-react';
 import {
   AttendanceRecord,
@@ -74,9 +75,24 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
     }
   }, [selectedTab]);
 
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   const handleTabClick = (tab: TraineeTab) => {
     setActiveTab(tab);
+    setMobileMenuOpen(false);
     onTabChange?.(tab);
+    setTimeout(() => {
+      const el = document.getElementById('trainee-content-viewport');
+      if (el) {
+        const headerOffset = 115;
+        const elementPosition = el.getBoundingClientRect().top + window.pageYOffset;
+        const offsetPosition = elementPosition - headerOffset;
+        window.scrollTo({
+          top: Math.max(0, offsetPosition),
+          behavior: 'smooth',
+        });
+      }
+    }, 60);
   };
 
   const [loading, setLoading] = useState(false);
@@ -359,8 +375,136 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
         </div>
       </div>
 
-      {/* Trainee Navigation Tabs - High-Contrast Bold Modern Menu Bar */}
-      <div className="bg-slate-950 p-2 rounded-2xl shadow-lg border border-slate-800 ring-1 ring-slate-800/80 flex items-center gap-2 overflow-x-auto scrollbar-none">
+      {/* Mobile Navigation Header & Collapsible Submenu (sm:hidden) */}
+      <div className="sm:hidden space-y-2">
+        {/* Mobile Nav Top Bar */}
+        <div className="bg-slate-950 rounded-2xl p-3 border border-slate-800 shadow-lg flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="p-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl shadow-md shrink-0">
+              {activeTab === 'mark_attendance' && <Compass className="w-4 h-4" />}
+              {activeTab === 'history' && <BarChart2 className="w-4 h-4" />}
+              {activeTab === 'leaves' && <FileText className="w-4 h-4" />}
+              {activeTab === 'warnings' && <AlertTriangle className="w-4 h-4" />}
+              {activeTab === 'tools' && <Wrench className="w-4 h-4" />}
+            </span>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-amber-400 font-bold">
+                  Active Tab
+                </span>
+                <span className="text-slate-600">·</span>
+                <span className="text-[10px] text-slate-400 truncate">Trainee Portal</span>
+              </div>
+              <h3 className="font-extrabold text-sm text-white truncate">
+                {activeTab === 'mark_attendance' && 'Mark Attendance (GPS)'}
+                {activeTab === 'history' && 'Attendance History & Charts'}
+                {activeTab === 'leaves' && 'Leaves & Sanctions'}
+                {activeTab === 'warnings' && 'Official Notices'}
+                {activeTab === 'tools' && 'My Workshop Tools'}
+              </h3>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-expanded={mobileMenuOpen}
+            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+              mobileMenuOpen
+                ? 'bg-amber-500 text-white shadow-md shadow-amber-950/50 ring-2 ring-amber-400/40'
+                : 'bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700'
+            }`}
+          >
+            <Menu className="w-4 h-4 text-amber-400" />
+            <span>{mobileMenuOpen ? 'Close / बंद' : 'Menu / मेनू'}</span>
+            <ChevronDown
+              className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                mobileMenuOpen ? 'rotate-180 text-white' : 'text-slate-400'
+              }`}
+            />
+          </button>
+        </div>
+
+        {/* Collapsible Mobile Submenu Panel - Slides smoothly down BELOW the menu bar */}
+        {mobileMenuOpen && (
+          <div className="bg-slate-950 rounded-2xl border border-slate-800 shadow-2xl p-3 space-y-2 max-h-[65vh] overflow-y-auto overscroll-contain animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="flex items-center justify-between px-2 pb-1.5 border-b border-slate-800 text-[11px] text-slate-400">
+              <span className="font-semibold text-slate-300">Select Trainee Section / अनुभाग चुनें</span>
+              <span className="text-[10px] text-amber-400 font-mono">ITI Raigarh</span>
+            </div>
+
+            {[
+              { id: 'mark_attendance', label: 'Mark Attendance (GPS)', hindi: 'जीपीएस उपस्थिति दर्ज', icon: Compass },
+              { id: 'history', label: 'Attendance History & Charts', hindi: 'उपस्थिति इतिहास व चार्ट', icon: BarChart2 },
+              {
+                id: 'leaves',
+                label: 'Leaves & Sanctions',
+                hindi: 'अवकाश आवेदन',
+                icon: FileText,
+                badge: leavesList.length,
+                badgeType: 'neutral',
+              },
+              {
+                id: 'warnings',
+                label: 'Official Notices',
+                hindi: 'संस्थान नोटिस',
+                icon: AlertTriangle,
+                badge: warningsList.length,
+                badgeType: 'danger',
+              },
+              {
+                id: 'tools',
+                label: 'My Workshop Tools',
+                hindi: 'वर्कशॉप औजार',
+                icon: Wrench,
+                badge: indentsList.length,
+                badgeType: 'neutral',
+              },
+            ].map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => handleTabClick(tab.id as TraineeTab)}
+                  className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer ${
+                    isActive
+                      ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md shadow-orange-950/40 ring-1 ring-amber-300'
+                      : 'text-slate-300 hover:bg-slate-900 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-amber-400'}`} />
+                    <div className="flex flex-col text-left truncate">
+                      <span className="text-xs leading-tight font-extrabold truncate">{tab.label}</span>
+                      <span className={`text-[10px] leading-tight font-normal truncate ${isActive ? 'text-amber-100' : 'text-slate-400'}`}>
+                        {tab.hindi}
+                      </span>
+                    </div>
+                  </div>
+                  {tab.badge !== undefined && tab.badge > 0 && (
+                    <span
+                      className={`text-[10px] font-black px-2 py-0.5 rounded-full shrink-0 ml-1.5 ${
+                        isActive
+                          ? 'bg-white text-orange-950'
+                          : tab.badgeType === 'danger'
+                          ? 'bg-rose-500 text-white animate-pulse'
+                          : 'bg-slate-800 text-amber-300 border border-slate-700'
+                      }`}
+                    >
+                      {tab.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Trainee Navigation Tabs - Tablet / Desktop Bar (hidden sm:flex) */}
+      <div className="hidden sm:flex bg-slate-950 p-2 rounded-2xl shadow-lg border border-slate-800 ring-1 ring-slate-800/80 items-center gap-2 overflow-x-auto scrollbar-none">
         {[
           { id: 'mark_attendance', label: 'Mark Attendance (GPS)', hindi: 'जीपीएस उपस्थिति दर्ज', icon: Compass },
           { id: 'history', label: 'Attendance History & Charts', hindi: 'उपस्थिति इतिहास व चार्ट', icon: BarChart2 },
@@ -425,6 +569,9 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
           );
         })}
       </div>
+
+      {/* Trainee Content Viewport with header scroll offset */}
+      <div id="trainee-content-viewport" className="space-y-6 scroll-mt-28 sm:scroll-mt-32">
 
       {/* TAB 1: MARK ATTENDANCE (GPS GEOFENCE) */}
       {activeTab === 'mark_attendance' && (
@@ -1070,6 +1217,7 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
           </div>
         </div>
       )}
+      </div>
 
       {/* MODAL: APPLY FOR LEAVE */}
       {leaveModalOpen && (

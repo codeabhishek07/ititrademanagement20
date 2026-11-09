@@ -24,6 +24,8 @@ import {
   Mail,
   RefreshCw,
   Upload,
+  ChevronDown,
+  Menu,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import {
@@ -112,6 +114,24 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState('');
   const [syncingAssignments, setSyncingAssignments] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const handleSelectTab = (tab: OfficerTab) => {
+    setActiveTab(tab);
+    setMobileMenuOpen(false);
+    setTimeout(() => {
+      const el = document.getElementById('officer-content-viewport');
+      if (el) {
+        const headerOffset = 115;
+        const elementPosition = el.getBoundingClientRect().top + window.pageYOffset;
+        const offsetPosition = elementPosition - headerOffset;
+        window.scrollTo({
+          top: Math.max(0, offsetPosition),
+          behavior: 'smooth',
+        });
+      }
+    }, 60);
+  };
 
   // Reactive state for the current officer's profile and trade assignments
   const [currentOfficer, setCurrentOfficer] = useState<{
@@ -1033,10 +1053,220 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
         </div>
       </div>
 
+      {/* Mobile Navigation Header & Collapsible Submenu (< lg) */}
+      <div className="lg:hidden space-y-2">
+        {/* Mobile Nav Top Bar */}
+        <div className="bg-slate-900 rounded-2xl p-3 border border-slate-800 shadow-lg flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="p-2 bg-gradient-to-br from-emerald-600 to-teal-600 text-white rounded-xl shadow-md shrink-0">
+              {activeTab === 'attendance' && <CalendarCheck2 className="w-4 h-4" />}
+              {activeTab === 'trainees' && <Users className="w-4 h-4" />}
+              {activeTab === 'leaves' && <FileCheck2 className="w-4 h-4" />}
+              {activeTab === 'reports' && <BookOpen className="w-4 h-4" />}
+              {activeTab === 'warnings' && <AlertTriangle className="w-4 h-4" />}
+              {activeTab === 'inventory' && <Wrench className="w-4 h-4" />}
+              {activeTab === 'indents' && <BookOpen className="w-4 h-4" />}
+              {activeTab === 'lesson_plans' && <BookOpen className="w-4 h-4" />}
+              {activeTab === 'demonstration_plans' && <Wrench className="w-4 h-4" />}
+              {activeTab === 'weekly_plans' && <CalendarCheck2 className="w-4 h-4" />}
+              {activeTab === 'assessments' && <BarChart3 className="w-4 h-4" />}
+            </span>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-400 font-bold">
+                  Active Section
+                </span>
+                <span className="text-slate-600">·</span>
+                <span className="text-[10px] text-slate-400 truncate">Officer Portal</span>
+              </div>
+              <h3 className="font-extrabold text-sm text-white truncate">
+                {activeTab === 'attendance' && 'Daily Attendance'}
+                {activeTab === 'trainees' && 'Trainees Roster'}
+                {activeTab === 'leaves' && 'Leave Approvals'}
+                {activeTab === 'reports' && 'Official Registers'}
+                {activeTab === 'warnings' && 'Warnings & Alerts'}
+                {activeTab === 'inventory' && 'Workshop Inventory'}
+                {activeTab === 'indents' && 'Indent Register'}
+                {activeTab === 'lesson_plans' && 'Lesson Plan Generator'}
+                {activeTab === 'demonstration_plans' && 'Demo Plan Scheduler'}
+                {activeTab === 'weekly_plans' && 'Weekly Teaching Plan'}
+                {activeTab === 'assessments' && 'Digital Progress Card'}
+              </h3>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-expanded={mobileMenuOpen}
+            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+              mobileMenuOpen
+                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-900/50 ring-2 ring-emerald-400/40'
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
+            }`}
+          >
+            <Menu className="w-4 h-4 text-emerald-400" />
+            <span>{mobileMenuOpen ? 'Close / बंद' : 'Menu / मेनू'}</span>
+            <ChevronDown
+              className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                mobileMenuOpen ? 'rotate-180 text-white' : 'text-slate-400'
+              }`}
+            />
+          </button>
+        </div>
+
+        {/* Collapsible Mobile Submenu Panel - Slides smoothly down BELOW the menu bar */}
+        {mobileMenuOpen && (
+          <div className="bg-slate-900 rounded-2xl border border-slate-800 shadow-2xl p-3.5 space-y-4 max-h-[65vh] overflow-y-auto overscroll-contain animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="flex items-center justify-between px-2 pb-2 border-b border-slate-800 text-[11px] text-slate-400">
+              <span className="font-semibold text-slate-300">Select Section / अनुभाग चुनें</span>
+              <span className="text-[10px] text-emerald-400 font-mono">Govt ITI Raigarh</span>
+            </div>
+
+            {/* Section 1: Daily Operations */}
+            <div className="space-y-1">
+              <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 px-2 mb-1">
+                Daily Operations
+              </div>
+              {[
+                { id: 'attendance', label: 'Daily Attendance', hindi: 'दैनिक उपस्थिति', icon: CalendarCheck2 },
+                { id: 'trainees', label: 'Trainees Roster', hindi: 'प्रशिक्षु सूची', icon: Users },
+                {
+                  id: 'leaves',
+                  label: 'Leave Approvals',
+                  hindi: 'अवकाश अनुमोदन',
+                  icon: FileCheck2,
+                  badge: leaves.filter((l) => l.status === 'pending').length,
+                  badgeType: 'warning',
+                },
+              ].map((item) => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handleSelectTab(item.id as OfficerTab)}
+                    className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer ${
+                      isActive
+                        ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-950/50 ring-1 ring-emerald-400'
+                        : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-emerald-400'}`} />
+                      <div className="flex flex-col text-left truncate">
+                        <span className="text-xs leading-tight font-extrabold truncate">{item.label}</span>
+                        <span className={`text-[10px] leading-tight font-normal truncate ${isActive ? 'text-emerald-100' : 'text-slate-400'}`}>
+                          {item.hindi}
+                        </span>
+                      </div>
+                    </div>
+                    {item.badge !== undefined && item.badge > 0 && (
+                      <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 shadow-xs shrink-0 ml-1.5">
+                        {item.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Section 2: Official Registers & Workshop */}
+            <div className="space-y-1 pt-2 border-t border-slate-800">
+              <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 px-2 mb-1">
+                Registers &amp; Workshop
+              </div>
+              {[
+                { id: 'reports', label: 'Official Registers', hindi: 'सरकारी पंजी', icon: BookOpen },
+                {
+                  id: 'warnings',
+                  label: 'Warnings & Alerts',
+                  hindi: 'चेतावनी नोटिस',
+                  icon: AlertTriangle,
+                  badge: warnings.length,
+                  badgeType: 'danger',
+                },
+                { id: 'inventory', label: 'Workshop Inventory', hindi: 'सामग्री स्टॉक', icon: Wrench },
+                { id: 'indents', label: 'Indent Register', hindi: 'टूल निर्गमन', icon: BookOpen },
+              ].map((item) => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handleSelectTab(item.id as OfficerTab)}
+                    className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer ${
+                      isActive
+                        ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-950/50 ring-1 ring-emerald-400'
+                        : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-teal-400'}`} />
+                      <div className="flex flex-col text-left truncate">
+                        <span className="text-xs leading-tight font-extrabold truncate">{item.label}</span>
+                        <span className={`text-[10px] leading-tight font-normal truncate ${isActive ? 'text-emerald-100' : 'text-slate-400'}`}>
+                          {item.hindi}
+                        </span>
+                      </div>
+                    </div>
+                    {item.badge !== undefined && item.badge > 0 && (
+                      <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-rose-500 text-white shadow-xs shrink-0 ml-1.5">
+                        {item.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Section 3: Academic Routines */}
+            <div className="space-y-1 pt-2 border-t border-slate-800">
+              <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-emerald-400 px-2 mb-1 flex items-center gap-1">
+                <span>★ Academic Routines</span>
+              </div>
+              {[
+                { id: 'lesson_plans', label: 'Lesson Plan Generator', hindi: 'पाठ योजना जनरेटर', icon: BookOpen },
+                { id: 'demonstration_plans', label: 'Demo Plan Scheduler', hindi: 'प्रदर्शन योजना', icon: Wrench },
+                { id: 'weekly_plans', label: 'Weekly Teaching Plan', hindi: 'साप्ताहिक शिक्षण', icon: CalendarCheck2 },
+                { id: 'assessments', label: 'Digital Progress Card', hindi: 'डिजिटल प्रगति पत्रक', icon: BarChart3 },
+              ].map((item) => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handleSelectTab(item.id as OfficerTab)}
+                    className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer ${
+                      isActive
+                        ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-950/50 ring-1 ring-emerald-400'
+                        : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-emerald-400'}`} />
+                      <div className="flex flex-col text-left truncate">
+                        <span className="text-xs leading-tight font-extrabold truncate">{item.label}</span>
+                        <span className={`text-[10px] leading-tight font-normal truncate ${isActive ? 'text-emerald-100' : 'text-slate-400'}`}>
+                          {item.hindi}
+                        </span>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Government Portal Layout: Vertical Side Panel Navigation + Main Content */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left Sidebar: Vertical Side Panel Navigation */}
-        <aside className="lg:col-span-3 bg-slate-900 rounded-2xl shadow-xl border border-slate-800 p-4 space-y-5 sticky top-6">
+        {/* Left Sidebar: Vertical Side Panel Navigation (Desktop Only) */}
+        <aside className="hidden lg:block lg:col-span-3 bg-slate-900 rounded-2xl shadow-xl border border-slate-800 p-4 space-y-5 lg:sticky lg:top-28 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto scrollbar-thin">
           <div className="flex items-center gap-2.5 pb-3 border-b border-slate-800 px-2">
             <span className="p-2 bg-emerald-600 text-white rounded-xl shadow-md">
               <Users className="w-5 h-5" />
@@ -1070,7 +1300,8 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                 return (
                   <button
                     key={item.id}
-                    onClick={() => setActiveTab(item.id as OfficerTab)}
+                    type="button"
+                    onClick={() => handleSelectTab(item.id as OfficerTab)}
                     className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-bold transition-all duration-150 cursor-pointer ${
                       isActive
                         ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-950/50 ring-1 ring-emerald-400'
@@ -1117,7 +1348,8 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                 return (
                   <button
                     key={item.id}
-                    onClick={() => setActiveTab(item.id as OfficerTab)}
+                    type="button"
+                    onClick={() => handleSelectTab(item.id as OfficerTab)}
                     className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-bold transition-all duration-150 cursor-pointer ${
                       isActive
                         ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-950/50 ring-1 ring-emerald-400'
@@ -1157,7 +1389,8 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                 return (
                   <button
                     key={item.id}
-                    onClick={() => setActiveTab(item.id as OfficerTab)}
+                    type="button"
+                    onClick={() => handleSelectTab(item.id as OfficerTab)}
                     className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-bold transition-all duration-150 cursor-pointer ${
                       isActive
                         ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-950/50 ring-1 ring-emerald-400'
@@ -1179,7 +1412,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
         </aside>
 
         {/* Right Main Content Area (lg:col-span-9) */}
-        <div className="lg:col-span-9 space-y-6">
+        <div id="officer-content-viewport" className="lg:col-span-9 space-y-6 scroll-mt-28 sm:scroll-mt-32">
 
       {/* TAB 1: DAILY ATTENDANCE */}
       {activeTab === 'attendance' && (

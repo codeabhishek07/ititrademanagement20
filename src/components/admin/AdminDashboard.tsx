@@ -25,6 +25,8 @@ import {
   Save,
   Star,
   StarOff,
+  ChevronDown,
+  Menu,
 } from 'lucide-react';
 import {
   AcademicSession,
@@ -84,6 +86,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
   }, [activeTab]);
 
   const [loading, setLoading] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const handleSelectTab = (tab: AdminTab) => {
+    setActiveTab(tab);
+    setMobileMenuOpen(false);
+    setTimeout(() => {
+      const el = document.getElementById('admin-content-viewport');
+      if (el) {
+        const headerOffset = 115;
+        const elementPosition = el.getBoundingClientRect().top + window.pageYOffset;
+        const offsetPosition = elementPosition - headerOffset;
+        window.scrollTo({
+          top: Math.max(0, offsetPosition),
+          behavior: 'smooth',
+        });
+      }
+    }, 60);
+  };
 
   // Data states
   const [sessions, setSessions] = useState<AcademicSession[]>([]);
@@ -729,40 +749,431 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
         </div>
       </div>
 
-      {/* Admin Tab Navigation Bar - High-Contrast Bold Modern Menu Bar */}
-      <div className="bg-slate-950 p-2 rounded-2xl shadow-lg border border-slate-800 ring-1 ring-slate-800/80 flex items-center gap-2 overflow-x-auto scrollbar-none">
-        {[
-          { id: 'overview', label: 'System Overview', hindi: 'सिस्टम विवरण', icon: Building },
-          { id: 'sessions', label: 'Academic Sessions', hindi: 'शैक्षणिक सत्र', icon: Calendar },
-          { id: 'working_days', label: 'Monthly Working Days', hindi: 'मासिक कार्य दिवस', icon: FileText },
-          { id: 'trades', label: 'Trade Management', hindi: 'ट्रेड प्रबंधन', icon: Layers },
-          { id: 'officers', label: 'Training Officers & Accounts', hindi: 'प्रशिक्षण अधिकारी व खाते', icon: Users },
-          { id: 'rules', label: 'Campus Geofence & Rules', hindi: 'जियोफेंस एवं नियम', icon: Settings },
-          { id: 'audit', label: 'Audit Trail', hindi: 'ऑडिट ट्रेल', icon: ShieldAlert },
-        ].map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as AdminTab)}
-              className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all duration-150 whitespace-nowrap shrink-0 cursor-pointer ${
-                isActive
-                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-extrabold shadow-md shadow-blue-950/40 ring-2 ring-blue-300/30 border border-blue-400'
-                  : 'bg-slate-900/90 hover:bg-slate-850 text-slate-200 hover:text-white border border-slate-800 hover:border-slate-700'
-              }`}
-            >
-              <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} />
-              <div className="flex flex-col text-left">
-                <span className="tracking-tight text-xs leading-tight font-extrabold">{tab.label}</span>
-                <span className={`text-[10px] leading-tight font-normal ${isActive ? 'text-blue-100 opacity-90' : 'text-slate-400'}`}>
-                  {tab.hindi}
+      {/* Mobile Navigation Header & Collapsible Submenu (< lg) */}
+      <div className="lg:hidden space-y-2">
+        {/* Mobile Nav Top Bar */}
+        <div className="bg-slate-900 rounded-2xl p-3 border border-slate-800 shadow-lg flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="p-2 bg-gradient-to-br from-blue-600 to-indigo-600 text-white rounded-xl shadow-md shrink-0">
+              {activeTab === 'overview' && <Building className="w-4 h-4" />}
+              {activeTab === 'sessions' && <Calendar className="w-4 h-4" />}
+              {activeTab === 'working_days' && <CalendarDays className="w-4 h-4" />}
+              {activeTab === 'trades' && <Layers className="w-4 h-4" />}
+              {activeTab === 'officers' && <Users className="w-4 h-4" />}
+              {activeTab === 'rules' && <Settings className="w-4 h-4" />}
+              {activeTab === 'audit' && <ShieldAlert className="w-4 h-4" />}
+            </span>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-blue-400 font-bold">
+                  Active Section
                 </span>
+                <span className="text-slate-600">·</span>
+                <span className="text-[10px] text-slate-400 truncate">Admin Portal</span>
               </div>
-            </button>
-          );
-        })}
+              <h3 className="font-extrabold text-sm text-white truncate">
+                {activeTab === 'overview' && 'System Overview'}
+                {activeTab === 'sessions' && 'Academic Sessions'}
+                {activeTab === 'working_days' && 'Monthly Working Days'}
+                {activeTab === 'trades' && 'Trade Management'}
+                {activeTab === 'officers' && 'Officers & Accounts'}
+                {activeTab === 'rules' && 'Campus Geofence & Rules'}
+                {activeTab === 'audit' && 'Audit Trail Logs'}
+              </h3>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-expanded={mobileMenuOpen}
+            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+              mobileMenuOpen
+                ? 'bg-blue-600 text-white shadow-md shadow-blue-900/50 ring-2 ring-blue-400/40'
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
+            }`}
+          >
+            <Menu className="w-4 h-4 text-blue-400" />
+            <span>{mobileMenuOpen ? 'Close / बंद' : 'Menu / मेनू'}</span>
+            <ChevronDown
+              className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                mobileMenuOpen ? 'rotate-180 text-white' : 'text-slate-400'
+              }`}
+            />
+          </button>
+        </div>
+
+        {/* Collapsible Mobile Submenu Panel - Slides smoothly down BELOW the menu bar */}
+        {mobileMenuOpen && (
+          <div className="bg-slate-900 rounded-2xl border border-slate-800 shadow-2xl p-3.5 space-y-4 max-h-[65vh] overflow-y-auto overscroll-contain animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="flex items-center justify-between px-2 pb-2 border-b border-slate-800 text-[11px] text-slate-400">
+              <span className="font-semibold text-slate-300">Select Section / अनुभाग चुनें</span>
+              <span className="text-[10px] text-blue-400 font-mono">Govt ITI Raigarh</span>
+            </div>
+
+            {/* Section 1: Academic Core */}
+            <div className="space-y-1">
+              <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 px-2 mb-1 flex items-center justify-between">
+                <span>Academic Core</span>
+                <span className="text-slate-500 font-normal">कैलेंडर व सत्र</span>
+              </div>
+              {[
+                { id: 'overview', label: 'System Overview', hindi: 'सिस्टम विवरण', icon: Building },
+                { id: 'sessions', label: 'Academic Sessions', hindi: 'शैक्षणिक सत्र', icon: Calendar, badge: sessions.length },
+                { id: 'working_days', label: 'Monthly Working Days', hindi: 'मासिक कार्य दिवस', icon: CalendarDays, badge: monthlyDays.length > 0 ? `${monthlyDays.length}` : undefined },
+              ].map((item) => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handleSelectTab(item.id as AdminTab)}
+                    className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer ${
+                      isActive
+                        ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-950/50 ring-1 ring-blue-400'
+                        : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-blue-400'}`} />
+                      <div className="flex flex-col text-left truncate">
+                        <span className="text-xs leading-tight font-extrabold truncate">{item.label}</span>
+                        <span className={`text-[10px] leading-tight font-normal truncate ${isActive ? 'text-blue-100' : 'text-slate-400'}`}>
+                          {item.hindi}
+                        </span>
+                      </div>
+                    </div>
+                    {item.badge !== undefined && (
+                      <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full shrink-0 ml-1.5 ${
+                        isActive ? 'bg-white/20 text-white' : 'bg-slate-800 text-slate-300 border border-slate-700'
+                      }`}>
+                        {item.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Section 2: Faculty & Trades */}
+            <div className="space-y-1 pt-2 border-t border-slate-800">
+              <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 px-2 mb-1 flex items-center justify-between">
+                <span>Faculty &amp; Trades</span>
+                <span className="text-slate-500 font-normal">स्टाफ व ट्रेड</span>
+              </div>
+              {[
+                { id: 'trades', label: 'Trade Management', hindi: 'ट्रेड प्रबंधन', icon: Layers, badge: trades.length },
+                { id: 'officers', label: 'Officers & Accounts', hindi: 'प्रशिक्षण अधिकारी व खाते', icon: Users, badge: officers.length },
+              ].map((item) => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handleSelectTab(item.id as AdminTab)}
+                    className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer ${
+                      isActive
+                        ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-950/50 ring-1 ring-blue-400'
+                        : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-indigo-400'}`} />
+                      <div className="flex flex-col text-left truncate">
+                        <span className="text-xs leading-tight font-extrabold truncate">{item.label}</span>
+                        <span className={`text-[10px] leading-tight font-normal truncate ${isActive ? 'text-blue-100' : 'text-slate-400'}`}>
+                          {item.hindi}
+                        </span>
+                      </div>
+                    </div>
+                    {item.badge !== undefined && (
+                      <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full shrink-0 ml-1.5 ${
+                        isActive ? 'bg-white/20 text-white' : 'bg-slate-800 text-slate-300 border border-slate-700'
+                      }`}>
+                        {item.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Section 3: Governance */}
+            <div className="space-y-1 pt-2 border-t border-slate-800">
+              <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 px-2 mb-1 flex items-center justify-between">
+                <span>Governance</span>
+                <span className="text-slate-500 font-normal">नियम व सुरक्षा</span>
+              </div>
+              {[
+                { id: 'rules', label: 'Campus Geofence & Rules', hindi: 'जियोफेंस एवं नियम', icon: Settings },
+                { id: 'audit', label: 'Audit Trail Logs', hindi: 'ऑडिट ट्रेल', icon: ShieldAlert, badge: auditLogs.length > 0 ? auditLogs.length : undefined },
+              ].map((item) => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handleSelectTab(item.id as AdminTab)}
+                    className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer ${
+                      isActive
+                        ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-950/50 ring-1 ring-blue-400'
+                        : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-cyan-400'}`} />
+                      <div className="flex flex-col text-left truncate">
+                        <span className="text-xs leading-tight font-extrabold truncate">{item.label}</span>
+                        <span className={`text-[10px] leading-tight font-normal truncate ${isActive ? 'text-blue-100' : 'text-slate-400'}`}>
+                          {item.hindi}
+                        </span>
+                      </div>
+                    </div>
+                    {item.badge !== undefined && (
+                      <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full shrink-0 ml-1.5 ${
+                        isActive ? 'bg-white/20 text-white' : 'bg-slate-800 text-slate-300 border border-slate-700'
+                      }`}>
+                        {item.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Government Portal Layout: Vertical Side Panel Navigation + Main Content Viewport */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Left Sidebar: Vertical Side Panel Navigation (Desktop Only) */}
+        <aside className="hidden lg:block lg:col-span-3 bg-slate-900 rounded-2xl shadow-xl border border-slate-800 p-4 space-y-5 lg:sticky lg:top-28 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto scrollbar-thin">
+          {/* Header Strip in Sidebar */}
+          <div className="flex items-center gap-3 pb-3 border-b border-slate-800 px-1">
+            <span className="p-2.5 bg-gradient-to-br from-blue-600 to-indigo-600 text-white rounded-xl shadow-md ring-1 ring-blue-400/30">
+              <Shield className="w-5 h-5" />
+            </span>
+            <div className="min-w-0">
+              <h4 className="font-extrabold text-sm text-white tracking-tight truncate">
+                Admin Control Panel
+              </h4>
+              <p className="text-[10px] text-blue-300 font-medium">
+                शासकीय प्रशासन · ITI Raigarh
+              </p>
+            </div>
+          </div>
+
+          {/* Active Session Status Widget */}
+          <div className="bg-slate-950/80 rounded-xl p-2.5 border border-slate-800/80 flex items-center justify-between text-xs">
+            <div className="flex flex-col min-w-0 pr-2">
+              <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">
+                Active Session
+              </span>
+              <span className="font-bold text-white text-[11px] truncate">
+                {sessions.find((s) => s.status === 'active')?.name || '2025-2026'}
+              </span>
+            </div>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0">
+              Online
+            </span>
+          </div>
+
+          <div className="space-y-4 text-xs">
+            {/* Section 1: Academic Calendar & Overview */}
+            <div className="space-y-1">
+              <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 px-2 mb-1.5 flex items-center justify-between">
+                <span>Academic Core</span>
+                <span className="text-slate-500 font-normal">कैलेंडर व सत्र</span>
+              </div>
+              {[
+                { id: 'overview', label: 'System Overview', hindi: 'सिस्टम विवरण', icon: Building },
+                {
+                  id: 'sessions',
+                  label: 'Academic Sessions',
+                  hindi: 'शैक्षणिक सत्र',
+                  icon: Calendar,
+                  badge: sessions.length,
+                },
+                {
+                  id: 'working_days',
+                  label: 'Monthly Working Days',
+                  hindi: 'मासिक कार्य दिवस',
+                  icon: CalendarDays,
+                  badge: monthlyDays.length > 0 ? `${monthlyDays.length}` : undefined,
+                },
+              ].map((item) => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handleSelectTab(item.id as AdminTab)}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-bold transition-all duration-150 cursor-pointer ${
+                      isActive
+                        ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-950/50 ring-1 ring-blue-400'
+                        : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-blue-400'}`} />
+                      <div className="flex flex-col text-left truncate">
+                        <span className="text-xs leading-tight font-extrabold truncate">{item.label}</span>
+                        <span className={`text-[10px] leading-tight font-normal truncate ${isActive ? 'text-blue-100' : 'text-slate-400'}`}>
+                          {item.hindi}
+                        </span>
+                      </div>
+                    </div>
+                    {item.badge !== undefined && (
+                      <span
+                        className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full shrink-0 ml-1.5 ${
+                          isActive
+                            ? 'bg-white/20 text-white'
+                            : 'bg-slate-800 text-slate-300 border border-slate-700'
+                        }`}
+                      >
+                        {item.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Section 2: Faculty & Trades */}
+            <div className="space-y-1 pt-2 border-t border-slate-800">
+              <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 px-2 mb-1.5 flex items-center justify-between">
+                <span>Faculty &amp; Trades</span>
+                <span className="text-slate-500 font-normal">स्टाफ व ट्रेड</span>
+              </div>
+              {[
+                {
+                  id: 'trades',
+                  label: 'Trade Management',
+                  hindi: 'ट्रेड प्रबंधन',
+                  icon: Layers,
+                  badge: trades.length,
+                },
+                {
+                  id: 'officers',
+                  label: 'Officers & Accounts',
+                  hindi: 'प्रशिक्षण अधिकारी व खाते',
+                  icon: Users,
+                  badge: officers.length,
+                },
+              ].map((item) => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handleSelectTab(item.id as AdminTab)}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-bold transition-all duration-150 cursor-pointer ${
+                      isActive
+                        ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-950/50 ring-1 ring-blue-400'
+                        : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-indigo-400'}`} />
+                      <div className="flex flex-col text-left truncate">
+                        <span className="text-xs leading-tight font-extrabold truncate">{item.label}</span>
+                        <span className={`text-[10px] leading-tight font-normal truncate ${isActive ? 'text-blue-100' : 'text-slate-400'}`}>
+                          {item.hindi}
+                        </span>
+                      </div>
+                    </div>
+                    {item.badge !== undefined && (
+                      <span
+                        className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full shrink-0 ml-1.5 ${
+                          isActive
+                            ? 'bg-white/20 text-white'
+                            : 'bg-slate-800 text-slate-300 border border-slate-700'
+                        }`}
+                      >
+                        {item.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Section 3: Governance & Security */}
+            <div className="space-y-1 pt-2 border-t border-slate-800">
+              <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 px-2 mb-1.5 flex items-center justify-between">
+                <span>Governance</span>
+                <span className="text-slate-500 font-normal">नियम व सुरक्षा</span>
+              </div>
+              {[
+                { id: 'rules', label: 'Campus Geofence & Rules', hindi: 'जियोफेंस एवं नियम', icon: Settings },
+                {
+                  id: 'audit',
+                  label: 'Audit Trail Logs',
+                  hindi: 'ऑडिट ट्रेल',
+                  icon: ShieldAlert,
+                  badge: auditLogs.length > 0 ? auditLogs.length : undefined,
+                },
+              ].map((item) => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handleSelectTab(item.id as AdminTab)}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-bold transition-all duration-150 cursor-pointer ${
+                      isActive
+                        ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-950/50 ring-1 ring-blue-400'
+                        : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-cyan-400'}`} />
+                      <div className="flex flex-col text-left truncate">
+                        <span className="text-xs leading-tight font-extrabold truncate">{item.label}</span>
+                        <span className={`text-[10px] leading-tight font-normal truncate ${isActive ? 'text-blue-100' : 'text-slate-400'}`}>
+                          {item.hindi}
+                        </span>
+                      </div>
+                    </div>
+                    {item.badge !== undefined && (
+                      <span
+                        className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full shrink-0 ml-1.5 ${
+                          isActive
+                            ? 'bg-white/20 text-white'
+                            : 'bg-slate-800 text-slate-300 border border-slate-700'
+                        }`}
+                      >
+                        {item.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Quick Info & System Status Card at bottom of sidebar */}
+          <div className="pt-3 border-t border-slate-800/80 space-y-2">
+            <div className="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/60 text-[11px] text-slate-400 space-y-1">
+              <div className="flex items-center justify-between text-slate-300 font-semibold text-[10px] uppercase tracking-wider">
+                <span>Campus Geofence</span>
+                <span className="text-emerald-400 font-mono">Enforced</span>
+              </div>
+              <p className="text-[10px] text-slate-500 leading-tight">
+                Radius: <strong className="text-slate-300 font-mono">{settings.campusLocation?.radiusMeters || 1500}m</strong> perimeter around ITI Raigarh.
+              </p>
+            </div>
+          </div>
+        </aside>
+
+        {/* Main Content Area */}
+        <main id="admin-content-viewport" className="lg:col-span-9 space-y-6 scroll-mt-28 sm:scroll-mt-32">
 
       {/* TAB 1: OVERVIEW */}
       {activeTab === 'overview' && (
@@ -1997,6 +2408,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
           </div>
         </div>
       )}
+        </main>
+      </div>
 
       {/* MODAL: CREATE / EDIT SESSION */}
       {sessionModalOpen && (
