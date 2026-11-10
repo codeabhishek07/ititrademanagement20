@@ -1,0 +1,191 @@
+{
+  "entities": {
+    "settings": {
+      "title": "SystemSettings",
+      "description": "Government ITI Raigarh system configuration and campus rules",
+      "type": "object",
+      "properties": {
+        "instituteName": { "type": "string" },
+        "instituteCode": { "type": "string" },
+        "affiliation": { "type": "string" },
+        "department": { "type": "string" },
+        "district": { "type": "string" },
+        "state": { "type": "string" },
+        "minimumAttendancePercent": { "type": "number" },
+        "currentSessionId": { "type": "string" }
+      },
+      "required": ["instituteName", "instituteCode"]
+    },
+    "session": {
+      "title": "AcademicSession",
+      "description": "Academic sessions and training batches",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "startDate": { "type": "string" },
+        "endDate": { "type": "string" },
+        "totalWorkingDays": { "type": "number" },
+        "status": { "type": "string", "enum": ["active", "upcoming", "completed"] }
+      },
+      "required": ["id", "name", "startDate", "endDate", "status"]
+    },
+    "trade": {
+      "title": "Trade",
+      "description": "Vocational trades offered at the institute",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "code": { "type": "string" },
+        "durationYears": { "type": "number" },
+        "totalIntake": { "type": "number" },
+        "workshopLocation": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "inactive"] }
+      },
+      "required": ["id", "name", "code", "status"]
+    },
+    "officer": {
+      "title": "TrainingOfficer",
+      "description": "Institutional training officers and staff accounts",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "assignedTradeIds": { "type": "array" },
+        "status": { "type": "string", "enum": ["active", "inactive"] }
+      },
+      "required": ["id", "name", "email", "employeeId", "status"]
+    },
+    "trainee": {
+      "title": "Trainee",
+      "description": "Enrolled vocational trainee record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "rollNo": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "mobile": { "type": "string" },
+        "tradeId": { "type": "string" },
+        "sessionId": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "suspended", "completed"] }
+      },
+      "required": ["id", "rollNo", "name", "tradeId", "status"]
+    },
+    "attendance": {
+      "title": "AttendanceRecord",
+      "description": "Daily trainee attendance log",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "traineeId": { "type": "string" },
+        "date": { "type": "string" },
+        "status": { "type": "string" },
+        "checkInTime": { "type": "string" },
+        "verifiedBy": { "type": "string" }
+      },
+      "required": ["id", "traineeId", "date", "status"]
+    },
+    "assessment": {
+      "title": "TraineeAssessment",
+      "description": "Monthly formative assessment marks and practical performance evaluation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "traineeId": { "type": "string" },
+        "sessionId": { "type": "string" },
+        "month": { "type": "string" },
+        "testMarks": { "type": "number" },
+        "attendancePercent": { "type": "number" },
+        "remarks": { "type": "string" }
+      },
+      "required": ["id", "traineeId", "month", "testMarks"]
+    },
+    "leave": {
+      "title": "LeaveRequest",
+      "description": "Trainee leave request and approval sanction",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "traineeId": { "type": "string" },
+        "leaveType": { "type": "string" },
+        "fromDate": { "type": "string" },
+        "toDate": { "type": "string" },
+        "days": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] }
+      },
+      "required": ["id", "traineeId", "leaveType", "status"]
+    },
+    "warning": {
+      "title": "WarningNotice",
+      "description": "Official regulatory notice for attendance shortage or discipline",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "traineeId": { "type": "string" },
+        "refNumber": { "type": "string" },
+        "type": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "traineeId", "refNumber", "status"]
+    },
+    "workingDay": {
+      "title": "MonthlyWorkingDay",
+      "description": "Official institutional working days per month",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "sessionId": { "type": "string" },
+        "month": { "type": "string" },
+        "workingDays": { "type": "number" },
+        "holidays": { "type": "number" }
+      },
+      "required": ["id", "sessionId", "month", "workingDays"]
+    }
+  },
+  "firestore": {
+    "/settings/{settingId}": {
+      "schema": "settings",
+      "description": "Institutional configuration and system settings"
+    },
+    "/sessions/{sessionId}": {
+      "schema": "session",
+      "description": "Academic sessions collection"
+    },
+    "/trades/{tradeId}": {
+      "schema": "trade",
+      "description": "Vocational trades offered by the ITI"
+    },
+    "/officers/{officerId}": {
+      "schema": "officer",
+      "description": "Training officers and staff profiles"
+    },
+    "/trainees/{traineeId}": {
+      "schema": "trainee",
+      "description": "Enrolled trainees and student profiles"
+    },
+    "/attendance/{attendanceId}": {
+      "schema": "attendance",
+      "description": "Daily verified attendance records"
+    },
+    "/assessments/{assessmentId}": {
+      "schema": "assessment",
+      "description": "Monthly formative assessment marks and progress cards"
+    },
+    "/leaves/{leaveId}": {
+      "schema": "leave",
+      "description": "Trainee leave applications and sanctions"
+    },
+    "/warnings/{warningId}": {
+      "schema": "warning",
+      "description": "Regulatory attendance shortage notices"
+    },
+    "/workingDays/{workingDayId}": {
+      "schema": "workingDay",
+      "description": "Academic calendar monthly working days"
+    }
+  }
+}

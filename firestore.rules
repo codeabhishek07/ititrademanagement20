@@ -1,0 +1,111 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSystemAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'abhixfactor@gmail.com' ||
+        request.auth.token.email == 'admin.iti.raigarh@cg.gov.in'
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Default deny all unknown collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Settings collection
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isSystemAdmin() || isSignedIn() || isValidId(settingId);
+    }
+
+    // Sessions collection
+    match /sessions/{sessionId} {
+      allow read: if true;
+      allow write: if isSystemAdmin() || isSignedIn() || isValidId(sessionId);
+    }
+
+    // Trades collection
+    match /trades/{tradeId} {
+      allow read: if true;
+      allow write: if isSystemAdmin() || isSignedIn() || isValidId(tradeId);
+    }
+
+    // Officers collection
+    match /officers/{officerId} {
+      allow read: if true;
+      allow write: if isSystemAdmin() || isSignedIn() || isValidId(officerId);
+    }
+
+    // Trainees collection
+    match /trainees/{traineeId} {
+      allow read: if true;
+      allow write: if isSystemAdmin() || isSignedIn() || isValidId(traineeId);
+    }
+
+    // Attendance records
+    match /attendance/{attendanceId} {
+      allow read: if true;
+      allow write: if isSystemAdmin() || isSignedIn() || isValidId(attendanceId);
+    }
+
+    // Formative Assessments & Marks
+    match /assessments/{assessmentId} {
+      allow read: if true;
+      allow write: if isSystemAdmin() || isSignedIn() || isValidId(assessmentId);
+    }
+
+    // Leaves
+    match /leaves/{leaveId} {
+      allow read: if true;
+      allow write: if isSystemAdmin() || isSignedIn() || isValidId(leaveId);
+    }
+
+    // Warnings
+    match /warnings/{warningId} {
+      allow read: if true;
+      allow write: if isSystemAdmin() || isSignedIn() || isValidId(warningId);
+    }
+
+    // Monthly Working Days
+    match /workingDays/{workingDayId} {
+      allow read: if true;
+      allow write: if isSystemAdmin() || isSignedIn() || isValidId(workingDayId);
+    }
+
+    // Academic Plans & Inventory
+    match /plans/{planId} {
+      allow read: if true;
+      allow write: if isSystemAdmin() || isSignedIn() || isValidId(planId);
+    }
+
+    match /inventory/{itemId} {
+      allow read: if true;
+      allow write: if isSystemAdmin() || isSignedIn() || isValidId(itemId);
+    }
+
+    match /indents/{indentId} {
+      allow read: if true;
+      allow write: if isSystemAdmin() || isSignedIn() || isValidId(indentId);
+    }
+
+    match /auditLogs/{logId} {
+      allow read: if true;
+      allow write: if isSystemAdmin() || isSignedIn() || isValidId(logId);
+    }
+
+    match /system/{docId} {
+      allow read, write: if true;
+    }
+  }
+}

@@ -336,6 +336,10 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
                 <span className="text-[11px] font-mono font-semibold bg-slate-100 text-slate-800 px-2 py-0.5 rounded border border-slate-200">
                   {trainee.rollNo}
                 </span>
+                <span className="hidden sm:inline-flex items-center gap-1 text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-semibold" title="Attendance and records auto-preserved in browser storage">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Auto-Preserved
+                </span>
               </div>
               <p className="text-xs text-slate-500 flex items-center flex-wrap gap-x-2 gap-y-0.5 mt-0.5">
                 <span>Trade: <span className="font-semibold text-slate-700">{trainee.tradeName || 'Electrician'}</span></span>

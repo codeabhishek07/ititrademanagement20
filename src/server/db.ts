@@ -1,5 +1,11 @@
 import fs from 'fs';
 import path from 'path';
+import {
+  loadDatabaseFromFirestore,
+  seedDatabaseToFirestore,
+  persistItemToFirestore,
+  deleteItemFromFirestore,
+} from './firestoreAdapter.ts';
 import type {
   SystemSettings,
   AcademicSession,
@@ -830,6 +836,9 @@ class Database {
     return initial;
   }
 
+  private isFirestoreInitialized: boolean = false;
+  private syncTimer: NodeJS.Timeout | null = null;
+
   private saveDirect(dataToSave: DatabaseSchema) {
     try {
       if (!fs.existsSync(DATA_DIR)) {
@@ -841,8 +850,94 @@ class Database {
     }
   }
 
+  /**
+   * Initializes Firestore on server boot.
+   * Loads saved institutional data from Firestore if present, or seeds initial data to Firestore if empty.
+   */
+  public async initFirestore(): Promise<void> {
+    try {
+      console.log('[Firestore] Checking persistent cloud database connection...');
+      const cloudData = await loadDatabaseFromFirestore();
+
+      if (cloudData && cloudData.settings && Array.isArray(cloudData.trades) && cloudData.trades.length > 0) {
+        console.log('[Firestore] Successfully restored persistent database from Firestore cloud!');
+        this.data = {
+          ...this.data,
+          ...cloudData,
+          settings: { ...this.data.settings, ...cloudData.settings },
+          sessions: Array.isArray(cloudData.sessions) && cloudData.sessions.length > 0 ? cloudData.sessions : this.data.sessions,
+          trades: Array.isArray(cloudData.trades) && cloudData.trades.length > 0 ? cloudData.trades : this.data.trades,
+          officers: Array.isArray(cloudData.officers) && cloudData.officers.length > 0 ? cloudData.officers : this.data.officers,
+          trainees: Array.isArray(cloudData.trainees) ? cloudData.trainees : this.data.trainees,
+          attendance: Array.isArray(cloudData.attendance) ? cloudData.attendance : this.data.attendance,
+          assessments: Array.isArray(cloudData.assessments) ? cloudData.assessments : this.data.assessments,
+          monthlyWorkingDays: Array.isArray(cloudData.monthlyWorkingDays) ? cloudData.monthlyWorkingDays : this.data.monthlyWorkingDays,
+          leaves: Array.isArray(cloudData.leaves) ? cloudData.leaves : this.data.leaves,
+          warnings: Array.isArray(cloudData.warnings) ? cloudData.warnings : this.data.warnings,
+          inventory: Array.isArray(cloudData.inventory) ? cloudData.inventory : this.data.inventory,
+          indents: Array.isArray(cloudData.indents) ? cloudData.indents : this.data.indents,
+          auditLogs: Array.isArray(cloudData.auditLogs) ? cloudData.auditLogs : this.data.auditLogs,
+          lessonPlans: Array.isArray(cloudData.lessonPlans) ? cloudData.lessonPlans : this.data.lessonPlans,
+          demonstrationPlans: Array.isArray(cloudData.demonstrationPlans) ? cloudData.demonstrationPlans : this.data.demonstrationPlans,
+          weeklyPlans: Array.isArray(cloudData.weeklyPlans) ? cloudData.weeklyPlans : this.data.weeklyPlans,
+        };
+        // Also update local cache file
+        this.saveDirect(this.data);
+      } else {
+        console.log('[Firestore] Cloud database is empty or initial boot. Seeding institutional data to Firestore...');
+        await seedDatabaseToFirestore(this.data);
+        console.log('[Firestore] Initial institutional data seeded to Firestore cloud successfully.');
+      }
+      this.isFirestoreInitialized = true;
+    } catch (err) {
+      console.error('[Firestore] Initialization error:', err);
+    }
+  }
+
+  /**
+   * Debounced synchronization of all in-memory collections to Firestore.
+   */
+  public scheduleFirestoreSync() {
+    if (this.syncTimer) {
+      clearTimeout(this.syncTimer);
+    }
+    this.syncTimer = setTimeout(async () => {
+      try {
+        await seedDatabaseToFirestore(this.data);
+      } catch (err) {
+        console.error('[Firestore] Background sync error:', err);
+      }
+    }, 1200);
+  }
+
+  /**
+   * Immediately saves an individual item to Firestore.
+   */
+  public persistItem(collName: string, id: string, data: any, typeTag?: string) {
+    persistItemToFirestore(collName, id, data, typeTag).catch((err) => {
+      console.warn(`[Firestore] Failed to persist ${collName}/${id}:`, err);
+    });
+  }
+
+  /**
+   * Immediately deletes an individual item from Firestore.
+   */
+  public deleteItem(collName: string, id: string) {
+    deleteItemFromFirestore(collName, id).catch((err) => {
+      console.warn(`[Firestore] Failed to delete ${collName}/${id}:`, err);
+    });
+  }
+
+  /**
+   * Forces an immediate, synchronous upload of current state to Firestore.
+   */
+  public async forceFirestoreSync(): Promise<void> {
+    await seedDatabaseToFirestore(this.data);
+  }
+
   public save() {
     this.saveDirect(this.data);
+    this.scheduleFirestoreSync();
   }
 
   public get(): DatabaseSchema {
@@ -855,7 +950,51 @@ class Database {
 
   public resetToDefault(): DatabaseSchema {
     this.data = getInitialDatabase();
-    this.save();
+    this.saveDirect(this.data);
+    this.forceFirestoreSync().catch((e) => console.error(e));
+    return this.data;
+  }
+
+  public restoreFromBackup(backupPayload: any): DatabaseSchema {
+    const rawData = backupPayload?.data || backupPayload?.payload || backupPayload;
+    if (!rawData || typeof rawData !== 'object') {
+      throw new Error('Invalid backup data format. Expected an institutional backup object.');
+    }
+
+    const initial = getInitialDatabase();
+    const merged: DatabaseSchema = {
+      ...initial,
+      ...rawData,
+      settings: rawData.settings ? { ...initial.settings, ...rawData.settings } : initial.settings,
+      sessions: Array.isArray(rawData.sessions) && rawData.sessions.length > 0 ? rawData.sessions : initial.sessions,
+      trades: Array.isArray(rawData.trades) && rawData.trades.length > 0 ? rawData.trades : initial.trades,
+      officers: Array.isArray(rawData.officers) && rawData.officers.length > 0 ? rawData.officers : initial.officers,
+      trainees: Array.isArray(rawData.trainees) && rawData.trainees.length > 0 ? rawData.trainees : initial.trainees,
+      monthlyWorkingDays: Array.isArray(rawData.monthlyWorkingDays) ? rawData.monthlyWorkingDays : initial.monthlyWorkingDays,
+      attendance: Array.isArray(rawData.attendance) ? rawData.attendance : initial.attendance,
+      leaves: Array.isArray(rawData.leaves) ? rawData.leaves : initial.leaves,
+      warnings: Array.isArray(rawData.warnings) ? rawData.warnings : initial.warnings,
+      inventory: Array.isArray(rawData.inventory) ? rawData.inventory : initial.inventory,
+      indents: Array.isArray(rawData.indents) ? rawData.indents : initial.indents,
+      auditLogs: Array.isArray(rawData.auditLogs) ? rawData.auditLogs : initial.auditLogs,
+      lessonPlans: Array.isArray(rawData.lessonPlans) ? rawData.lessonPlans : initial.lessonPlans,
+      demonstrationPlans: Array.isArray(rawData.demonstrationPlans) ? rawData.demonstrationPlans : initial.demonstrationPlans,
+      weeklyPlans: Array.isArray(rawData.weeklyPlans) ? rawData.weeklyPlans : initial.weeklyPlans,
+      assessments: Array.isArray(rawData.assessments) ? rawData.assessments : (initial.assessments || []),
+    };
+
+    this.data = merged;
+    this.saveDirect(this.data);
+    this.forceFirestoreSync().catch((e) => console.error(e));
+
+    this.addAuditLog({
+      userId: 'system_backup',
+      userName: 'Institutional Backup Engine',
+      userRole: 'admin',
+      action: 'DATABASE_BACKUP_RESTORED',
+      details: `Database restored: ${merged.trainees.length} Trainees, ${merged.assessments.length} Assessment records, ${merged.attendance.length} Attendance entries, ${merged.trades.length} Trades.`,
+    });
+
     return this.data;
   }
 

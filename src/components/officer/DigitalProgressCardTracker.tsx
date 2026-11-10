@@ -24,7 +24,14 @@ import {
   Layers,
   Trash2,
   HelpCircle,
+  Database,
+  Upload,
 } from 'lucide-react';
+import {
+  triggerAutoBackup,
+  downloadBackupFile,
+  restoreBackupPayload,
+} from '../../services/backupService.ts';
 import {
   TraineeAssessment,
   Trainee,
@@ -438,6 +445,30 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
     setModalOpen(true);
   };
 
+  const officerBackupInputRef = useRef<HTMLInputElement>(null);
+
+  const handleOfficerRestoreBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const parsed = JSON.parse(event.target?.result as string);
+        const res = await restoreBackupPayload(parsed, 'officer_progress_card_upload');
+        showToast(res.message || 'Progress card database restored successfully');
+        if (selectedTraineeId) {
+          const updated = await fetchAssessments(selectedTraineeId);
+          setAssessments(updated);
+        }
+      } catch (err: any) {
+        alert(`Restore error: ${err.message}`);
+      } finally {
+        if (officerBackupInputRef.current) officerBackupInputRef.current.value = '';
+      }
+    };
+    reader.readAsText(file);
+  };
+
   const handleSaveMarks = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedTraineeId) return;
@@ -465,6 +496,9 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
       const updated = await fetchAssessments(selectedTraineeId);
       setAssessments(updated);
       setSelectedBreakdownMonth(form.month);
+
+      // Trigger automatic persistent backup to IndexedDB so entered marks survive restarts
+      triggerAutoBackup('marks_entry', 'officer').catch(() => {});
     } catch (err: any) {
       alert(err.message || 'Failed to save marks');
     } finally {
@@ -906,6 +940,42 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
             <Printer className="w-3.5 h-3.5 text-slate-300" />
             <span>Save as PDF / Print</span>
           </button>
+
+          {/* Backup & Restore Controls */}
+          <div className="flex items-center gap-1.5 border-l border-slate-300 pl-2">
+            <input
+              type="file"
+              ref={officerBackupInputRef}
+              onChange={handleOfficerRestoreBackup}
+              accept=".json,application/json"
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => officerBackupInputRef.current?.click()}
+              className="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg text-xs flex items-center gap-1 border border-slate-300 shadow-xs cursor-pointer transition-colors"
+              title="Restore marks and data from a backup JSON file"
+            >
+              <Upload className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Restore Backup</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => downloadBackupFile().then(() => showToast('Full marks & progress backup downloaded.'))}
+              className="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg text-xs flex items-center gap-1 border border-slate-300 shadow-xs cursor-pointer transition-colors"
+              title="Download backup file of all marks & database"
+            >
+              <Database className="w-3.5 h-3.5 text-blue-600" />
+              <span>Backup</span>
+            </button>
+            <span
+              className="hidden xl:inline-flex items-center gap-1 px-2 py-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md"
+              title="Every mark entered is automatically preserved in browser storage"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              Auto-Save Active
+            </span>
+          </div>
         </div>
       </div>
 

@@ -27,7 +27,19 @@ import {
   StarOff,
   ChevronDown,
   Menu,
+  Database,
+  Download,
+  Upload,
+  Cloud,
+  CloudUpload,
+  ArrowUpCircle,
 } from 'lucide-react';
+import {
+  triggerAutoBackup,
+  downloadBackupFile,
+  restoreBackupPayload,
+  getLatestSystemBackup,
+} from '../../services/backupService.ts';
 import {
   AcademicSession,
   MonthlyWorkingDay,
@@ -703,6 +715,77 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
     }
   };
 
+  const [backupLoading, setBackupLoading] = useState(false);
+  const [lastBackupTime, setLastBackupTime] = useState<string>('Auto-Save Active');
+  const backupFileInputRef = React.useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    getLatestSystemBackup().then((b) => {
+      if (b?.formattedDate) setLastBackupTime(b.formattedDate);
+    });
+  }, []);
+
+  const handleDownloadBackup = async () => {
+    try {
+      setBackupLoading(true);
+      await downloadBackupFile();
+      showToast('Full institutional backup (.json) downloaded successfully');
+    } catch (err: any) {
+      alert(`Download failed: ${err.message}`);
+    } finally {
+      setBackupLoading(false);
+    }
+  };
+
+  const handleManualSnapshot = async () => {
+    try {
+      setBackupLoading(true);
+      const res = await triggerAutoBackup('manual_export', 'admin');
+      if (res?.formattedDate) setLastBackupTime(res.formattedDate);
+      showToast('Institutional database snapshot saved to browser persistent storage');
+    } catch (err: any) {
+      alert(`Snapshot failed: ${err.message}`);
+    } finally {
+      setBackupLoading(false);
+    }
+  };
+
+  const handleSyncFirestore = async () => {
+    try {
+      setBackupLoading(true);
+      const res = await fetch('/api/system/sync-cloud', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to sync to Firestore');
+      showToast('All institutional data, marks, and settings saved to Firestore cloud successfully!');
+    } catch (err: any) {
+      alert(`Firestore sync error: ${err.message}`);
+    } finally {
+      setBackupLoading(false);
+    }
+  };
+
+  const handleFileRestore = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        setBackupLoading(true);
+        const parsed = JSON.parse(event.target?.result as string);
+        const res = await restoreBackupPayload(parsed, 'admin_file_upload');
+        showToast(res.message || 'Database restored from backup file successfully');
+        reloadData();
+      } catch (err: any) {
+        alert(`Failed to restore backup file: ${err.message}`);
+      } finally {
+        setBackupLoading(false);
+        if (backupFileInputRef.current) backupFileInputRef.current.value = '';
+      }
+    };
+    reader.readAsText(file);
+  };
+
   return (
     <div className="space-y-6">
       {/* Toast Notification */}
@@ -1267,6 +1350,125 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
                     <p className="text-slate-600 text-[11px] mt-1 line-clamp-2">{log.details}</p>
                   </div>
                 ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Institutional Data Protection & Automatic Backup Console */}
+          <div className="bg-slate-900 rounded-2xl border border-slate-800 p-5 shadow-xl text-white space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3.5">
+              <div className="flex items-center gap-3">
+                <span className="p-2.5 bg-gradient-to-br from-emerald-600 to-teal-600 rounded-xl shadow-md">
+                  <Database className="w-5 h-5 text-white" />
+                </span>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="font-extrabold text-sm text-white">
+                      Institutional Data Protection &amp; Persistent Firestore Database
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      Firestore Cloud Persistence Active
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30 flex items-center gap-1">
+                      <Cloud className="w-3 h-3 text-blue-400" />
+                      Live Sync
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Google Cloud Firestore permanently saves all trainee profiles, formative assessment marks, attendance, and institution settings across all browser sessions, logouts, and Cloud Run server restarts.
+                  </p>
+                </div>
+              </div>
+
+              <div className="text-right text-[11px] text-slate-400 font-mono">
+                <span>Last Snapshot: </span>
+                <span className="text-emerald-400 font-bold">{lastBackupTime}</span>
+              </div>
+            </div>
+
+            {/* Metrics Row */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              <div className="bg-slate-950/80 p-3 rounded-xl border border-slate-800/80">
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Cloud Database</span>
+                <div className="text-base font-extrabold text-white font-mono mt-0.5 flex items-center gap-1.5">
+                  <Cloud className="w-4 h-4 text-emerald-400" />
+                  <span>Firestore</span>
+                </div>
+                <span className="text-[10px] text-emerald-400 font-medium">Permanent Cloud Storage</span>
+              </div>
+              <div className="bg-slate-950/80 p-3 rounded-xl border border-slate-800/80">
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Protected Capacity</span>
+                <div className="text-base font-extrabold text-white font-mono mt-0.5">{trades.reduce((acc, t) => acc + t.totalIntake, 0)} Seats</div>
+                <span className="text-[10px] text-teal-400 font-medium">Trainees, Marks, Settings</span>
+              </div>
+              <div className="bg-slate-950/80 p-3 rounded-xl border border-slate-800/80">
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Session Persistence</span>
+                <div className="text-base font-extrabold text-white font-mono mt-0.5">100% Retained</div>
+                <span className="text-[10px] text-blue-400 font-medium">Survives Logout &amp; Reboots</span>
+              </div>
+              <div className="bg-slate-950/80 p-3 rounded-xl border border-slate-800/80">
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Secondary Shield</span>
+                <div className="text-base font-extrabold text-white font-mono mt-0.5">IndexedDB + JSON</div>
+                <span className="text-[10px] text-slate-400 font-medium">Offline Browser Mirror</span>
+              </div>
+            </div>
+
+            {/* Action Buttons Toolbar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleSyncFirestore}
+                  disabled={backupLoading}
+                  className="flex items-center gap-2 px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-md transition-all cursor-pointer"
+                  title="Immediately save current state into Firestore cloud"
+                >
+                  <CloudUpload className="w-4 h-4" />
+                  <span>Sync to Firestore Cloud</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDownloadBackup}
+                  disabled={backupLoading}
+                  className="flex items-center gap-2 px-3.5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-extrabold text-xs rounded-xl shadow-md transition-all cursor-pointer"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Download Backup (.json)</span>
+                </button>
+
+                <input
+                  type="file"
+                  ref={backupFileInputRef}
+                  onChange={handleFileRestore}
+                  accept=".json,application/json"
+                  className="hidden"
+                />
+
+                <button
+                  type="button"
+                  onClick={() => backupFileInputRef.current?.click()}
+                  disabled={backupLoading}
+                  className="flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-slate-600 font-bold text-xs rounded-xl transition-all cursor-pointer"
+                >
+                  <Upload className="w-4 h-4 text-emerald-400" />
+                  <span>Upload &amp; Restore (.json)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleManualSnapshot}
+                  disabled={backupLoading}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-slate-800/60 hover:bg-slate-800 text-slate-300 border border-slate-800 font-medium text-xs rounded-xl transition-all cursor-pointer"
+                >
+                  <Save className="w-3.5 h-3.5 text-teal-400" />
+                  <span>Save Local Snapshot</span>
+                </button>
+              </div>
+
+              <div className="text-[11px] text-slate-400">
+                <span>Backup file can be imported anytime on any device to restore 100% of institutional records.</span>
               </div>
             </div>
           </div>

@@ -1,6 +1,6 @@
 // IndexedDB Offline Storage Layer for Government ITI Raigarh
 const DB_NAME = 'iti_raigarh_offline_db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export interface OfflineSyncItem {
   id?: number;
@@ -10,6 +10,22 @@ export interface OfflineSyncItem {
   label: string;
   timestamp: number;
   attempts: number;
+}
+
+export interface SystemBackupRecord {
+  id: string; // e.g. "latest_backup" or "backup_<timestamp>"
+  timestamp: number;
+  formattedDate: string;
+  source: 'auto_sync' | 'manual_export' | 'before_logout' | 'marks_entry';
+  userRole?: string;
+  summary: {
+    traineesCount: number;
+    assessmentsCount: number;
+    attendanceCount: number;
+    tradesCount: number;
+    sessionsCount: number;
+  };
+  payload: any;
 }
 
 let dbInstance: IDBDatabase | null = null;
@@ -46,6 +62,12 @@ export function openOfflineDB(): Promise<IDBDatabase> {
           autoIncrement: true,
         });
         syncStore.createIndex('timestamp', 'timestamp', { unique: false });
+      }
+
+      // 4. Institutional Backups Store: Permanent snapshots to survive Cloud Run scale-down
+      if (!db.objectStoreNames.contains('system_backups')) {
+        const backupStore = db.createObjectStore('system_backups', { keyPath: 'id' });
+        backupStore.createIndex('timestamp', 'timestamp', { unique: false });
       }
     };
 
@@ -208,4 +230,107 @@ export async function flushSyncQueue(): Promise<{ synced: number; failed: number
   }
 
   return { synced, failed };
+}
+
+// -------------------------------------------------------------
+// Institutional System Backups Storage (survives scale-down)
+// -------------------------------------------------------------
+
+export async function saveSystemBackup(backup: SystemBackupRecord): Promise<void> {
+  try {
+    const db = await openOfflineDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('system_backups', 'readwrite');
+      const store = tx.objectStore('system_backups');
+      // Save primary 'latest_backup' for quick restore check
+      store.put({ ...backup, id: 'latest_backup' });
+      // Also save timestamped historical backup (keep up to 5)
+      store.put({ ...backup, id: `backup_${backup.timestamp}` });
+
+      tx.oncomplete = () => {
+        // Also mirror lightweight metadata in localStorage for instant boot check
+        try {
+          localStorage.setItem(
+            'iti_latest_backup_meta',
+            JSON.stringify({
+              id: 'latest_backup',
+              timestamp: backup.timestamp,
+              formattedDate: backup.formattedDate,
+              source: backup.source,
+              userRole: backup.userRole,
+              summary: backup.summary,
+            })
+          );
+        } catch (e) {}
+        resolve();
+      };
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (err) {
+    console.warn('Failed to save institutional backup to IndexedDB:', err);
+  }
+}
+
+export async function getLatestSystemBackup(): Promise<SystemBackupRecord | null> {
+  try {
+    const db = await openOfflineDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction('system_backups', 'readonly');
+      const store = tx.objectStore('system_backups');
+      const request = store.get('latest_backup');
+
+      request.onsuccess = () => {
+        if (request.result && request.result.payload) {
+          resolve(request.result as SystemBackupRecord);
+        } else {
+          resolve(null);
+        }
+      };
+
+      request.onerror = () => resolve(null);
+    });
+  } catch (err) {
+    console.warn('Failed to read latest backup from IndexedDB:', err);
+    return null;
+  }
+}
+
+export async function getAllSystemBackups(): Promise<SystemBackupRecord[]> {
+  try {
+    const db = await openOfflineDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction('system_backups', 'readonly');
+      const store = tx.objectStore('system_backups');
+      const request = store.getAll();
+
+      request.onsuccess = () => {
+        const list = (request.result || []) as SystemBackupRecord[];
+        // Filter out the 'latest_backup' duplicate key, return historical list sorted desc
+        const historical = list
+          .filter((item) => item.id !== 'latest_backup')
+          .sort((a, b) => b.timestamp - a.timestamp);
+        resolve(historical);
+      };
+
+      request.onerror = () => resolve([]);
+    });
+  } catch (err) {
+    console.warn('Failed to read all backups:', err);
+    return [];
+  }
+}
+
+export async function deleteSystemBackup(id: string): Promise<void> {
+  try {
+    const db = await openOfflineDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('system_backups', 'readwrite');
+      const store = tx.objectStore('system_backups');
+      const request = store.delete(id);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  } catch (err) {
+    console.warn('Failed to delete backup:', err);
+  }
 }

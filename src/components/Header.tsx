@@ -15,6 +15,7 @@ import {
   ShieldAlert,
   ChevronRight,
   X,
+  Database,
 } from 'lucide-react';
 import { UserRole, AppNotification } from '../types.ts';
 import { fetchNotifications } from '../api.ts';
@@ -431,6 +432,16 @@ export const Header: React.FC<HeaderProps> = ({
                   <span className="text-slate-400 text-[9px] uppercase tracking-wider font-semibold">Active</span>
                 </div>
               </div>
+            </div>
+
+            {/* Browser Auto-Preservation Status Indicator */}
+            <div
+              className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border bg-slate-900 border-slate-800 text-[10px] font-mono text-slate-300 shadow-xs"
+              title="Continuous Auto-Save: Institutional records and marks are saved to browser storage and restored automatically across logins"
+            >
+              <Database className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="font-bold text-white">Auto-Save</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
             </div>
 
             {/* PWA In-App Install Prompt */}

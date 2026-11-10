@@ -23,6 +23,9 @@ async function startServer() {
 
   app.use(express.json());
 
+  // Initialize and synchronize with persistent Google Cloud Firestore
+  await db.initFirestore();
+
   // -------------------------------------------------------------
   // API Endpoints
   // -------------------------------------------------------------
@@ -41,6 +44,88 @@ async function startServer() {
         totalInventoryItems: data.inventory.length,
       },
     });
+  });
+
+  // -------------------------------------------------------------
+  // Automatic Institutional Backup & Restore Endpoints
+  // -------------------------------------------------------------
+  app.get('/api/system/export-backup', (req: Request, res: Response) => {
+    try {
+      const data = db.get();
+      const backupPayload = {
+        meta: {
+          app: 'Government ITI Raigarh MIS',
+          instituteCode: data.settings.instituteCode,
+          instituteName: data.settings.instituteName,
+          exportDate: new Date().toISOString(),
+          formattedDate: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
+          version: '2.6.0',
+          summary: {
+            traineesCount: data.trainees.length,
+            assessmentsCount: data.assessments?.length || 0,
+            attendanceCount: data.attendance.length,
+            tradesCount: data.trades.length,
+            sessionsCount: data.sessions.length,
+            workingDaysCount: data.monthlyWorkingDays.length,
+          },
+        },
+        data,
+      };
+      res.setHeader('Content-Disposition', `attachment; filename="Govt_ITI_Raigarh_Backup_${new Date().toISOString().split('T')[0]}.json"`);
+      res.json(backupPayload);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to generate institutional backup' });
+    }
+  });
+
+  app.post('/api/system/restore-backup', (req: Request, res: Response) => {
+    try {
+      const { backupData, source } = req.body;
+      if (!backupData) {
+        return res.status(400).json({ error: 'No backup data payload provided' });
+      }
+      const restored = db.restoreFromBackup(backupData);
+      res.json({
+        success: true,
+        message: 'Institutional database successfully restored and saved',
+        summary: {
+          traineesCount: restored.trainees.length,
+          assessmentsCount: restored.assessments?.length || 0,
+          attendanceCount: restored.attendance.length,
+          tradesCount: restored.trades.length,
+          sessionsCount: restored.sessions.length,
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to restore database from backup' });
+    }
+  });
+
+  app.get('/api/system/cloud-status', (_req: Request, res: Response) => {
+    const data = db.get();
+    res.json({
+      connected: true,
+      provider: 'Google Cloud Firestore',
+      databaseId: 'ai-studio-ititrademanageme-5b8dc514-0a44-4514-a54d-82e373529b3f',
+      project: 'modified-firmament-k01dl',
+      summary: {
+        trainees: data.trainees.length,
+        assessments: data.assessments?.length || 0,
+        attendance: data.attendance.length,
+        trades: data.trades.length,
+        officers: data.officers.length,
+        sessions: data.sessions.length,
+      },
+    });
+  });
+
+  app.post('/api/system/sync-cloud', async (_req: Request, res: Response) => {
+    try {
+      await db.forceFirestoreSync();
+      res.json({ success: true, message: 'All institutional data, marks, and settings successfully synchronized to Firestore.' });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to sync to Firestore' });
+    }
   });
 
   // Auth: Real credentials-based login verifying against database

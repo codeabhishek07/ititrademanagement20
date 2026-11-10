@@ -11,8 +11,14 @@ import {
   AcademicSession,
 } from './types.ts';
 import { fetchBootstrap, loginApi, fetchTrades, fetchSessions } from './api.ts';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Database, CheckCircle2, AlertCircle, ArrowUpCircle, X } from 'lucide-react';
 import { OfflineIndicator } from './components/OfflineIndicator.tsx';
+import {
+  triggerAutoBackup,
+  autoRestoreIfServerWashedOut,
+  checkForRestorableBackup,
+  restoreBackupPayload,
+} from './services/backupService.ts';
 
 interface CurrentUser {
   id: string;
@@ -33,6 +39,13 @@ interface CurrentUser {
 
 export default function App() {
   const [loading, setLoading] = useState(true);
+  const [autoRestoreNotice, setAutoRestoreNotice] = useState<string>('');
+  const [manualRestoreAvailable, setManualRestoreAvailable] = useState<{
+    hasBackup: boolean;
+    reason?: string;
+    payload?: any;
+  } | null>(null);
+
   // Restore persistent login session from localStorage
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(() => {
     try {
@@ -64,6 +77,31 @@ export default function App() {
   const loadInitialData = async () => {
     try {
       setLoading(true);
+
+      // Step 1: Check and auto-restore if server restarted with washed-out demo seed data
+      try {
+        const didAutoRestore = await autoRestoreIfServerWashedOut();
+        if (didAutoRestore) {
+          setAutoRestoreNotice(
+            'Institutional data auto-restored from browser persistent backup: Trainees, marks, and settings preserved.'
+          );
+          setTimeout(() => setAutoRestoreNotice(''), 7000);
+        } else {
+          // Check if there is an available restorable backup that user can choose to load
+          const check = await checkForRestorableBackup();
+          if (check.hasRestorableBackup && check.backup) {
+            setManualRestoreAvailable({
+              hasBackup: true,
+              reason: check.reason,
+              payload: check.backup.payload,
+            });
+          }
+        }
+      } catch (backupErr) {
+        console.warn('Backup check error on boot:', backupErr);
+      }
+
+      // Step 2: Bootstrap application from server
       const data = await fetchBootstrap();
       setSettings(data.settings);
       setSessions(data.sessions);
@@ -80,6 +118,9 @@ export default function App() {
         }
         return prev;
       });
+
+      // Step 3: Trigger a background snapshot to ensure fresh cache
+      triggerAutoBackup('auto_sync', currentUser?.role || 'visitor').catch(() => {});
     } catch (err) {
       console.error('Failed to bootstrap applet:', err);
     } finally {
@@ -89,7 +130,31 @@ export default function App() {
 
   useEffect(() => {
     loadInitialData();
-  }, []);
+
+    // Periodic auto-backup every 60 seconds to continuously safeguard data
+    const interval = setInterval(() => {
+      triggerAutoBackup('auto_sync', currentUser?.role || 'active_session').catch(() => {});
+    }, 60000);
+
+    return () => clearInterval(interval);
+  }, [currentUser?.role]);
+
+  // Handle Manual Restore from Banner
+  const handleRestoreFromBanner = async () => {
+    if (!manualRestoreAvailable?.payload) return;
+    try {
+      setLoading(true);
+      await restoreBackupPayload(manualRestoreAvailable.payload, 'user_prompt_restore');
+      setManualRestoreAvailable(null);
+      setAutoRestoreNotice('Database successfully restored from your browser backup!');
+      setTimeout(() => setAutoRestoreNotice(''), 6000);
+      await loadInitialData();
+    } catch (err: any) {
+      alert(`Restore failed: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Handle Real Credentials Login
   const handleLogin = async (params: { role: UserRole; email: string; password?: string }) => {
@@ -102,6 +167,8 @@ export default function App() {
         user.tradeName = trTrade?.name || 'Electrician';
       }
       setCurrentUser(user);
+      // Auto-backup upon successful login
+      triggerAutoBackup('auto_sync', user.role).catch(() => {});
     } catch (err: any) {
       throw err;
     } finally {
@@ -128,7 +195,12 @@ export default function App() {
     } catch (e) {}
   }, [traineeActiveTab]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    // Preserve entire current database snapshot before destroying session
+    try {
+      await triggerAutoBackup('before_logout', currentUser?.role || 'user');
+    } catch (e) {}
+
     setCurrentUser(null);
     try {
       localStorage.removeItem('iti_session_user');
@@ -167,6 +239,54 @@ export default function App() {
         onLogout={handleLogout}
         onNavigateTraineeTab={(tab) => setTraineeActiveTab(tab)}
       />
+
+      {/* Auto-Restore Toast Notification */}
+      {autoRestoreNotice && (
+        <div className="bg-emerald-900 text-emerald-100 border-b border-emerald-800 text-xs px-4 py-2.5 flex items-center justify-between shadow-xs animate-in fade-in duration-200">
+          <div className="max-w-7xl mx-auto w-full flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span className="font-semibold">{autoRestoreNotice}</span>
+            </div>
+            <button
+              onClick={() => setAutoRestoreNotice('')}
+              className="p-1 hover:bg-emerald-800 rounded text-emerald-300 cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Restorable Backup Available Prompt Banner */}
+      {manualRestoreAvailable && (
+        <div className="bg-amber-950 text-amber-100 border-b border-amber-800 text-xs px-4 py-2.5 flex items-center justify-between shadow-xs">
+          <div className="max-w-7xl mx-auto w-full flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Database className="w-4 h-4 text-amber-400 shrink-0" />
+              <div>
+                <span className="font-bold text-white">Saved Institutional Backup Found: </span>
+                <span className="text-amber-200">{manualRestoreAvailable.reason || 'Custom marks & trainees available in browser'}</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleRestoreFromBanner}
+                className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold rounded-lg shadow-xs flex items-center gap-1 cursor-pointer"
+              >
+                <ArrowUpCircle className="w-3.5 h-3.5" />
+                <span>Restore Saved Data Now</span>
+              </button>
+              <button
+                onClick={() => setManualRestoreAvailable(null)}
+                className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg cursor-pointer"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6">
