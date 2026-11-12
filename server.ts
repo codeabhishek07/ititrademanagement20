@@ -21,7 +21,21 @@ async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
 
-  app.use(express.json());
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+  // Gracefully catch and report payload errors if any occur
+  app.use((err: any, _req: Request, res: Response, next: any) => {
+    if (err && (err.type === 'entity.too.large' || err.status === 413)) {
+      return res.status(413).json({
+        error: 'Payload Too Large: The uploaded backup file or data package exceeds the server limit (50MB).',
+      });
+    }
+    if (err instanceof SyntaxError && 'body' in err) {
+      return res.status(400).json({ error: 'Malformed JSON payload received.' });
+    }
+    next(err);
+  });
 
   // Initialize and synchronize with persistent Google Cloud Firestore
   await db.initFirestore();
@@ -984,6 +998,7 @@ async function startServer() {
     data.trainees = data.trainees.filter((t) => t.id !== req.params.id);
     // Also remove associated attendance or mark inactive
     db.save();
+    db.deleteItem('trainees', req.params.id);
     db.addAuditLog({
       userId: req.query.officerId?.toString() || 'usr_admin',
       userName: req.query.officerName?.toString() || 'Training Officer',
@@ -1058,8 +1073,14 @@ async function startServer() {
 
     // Check window cutoff unless admin bypass or simulator
     if (!isWithinTimeWindow && !forceSimulation) {
+      const formatTime = (h: number, m: number = 0) => {
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        const h12 = h % 12 || 12;
+        const mStr = m > 0 ? `:${m.toString().padStart(2, '0')}` : ':00';
+        return `${h12}${mStr} ${ampm} (${h.toString().padStart(2, '0')}:00)`;
+      };
       return res.status(400).json({
-        error: `Attendance window is closed. Official attendance time is between ${win.startHour}:00 AM and ${win.endHour}:00 AM. Attendance recorded outside this window requires Training Officer approval.`,
+        error: `Attendance window is closed. Official attendance window is between ${formatTime(win.startHour, win.startMinute)} and ${formatTime(win.endHour, win.endMinute)} (07:00 to 15:00). Attendance recorded outside this window requires Training Officer approval.`,
       });
     }
 
@@ -1182,9 +1203,9 @@ async function startServer() {
           sessionId: tr.sessionId,
           date: targetDate,
           status: 'Absent',
-          timestamp: '10:01 AM (Cutoff Passed)',
+          timestamp: '05:00 PM (17:00 Cutoff)',
           markedBy: 'system_auto_absent',
-          remarks: 'Automatic absent recorded past cutoff time (10:00 AM) - Subject to authorized correction by Training Officer.',
+          remarks: 'Automatic absent recorded past 17:00 (05:00 PM) cutoff time - Subject to authorized correction by Training Officer.',
         });
         newlyMarkedAbsent++;
       }
@@ -1667,7 +1688,7 @@ async function startServer() {
         id: `notif_absent_${todayStr}`,
         type: 'absent_recorded',
         title: `Absence Recorded for Today (${todayStr})`,
-        message: todayRecord.remarks || 'Automatic absent recorded past cutoff time (10:00 AM). Authorized corrections must be processed through your Training Officer.',
+        message: todayRecord.remarks || 'Automatic absent recorded past 17:00 (05:00 PM) cutoff time. Authorized corrections must be processed through your Training Officer.',
         timestamp: todayRecord.timestamp,
         read: false,
         priority: 'high',
@@ -1975,6 +1996,59 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   }
+
+  // -------------------------------------------------------------
+  // Scheduled Background Task: Auto-Mark Absent at 17:00 Cutoff
+  // -------------------------------------------------------------
+  let lastAutoAbsentDate = '';
+  setInterval(() => {
+    try {
+      const now = new Date();
+      const hour = now.getHours();
+      const minute = now.getMinutes();
+      const todayStr = now.toISOString().split('T')[0];
+      const win = db.get().settings.attendanceWindow;
+      const autoHour = win.autoAbsentHour !== undefined ? win.autoAbsentHour : 17;
+      const autoMinute = win.autoAbsentMinute !== undefined ? win.autoAbsentMinute : 0;
+
+      // Run when time is at or past cutoff (17:00) and hasn't run for today yet
+      if (
+        (hour > autoHour || (hour === autoHour && minute >= autoMinute)) &&
+        lastAutoAbsentDate !== todayStr
+      ) {
+        lastAutoAbsentDate = todayStr;
+        const data = db.get();
+        let marked = 0;
+        data.trainees.forEach((tr) => {
+          if (tr.status === 'active') {
+            const exists = data.attendance.find((a) => a.traineeId === tr.id && a.date === todayStr);
+            if (!exists) {
+              data.attendance.push({
+                id: `att_auto_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`,
+                traineeId: tr.id,
+                traineeName: tr.name,
+                rollNo: tr.rollNo,
+                tradeId: tr.tradeId,
+                sessionId: tr.sessionId,
+                date: todayStr,
+                status: 'Absent',
+                timestamp: '05:00 PM (17:00 Cutoff)',
+                markedBy: 'system_auto_absent',
+                remarks: 'Automatic absent recorded at 17:00 (05:00 PM) cutoff time - Subject to authorized correction by Training Officer.',
+              });
+              marked++;
+            }
+          }
+        });
+        if (marked > 0) {
+          db.save();
+          console.log(`[Auto-Absent Scheduler] Flagged ${marked} unmarked active trainees as Absent for date ${todayStr} at 17:00 cutoff.`);
+        }
+      }
+    } catch (e) {
+      console.warn('[Auto-Absent Scheduler Error]:', e);
+    }
+  }, 30000);
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Govt ITI Raigarh Server running on http://0.0.0.0:${PORT}`);

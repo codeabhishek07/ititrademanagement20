@@ -18,6 +18,7 @@ import {
   autoRestoreIfServerWashedOut,
   checkForRestorableBackup,
   restoreBackupPayload,
+  clearAllSystemBackupsAndDemoCache,
 } from './services/backupService.ts';
 
 interface CurrentUser {
@@ -50,7 +51,25 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(() => {
     try {
       const saved = localStorage.getItem('iti_session_user');
-      return saved ? JSON.parse(saved) : null;
+      if (!saved) return null;
+      const parsed = JSON.parse(saved);
+      // Discard any lingering demo session
+      const id = String(parsed?.id || '').toLowerCase();
+      const name = String(parsed?.name || '').toLowerCase();
+      if (
+        id.startsWith('tr_') ||
+        name.includes('rohan sahu') ||
+        name.includes('pooja kashyap') ||
+        name.includes('amit bhagat') ||
+        name.includes('kavita patel') ||
+        name.includes('vikas tande') ||
+        name.includes('dinesh yadav') ||
+        name.includes('neha agrawal')
+      ) {
+        localStorage.removeItem('iti_session_user');
+        return null;
+      }
+      return parsed;
     } catch (err) {
       console.warn('Failed to parse saved session from localStorage:', err);
       return null;
@@ -78,30 +97,13 @@ export default function App() {
     try {
       setLoading(true);
 
-      // Step 1: Check and auto-restore if server restarted with washed-out demo seed data
-      try {
-        const didAutoRestore = await autoRestoreIfServerWashedOut();
-        if (didAutoRestore) {
-          setAutoRestoreNotice(
-            'Institutional data auto-restored from browser persistent backup: Trainees, marks, and settings preserved.'
-          );
-          setTimeout(() => setAutoRestoreNotice(''), 7000);
-        } else {
-          // Check if there is an available restorable backup that user can choose to load
-          const check = await checkForRestorableBackup();
-          if (check.hasRestorableBackup && check.backup) {
-            setManualRestoreAvailable({
-              hasBackup: true,
-              reason: check.reason,
-              payload: check.backup.payload,
-            });
-          }
-        }
-      } catch (backupErr) {
-        console.warn('Backup check error on boot:', backupErr);
+      // Wipe any lingering demo cache in IndexedDB on first load of clean version
+      if (localStorage.getItem('iti_demo_cleared_v2') !== 'true') {
+        await clearAllSystemBackupsAndDemoCache().catch(() => {});
+        localStorage.setItem('iti_demo_cleared_v2', 'true');
       }
 
-      // Step 2: Bootstrap application from server
+      // Bootstrap application from server
       const data = await fetchBootstrap();
       setSettings(data.settings);
       setSessions(data.sessions);
@@ -118,9 +120,6 @@ export default function App() {
         }
         return prev;
       });
-
-      // Step 3: Trigger a background snapshot to ensure fresh cache
-      triggerAutoBackup('auto_sync', currentUser?.role || 'visitor').catch(() => {});
     } catch (err) {
       console.error('Failed to bootstrap applet:', err);
     } finally {

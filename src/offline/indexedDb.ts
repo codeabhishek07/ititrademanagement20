@@ -334,3 +334,28 @@ export async function deleteSystemBackup(id: string): Promise<void> {
     console.warn('Failed to delete backup:', err);
   }
 }
+
+export async function clearAllSystemBackupsAndDemoCache(): Promise<void> {
+  try {
+    const db = await openOfflineDB();
+    await new Promise<void>((resolve) => {
+      const tx = db.transaction(['system_backups', 'app_cache'], 'readwrite');
+      tx.objectStore('system_backups').clear();
+      tx.objectStore('app_cache').clear();
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    });
+    // Also remove any demo local storage flags
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem('iti_cache_trainees');
+      localStorage.removeItem('iti_cache_attendance');
+      localStorage.removeItem('iti_cache_assessments');
+      localStorage.removeItem('iti_cache_indents');
+      localStorage.removeItem('iti_cache_warnings');
+      localStorage.removeItem('iti_cache_leaves');
+    }
+  } catch (err) {
+    console.warn('Failed to clear system backups and app cache:', err);
+  }
+}
+

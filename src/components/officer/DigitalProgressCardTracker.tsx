@@ -253,12 +253,6 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
           else if (r.status === 'CL') clCount++;
           else if (r.status === 'Medical Leave') mlCount++;
         });
-      } else if (m.monthKey === '2026-08' && selectedTrainee) {
-        // Default seed benchmark from PDF reference if initial month has 14 present
-        presentCount = 14;
-        absentCount = 1;
-        clCount = 1;
-        mlCount = 0;
       }
 
       // Calculate attendance percentage for this month
@@ -278,11 +272,6 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
         assessmentScore = sumParams > 0 ? sumParams : (asm.testMarks || 0);
         assessmentPercent = assessmentScore; // Out of 100
         remarks = asm.remarks || (assessmentScore >= 80 ? 'Good' : assessmentScore >= 60 ? 'Satisfactory' : 'Needs Improvement');
-      } else if (m.monthKey === '2026-08' && selectedTrainee) {
-        // Fallback default matching PDF reference for August 2026 if not yet recorded
-        assessmentScore = 81;
-        assessmentPercent = 81;
-        remarks = 'Good';
       }
 
       return {

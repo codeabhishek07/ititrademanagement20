@@ -980,7 +980,7 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
                             : d.record?.markedBy === 'officer_manual'
                             ? 'Officer Manual Override'
                             : d.record?.markedBy === 'system_auto_absent'
-                            ? '10 AM Auto Absent'
+                            ? '17:00 Auto Absent'
                             : 'Not Recorded'}
                         </span>
                       </td>

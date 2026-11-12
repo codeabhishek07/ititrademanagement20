@@ -7,3810 +7,423 @@
     "district": "Raigarh",
     "state": "Chhattisgarh",
     "campusLocation": {
-      "radiusMeters": 1500,
-      "campusName": "Government ITI Raigarh Campus",
-      "address": "Chakradhar Nagar Industrial Area Boirdadar, Raigarh (C.G.) 496001",
       "lng": 83.4133,
-      "lat": 21.8958
+      "radiusMeters": 1500,
+      "lat": 21.8958,
+      "address": "Chakradhar Nagar Industrial Area Boirdadar, Raigarh (C.G.) 496001",
+      "campusName": "Government ITI Raigarh Campus"
     },
     "attendanceWindow": {
+      "startHour": 7,
       "startMinute": 0,
-      "endHour": 10,
+      "endHour": 15,
       "endMinute": 0,
-      "startHour": 7
+      "autoAbsentHour": 17,
+      "autoAbsentMinute": 0
     },
     "minimumAttendancePercent": 80,
     "leaveLimits": {
       "medicalAnnual": 15,
-      "halfDayMonthlyLimit": 4,
-      "clAnnual": 12
+      "clAnnual": 12,
+      "halfDayMonthlyLimit": 4
     },
-    "currentSessionId": "session_2025_2026",
+    "currentSessionId": "session_2026_2027",
     "adminAccount": {
-      "mobile": "+91 98261 45210",
+      "password": "admin123",
+      "name": "Shri  PL Kunte (Principal / Admin)",
       "email": "admin.iti.raigarh@cg.gov.in",
-      "name": "Shri S. K. Patel (Principal / Admin)",
-      "password": "admin123"
+      "mobile": "+91 98261 45210"
     }
   },
   "sessions": [
     {
-      "name": "Session 2024-2025",
-      "endDate": "2025-07-31",
+      "id": "session_2024_2025",
       "totalWorkingDays": 242,
       "startDate": "2024-08-01",
+      "endDate": "2025-07-31",
       "status": "completed",
-      "id": "session_2024_2025"
+      "name": "Session 2024-2025"
     },
     {
-      "startDate": "2025-08-01",
       "endDate": "2026-07-31",
       "totalWorkingDays": 240,
-      "name": "Session 2025-2026",
       "status": "active",
+      "startDate": "2025-08-01",
+      "name": "Session 2025-2026",
       "id": "session_2025_2026"
     },
     {
+      "status": "active",
       "id": "session_2026_2027",
-      "endDate": "2027-07-31",
-      "startDate": "2026-08-01",
-      "totalWorkingDays": 23,
+      "totalWorkingDays": 22,
       "name": "Session 2026-2027",
-      "status": "upcoming"
+      "startDate": "2026-08-01",
+      "endDate": "2027-07-31"
     }
   ],
   "monthlyWorkingDays": [
     {
-      "holidays": 8,
-      "id": "mwd_1",
-      "totalDays": 31,
+      "sessionId": "session_2025_2026",
       "remarks": "Independence Day, Raksha Bandhan",
       "month": "2025-08",
+      "totalDays": 31,
+      "id": "mwd_1",
       "workingDays": 23,
-      "sessionId": "session_2025_2026"
+      "holidays": 8
     },
     {
-      "totalDays": 31,
       "remarks": "Regular trade practical tests",
+      "totalDays": 31,
+      "workingDays": 25,
       "id": "mwd_10",
       "month": "2026-05",
-      "workingDays": 25,
       "sessionId": "session_2025_2026",
       "holidays": 6
     },
     {
+      "sessionId": "session_2025_2026",
       "id": "mwd_2",
-      "workingDays": 24,
-      "sessionId": "session_2025_2026",
       "remarks": "Vishwakarma Puja, Ganesh Chaturthi",
-      "totalDays": 30,
       "month": "2025-09",
-      "holidays": 6
-    },
-    {
-      "holidays": 11,
-      "month": "2025-10",
-      "remarks": "Gandhi Jayanti, Dussehra, Diwali break",
-      "sessionId": "session_2025_2026",
-      "workingDays": 20,
-      "totalDays": 31,
-      "id": "mwd_3"
-    },
-    {
-      "id": "mwd_4",
-      "sessionId": "session_2025_2026",
-      "remarks": "CG State Foundation Day, Guru Nanak Jayanti",
-      "workingDays": 23,
-      "holidays": 7,
-      "month": "2025-11",
+      "holidays": 6,
+      "workingDays": 24,
       "totalDays": 30
     },
     {
+      "id": "mwd_3",
+      "workingDays": 20,
+      "month": "2025-10",
+      "sessionId": "session_2025_2026",
+      "holidays": 11,
       "totalDays": 31,
-      "remarks": "Ghasidas Jayanti, Christmas",
+      "remarks": "Gandhi Jayanti, Dussehra, Diwali break"
+    },
+    {
+      "workingDays": 23,
+      "sessionId": "session_2025_2026",
+      "month": "2025-11",
+      "remarks": "CG State Foundation Day, Guru Nanak Jayanti",
       "holidays": 7,
+      "totalDays": 30,
+      "id": "mwd_4"
+    },
+    {
+      "remarks": "Ghasidas Jayanti, Christmas",
       "sessionId": "session_2025_2026",
       "id": "mwd_5",
+      "workingDays": 24,
       "month": "2025-12",
-      "workingDays": 24
+      "totalDays": 31,
+      "holidays": 7
     },
     {
-      "holidays": 8,
       "remarks": "Cherchera, Republic Day",
       "totalDays": 31,
-      "id": "mwd_6",
-      "month": "2026-01",
-      "sessionId": "session_2025_2026",
-      "workingDays": 23
-    },
-    {
-      "month": "2026-02",
-      "id": "mwd_7",
-      "totalDays": 28,
-      "holidays": 6,
-      "workingDays": 22,
-      "remarks": "Maha Shivratri",
-      "sessionId": "session_2025_2026"
-    },
-    {
-      "totalDays": 31,
-      "month": "2026-03",
-      "sessionId": "session_2025_2026",
-      "remarks": "Holi festival",
       "workingDays": 23,
+      "id": "mwd_6",
       "holidays": 8,
-      "id": "mwd_8"
+      "sessionId": "session_2025_2026",
+      "month": "2026-01"
     },
     {
+      "totalDays": 28,
+      "remarks": "Maha Shivratri",
+      "workingDays": 22,
+      "holidays": 6,
+      "month": "2026-02",
+      "sessionId": "session_2025_2026",
+      "id": "mwd_7"
+    },
+    {
+      "month": "2026-03",
+      "remarks": "Holi festival",
+      "sessionId": "session_2025_2026",
+      "holidays": 8,
+      "workingDays": 23,
+      "id": "mwd_8",
+      "totalDays": 31
+    },
+    {
+      "totalDays": 30,
+      "remarks": "Ambedkar Jayanti, Ram Navami",
+      "workingDays": 22,
+      "sessionId": "session_2025_2026",
       "month": "2026-04",
       "holidays": 8,
-      "sessionId": "session_2025_2026",
-      "remarks": "Ambedkar Jayanti, Ram Navami",
-      "id": "mwd_9",
+      "id": "mwd_9"
+    },
+    {
       "totalDays": 30,
-      "workingDays": 22
+      "remarks": "Diwali",
+      "workingDays": 22,
+      "holidays": 8,
+      "month": "2026-11",
+      "id": "temp_1794308263883",
+      "sessionId": "session_2026_2027"
     }
   ],
   "trades": [
     {
-      "id": "trade_copa",
       "code": "COP-03",
       "status": "active",
       "workshopLocation": "IT Computer Wing - Lab C-2",
-      "sanctionedUnits": 2,
-      "name": "Computer Operator and Programming Assistant (COPA)",
-      "totalIntake": 48,
       "description": "Computer fundamentals, office automation, web authoring, Python/JS programming, and network configuration.",
-      "durationYears": 1
+      "durationYears": 1,
+      "totalIntake": 48,
+      "sanctionedUnits": 2,
+      "id": "trade_copa",
+      "name": "Computer Operator and Programming Assistant (COPA)"
     },
     {
-      "workshopLocation": "Workshop Block A - Bay 101",
-      "description": "Training in wiring, motor winding, power electronics, transformer diagnostics, and solar panel installation.",
-      "durationYears": 2,
-      "totalIntake": 40,
-      "name": "Electrician",
       "sanctionedUnits": 2,
+      "name": "Electrician",
+      "description": "Training in wiring, motor winding, power electronics, transformer diagnostics, and solar panel installation.",
       "id": "trade_elec",
-      "status": "active",
-      "code": "ELE-01"
+      "totalIntake": 40,
+      "durationYears": 2,
+      "workshopLocation": "Workshop Block A - Bay 101",
+      "code": "ELE-01",
+      "status": "active"
     },
     {
       "workshopLocation": "Mechanical Workshop Block B - Bay 201",
-      "status": "active",
-      "name": "Fitter",
-      "totalIntake": 40,
       "sanctionedUnits": 2,
       "description": "Precision bench work, filing, fitting, pipe fitting, lathe operation, hydraulics, and assembly.",
       "id": "trade_fit",
-      "code": "FIT-02",
-      "durationYears": 2
-    },
-    {
-      "workshopLocation": "Machine Shop - Bay 203",
-      "status": "active",
-      "description": "Operating centre lathe, capstan lathe, CNC basics, thread cutting, eccentric turning, and precision machining.",
-      "totalIntake": 20,
       "durationYears": 2,
-      "sanctionedUnits": 1,
-      "code": "TUR-05",
-      "id": "trade_turn",
-      "name": "Turner"
+      "name": "Fitter",
+      "totalIntake": 40,
+      "code": "FIT-02",
+      "status": "active"
     },
     {
-      "code": "WLD-04",
-      "durationYears": 1,
-      "id": "trade_weld",
+      "sanctionedUnits": 1,
       "totalIntake": 20,
+      "description": "Operating centre lathe, capstan lathe, CNC basics, thread cutting, eccentric turning, and precision machining.",
+      "code": "TUR-05",
+      "status": "active",
+      "name": "Turner",
+      "workshopLocation": "Machine Shop - Bay 203",
+      "durationYears": 2,
+      "id": "trade_turn"
+    },
+    {
+      "totalIntake": 20,
+      "id": "trade_weld",
+      "durationYears": 1,
+      "code": "WLD-04",
+      "status": "active",
+      "description": "SMAW, GMAW, GTAW welding, gas cutting, oxy-acetylene brazing, and metal joint inspection.",
       "name": "Welder (Gas & Electric)",
       "workshopLocation": "Fabrication Shed - Booth 1-10",
-      "sanctionedUnits": 1,
-      "status": "active",
-      "description": "SMAW, GMAW, GTAW welding, gas cutting, oxy-acetylene brazing, and metal joint inspection."
+      "sanctionedUnits": 1
     }
   ],
   "officers": [
     {
-      "id": "off_0",
       "status": "active",
-      "employeeId": "CG-ITI-TO-1001",
-      "name": "Abhishek Swarnkar",
-      "password": "officer123",
-      "qualification": "B.E. (CSE/IT), CITS Certified",
       "email": "abhishek.swarnkar@iti.cg.gov.in",
+      "qualification": "B.E. (CSE/IT), CITS Certified",
+      "name": "Abhishek Swarnkar",
+      "designation": "Training Officer, ITI Raigarh CG",
+      "id": "off_0",
+      "employeeId": "CG-ITI-TO-1001",
       "mobile": "+91 94252 55660",
       "assignedTradeIds": [
-        "trade_elec",
         "trade_copa"
       ],
-      "designation": "Training Officer, ITI Raigarh CG"
+      "password": "officer123"
     },
     {
+      "name": "Er. Rajesh Kumar Dewangan",
+      "status": "active",
+      "id": "off_1",
       "password": "officer123",
       "employeeId": "CG-ITI-TO-1042",
-      "name": "Er. Rajesh Kumar Dewangan",
-      "mobile": "+91 94252 87612",
-      "designation": "Senior Training Officer (Electrical)",
-      "assignedTradeIds": [
-        "trade_elec",
-        "trade_copa"
-      ],
-      "status": "active",
       "email": "rajesh.dewangan@iti.cg.gov.in",
+      "mobile": "+91 94252 87612",
+      "assignedTradeIds": [
+        "trade_elec"
+      ],
       "qualification": "B.Tech (Electrical Engg), CITS Certified",
-      "id": "off_1"
+      "designation": "Senior Training Officer (Electrical)"
     },
     {
       "employeeId": "CG-ITI-TO-1089",
-      "name": "Er. Manoj Kumar Rathore",
-      "qualification": "Diploma Mechanical Engg, NTC, CITS",
-      "mobile": "+91 98271 34910",
-      "designation": "Training Officer (Mechanical & Fitter)",
-      "status": "active",
-      "password": "officer123",
-      "email": "manoj.rathore@iti.cg.gov.in",
-      "id": "off_2",
       "assignedTradeIds": [
         "trade_fit",
         "trade_turn"
-      ]
+      ],
+      "mobile": "+91 98271 34910",
+      "designation": "Training Officer (Mechanical & Fitter)",
+      "id": "off_2",
+      "qualification": "Diploma Mechanical Engg, NTC, CITS",
+      "name": "Er. Manoj Kumar Rathore",
+      "email": "manoj.rathore@iti.cg.gov.in",
+      "password": "officer123",
+      "status": "active"
     },
     {
-      "employeeId": "CG-ITI-TO-1120",
-      "name": "Smt. Priyanka Sharma",
-      "qualification": "MCA, CITS (COPA)",
-      "mobile": "+91 97531 22440",
-      "assignedTradeIds": [
-        "trade_copa"
-      ],
-      "designation": "Training Officer (IT & COPA)",
       "status": "active",
       "email": "priyanka.sharma@iti.cg.gov.in",
+      "employeeId": "CG-ITI-TO-1120",
+      "name": "Smt. Priyanka Sharma",
+      "id": "off_3",
+      "designation": "Training Officer (IT & COPA)",
+      "assignedTradeIds": [
+        "trade_weld"
+      ],
       "password": "officer123",
-      "id": "off_3"
+      "qualification": "MCA, CITS (COPA)",
+      "mobile": "+91 97531 22440"
     }
   ],
-  "trainees": [
-    {
-      "id": "tr_1",
-      "category": "OBC",
-      "rollNo": "ITI/RAI/2025/ELE-014",
-      "password": "trainee123",
-      "sessionId": "session_2025_2026",
-      "admissionDate": "2025-08-05",
-      "dob": "2005-04-12",
-      "tradeId": "trade_elec",
-      "registrationNo": "NCVT2025ELE0014",
-      "status": "active",
-      "name": "Rohan Sahu",
-      "gender": "Male",
-      "email": "rohan.sahu@student.iti.cg.in",
-      "mobile": "+91 88789 12345",
-      "fatherName": "Shri Rameshwar Sahu"
-    },
-    {
-      "fatherName": "Shri Santosh Kashyap",
-      "registrationNo": "NCVT2025ELE0015",
-      "rollNo": "ITI/RAI/2025/ELE-015",
-      "dob": "2005-09-18",
-      "category": "ST",
-      "tradeId": "trade_elec",
-      "password": "trainee123",
-      "gender": "Female",
-      "status": "active",
-      "sessionId": "session_2025_2026",
-      "id": "tr_2",
-      "admissionDate": "2025-08-05",
-      "name": "Pooja Kashyap",
-      "email": "pooja.kashyap@student.iti.cg.in",
-      "mobile": "+91 88789 54321"
-    },
-    {
-      "mobile": "+91 91310 98765",
-      "email": "amit.bhagat@student.iti.cg.in",
-      "admissionDate": "2025-08-06",
-      "category": "ST",
-      "tradeId": "trade_elec",
-      "gender": "Male",
-      "password": "trainee123",
-      "status": "active",
-      "dob": "2004-11-25",
-      "fatherName": "Shri Anand Bhagat",
-      "id": "tr_3",
-      "registrationNo": "NCVT2025ELE0016",
-      "rollNo": "ITI/RAI/2025/ELE-016",
-      "name": "Amit Bhagat",
-      "sessionId": "session_2025_2026"
-    },
-    {
-      "registrationNo": "NCVT2025ELE0017",
-      "status": "active",
-      "fatherName": "Shri Dhaniram Patel",
-      "gender": "Female",
-      "category": "OBC",
-      "name": "Kavita Patel",
-      "password": "trainee123",
-      "sessionId": "session_2025_2026",
-      "email": "kavita.patel@student.iti.cg.in",
-      "tradeId": "trade_elec",
-      "id": "tr_4",
-      "mobile": "+91 98265 67890",
-      "rollNo": "ITI/RAI/2025/ELE-017",
-      "dob": "2005-01-30",
-      "admissionDate": "2025-08-06"
-    },
-    {
-      "status": "active",
-      "gender": "Male",
-      "name": "Vikas Tande",
-      "dob": "2004-07-14",
-      "fatherName": "Shri Mangal Tande",
-      "sessionId": "session_2025_2026",
-      "email": "vikas.tande@student.iti.cg.in",
-      "id": "tr_5",
-      "tradeId": "trade_elec",
-      "mobile": "+91 70002 34567",
-      "category": "SC",
-      "rollNo": "ITI/RAI/2025/ELE-018",
-      "password": "trainee123",
-      "registrationNo": "NCVT2025ELE0018",
-      "admissionDate": "2025-08-07"
-    },
-    {
-      "id": "tr_6",
-      "mobile": "+91 81203 45678",
-      "email": "dinesh.yadav@student.iti.cg.in",
-      "sessionId": "session_2025_2026",
-      "tradeId": "trade_fit",
-      "gender": "Male",
-      "name": "Dinesh Yadav",
-      "status": "active",
-      "dob": "2004-03-22",
-      "admissionDate": "2025-08-05",
-      "category": "OBC",
-      "rollNo": "ITI/RAI/2025/FIT-001",
-      "registrationNo": "NCVT2025FIT0001",
-      "password": "trainee123",
-      "fatherName": "Shri Balram Yadav"
-    },
-    {
-      "email": "neha.agrawal@student.iti.cg.in",
-      "rollNo": "ITI/RAI/2025/COP-005",
-      "name": "Neha Agrawal",
-      "id": "tr_7",
-      "fatherName": "Shri Pradeep Agrawal",
-      "registrationNo": "NCVT2025COP0005",
-      "admissionDate": "2025-08-05",
-      "status": "active",
-      "sessionId": "session_2025_2026",
-      "gender": "Female",
-      "mobile": "+91 99812 34123",
-      "category": "GEN",
-      "dob": "2006-02-10",
-      "tradeId": "trade_copa",
-      "password": "trainee123"
-    }
-  ],
-  "attendance": [
-    {
-      "rollNo": "ITI/RAI/2025/ELE-014",
-      "timestamp": "08:15 AM",
-      "status": "Present",
-      "tradeId": "trade_elec",
-      "date": "2026-10-08",
-      "id": "att_1",
-      "sessionId": "session_2025_2026",
-      "traineeName": "Rohan Sahu",
-      "markedBy": "trainee_gps",
-      "traineeId": "tr_1",
-      "geotag": {
-        "isWithinCampus": true,
-        "lng": 83.39608102886201,
-        "verified": true,
-        "lat": 21.89741986348407,
-        "distanceFromCampusMeters": 102,
-        "accuracyMeters": 8
-      }
-    },
-    {
-      "sessionId": "session_2025_2026",
-      "rollNo": "ITI/RAI/2025/ELE-014",
-      "markedBy": "trainee_gps",
-      "traineeId": "tr_1",
-      "date": "2026-10-19",
-      "status": "Present",
-      "tradeId": "trade_elec",
-      "traineeName": "Rohan Sahu",
-      "id": "att_10",
-      "timestamp": "08:15 AM",
-      "geotag": {
-        "accuracyMeters": 12,
-        "distanceFromCampusMeters": 91,
-        "lng": 83.39565341841222,
-        "verified": true,
-        "lat": 21.897605357724274,
-        "isWithinCampus": true
-      }
-    },
-    {
-      "sessionId": "session_2025_2026",
-      "tradeId": "trade_elec",
-      "geotag": {
-        "accuracyMeters": 14,
-        "lat": 21.897166094252984,
-        "lng": 83.39581511877073,
-        "verified": true,
-        "distanceFromCampusMeters": 61,
-        "isWithinCampus": true
-      },
-      "traineeId": "tr_5",
-      "rollNo": "ITI/RAI/2025/ELE-018",
-      "id": "att_100",
-      "timestamp": "08:15 AM",
-      "status": "Present",
-      "traineeName": "Vikas Tande",
-      "markedBy": "trainee_gps",
-      "date": "2026-10-30"
-    },
-    {
-      "status": "Present",
-      "id": "att_101",
-      "rollNo": "ITI/RAI/2025/FIT-001",
-      "tradeId": "trade_fit",
-      "timestamp": "08:15 AM",
-      "traineeId": "tr_6",
-      "traineeName": "Dinesh Yadav",
-      "geotag": {
-        "verified": true,
-        "distanceFromCampusMeters": 114,
-        "isWithinCampus": true,
-        "accuracyMeters": 10,
-        "lng": 83.39512384955432,
-        "lat": 21.89778237309035
-      },
-      "markedBy": "trainee_gps",
-      "date": "2026-10-08",
-      "sessionId": "session_2025_2026"
-    },
-    {
-      "rollNo": "ITI/RAI/2025/FIT-001",
-      "markedBy": "trainee_gps",
-      "sessionId": "session_2025_2026",
-      "traineeId": "tr_6",
-      "status": "Present",
-      "tradeId": "trade_fit",
-      "id": "att_102",
-      "timestamp": "08:15 AM",
-      "date": "2026-10-09",
-      "geotag": {
-        "isWithinCampus": true,
-        "verified": true,
-        "distanceFromCampusMeters": 72,
-        "lat": 21.897839261454376,
-        "lng": 83.39573296123486,
-        "accuracyMeters": 20
-      },
-      "traineeName": "Dinesh Yadav"
-    },
-    {
-      "date": "2026-10-10",
-      "traineeName": "Dinesh Yadav",
-      "traineeId": "tr_6",
-      "rollNo": "ITI/RAI/2025/FIT-001",
-      "sessionId": "session_2025_2026",
-      "status": "Present",
-      "id": "att_103",
-      "markedBy": "trainee_gps",
-      "geotag": {
-        "accuracyMeters": 21,
-        "verified": true,
-        "isWithinCampus": true,
-        "distanceFromCampusMeters": 86,
-        "lat": 21.89766094789832,
-        "lng": 83.3954110444598
-      },
-      "timestamp": "08:15 AM",
-      "tradeId": "trade_fit"
-    },
-    {
-      "date": "2026-10-12",
-      "id": "att_104",
-      "tradeId": "trade_fit",
-      "traineeId": "tr_6",
-      "sessionId": "session_2025_2026",
-      "traineeName": "Dinesh Yadav",
-      "geotag": {
-        "lat": 21.896950762325694,
-        "isWithinCampus": true,
-        "lng": 83.39538340124541,
-        "distanceFromCampusMeters": 111,
-        "accuracyMeters": 17,
-        "verified": true
-      },
-      "rollNo": "ITI/RAI/2025/FIT-001",
-      "status": "Present",
-      "timestamp": "08:15 AM",
-      "markedBy": "trainee_gps"
-    },
-    {
-      "rollNo": "ITI/RAI/2025/FIT-001",
-      "timestamp": "08:15 AM",
-      "status": "Present",
-      "markedBy": "trainee_gps",
-      "tradeId": "trade_fit",
-      "traineeName": "Dinesh Yadav",
-      "sessionId": "session_2025_2026",
-      "date": "2026-10-13",
-      "geotag": {
-        "verified": true,
-        "lng": 83.39590429277054,
-        "isWithinCampus": true,
-        "lat": 21.8978962544111,
-        "distanceFromCampusMeters": 70,
-        "accuracyMeters": 19
-      },
-      "traineeId": "tr_6",
-      "id": "att_105"
-    },
-    {
-      "geotag": {
-        "distanceFromCampusMeters": 89,
-        "verified": true,
-        "accuracyMeters": 14,
-        "lng": 83.39595451180882,
-        "lat": 21.897659356212774,
-        "isWithinCampus": true
-      },
-      "traineeId": "tr_6",
-      "traineeName": "Dinesh Yadav",
-      "date": "2026-10-14",
-      "sessionId": "session_2025_2026",
-      "id": "att_106",
-      "tradeId": "trade_fit",
-      "status": "Present",
-      "markedBy": "trainee_gps",
-      "rollNo": "ITI/RAI/2025/FIT-001",
-      "timestamp": "08:15 AM"
-    },
-    {
-      "id": "att_107",
-      "sessionId": "session_2025_2026",
-      "date": "2026-10-15",
-      "tradeId": "trade_fit",
-      "geotag": {
-        "distanceFromCampusMeters": 29,
-        "verified": true,
-        "isWithinCampus": true,
-        "accuracyMeters": 13,
-        "lng": 83.39601267996426,
-        "lat": 21.89703536916796
-      },
-      "traineeName": "Dinesh Yadav",
-      "markedBy": "trainee_gps",
-      "traineeId": "tr_6",
-      "status": "Present",
-      "timestamp": "08:15 AM",
-      "rollNo": "ITI/RAI/2025/FIT-001"
-    },
-    {
-      "tradeId": "trade_fit",
-      "geotag": {
-        "verified": true,
-        "accuracyMeters": 20,
-        "distanceFromCampusMeters": 70,
-        "lat": 21.896996657451684,
-        "lng": 83.39540291168093,
-        "isWithinCampus": true
-      },
-      "timestamp": "08:15 AM",
-      "markedBy": "trainee_gps",
-      "status": "Present",
-      "traineeId": "tr_6",
-      "traineeName": "Dinesh Yadav",
-      "date": "2026-10-16",
-      "rollNo": "ITI/RAI/2025/FIT-001",
-      "id": "att_108",
-      "sessionId": "session_2025_2026"
-    },
-    {
-      "geotag": {
-        "isWithinCampus": true,
-        "lat": 21.89743870461143,
-        "verified": true,
-        "lng": 83.39574477344536,
-        "distanceFromCampusMeters": 36,
-        "accuracyMeters": 10
-      },
-      "timestamp": "08:15 AM",
-      "date": "2026-10-17",
-      "markedBy": "trainee_gps",
-      "id": "att_109",
-      "sessionId": "session_2025_2026",
-      "tradeId": "trade_fit",
-      "status": "Present",
-      "traineeName": "Dinesh Yadav",
-      "rollNo": "ITI/RAI/2025/FIT-001",
-      "traineeId": "tr_6"
-    },
-    {
-      "traineeId": "tr_1",
-      "geotag": {
-        "isWithinCampus": true,
-        "lng": 83.39590389559869,
-        "lat": 21.897385529255278,
-        "distanceFromCampusMeters": 49,
-        "verified": true,
-        "accuracyMeters": 21
-      },
-      "traineeName": "Rohan Sahu",
-      "date": "2026-10-20",
-      "sessionId": "session_2025_2026",
-      "id": "att_11",
-      "tradeId": "trade_elec",
-      "status": "Present",
-      "rollNo": "ITI/RAI/2025/ELE-014",
-      "markedBy": "trainee_gps",
-      "timestamp": "08:15 AM"
-    },
-    {
-      "rollNo": "ITI/RAI/2025/FIT-001",
-      "traineeName": "Dinesh Yadav",
-      "timestamp": "08:15 AM",
-      "status": "Present",
-      "date": "2026-10-19",
-      "markedBy": "trainee_gps",
-      "traineeId": "tr_6",
-      "id": "att_110",
-      "sessionId": "session_2025_2026",
-      "geotag": {
-        "accuracyMeters": 9,
-        "verified": true,
-        "distanceFromCampusMeters": 80,
-        "isWithinCampus": true,
-        "lng": 83.39564967551551,
-        "lat": 21.897657381651026
-      },
-      "tradeId": "trade_fit"
-    },
-    {
-      "tradeId": "trade_fit",
-      "traineeId": "tr_6",
-      "geotag": {
-        "accuracyMeters": 8,
-        "distanceFromCampusMeters": 104,
-        "verified": true,
-        "isWithinCampus": true,
-        "lng": 83.39577429203638,
-        "lat": 21.897539054789053
-      },
-      "sessionId": "session_2025_2026",
-      "rollNo": "ITI/RAI/2025/FIT-001",
-      "traineeName": "Dinesh Yadav",
-      "date": "2026-10-20",
-      "id": "att_111",
-      "status": "Present",
-      "markedBy": "trainee_gps",
-      "timestamp": "08:15 AM"
-    },
-    {
-      "status": "Present",
-      "traineeId": "tr_6",
-      "id": "att_112",
-      "sessionId": "session_2025_2026",
-      "rollNo": "ITI/RAI/2025/FIT-001",
-      "markedBy": "trainee_gps",
-      "geotag": {
-        "accuracyMeters": 11,
-        "distanceFromCampusMeters": 49,
-        "isWithinCampus": true,
-        "lat": 21.897226670378043,
-        "lng": 83.3957953704369,
-        "verified": true
-      },
-      "date": "2026-10-21",
-      "tradeId": "trade_fit",
-      "traineeName": "Dinesh Yadav",
-      "timestamp": "08:15 AM"
-    },
-    {
-      "timestamp": "08:15 AM",
-      "markedBy": "trainee_gps",
-      "rollNo": "ITI/RAI/2025/FIT-001",
-      "date": "2026-10-22",
-      "id": "att_113",
-      "tradeId": "trade_fit",
-      "status": "Present",
-      "traineeName": "Dinesh Yadav",
-      "sessionId": "session_2025_2026",
-      "traineeId": "tr_6",
-      "geotag": {
-        "lng": 83.39517712421679,
-        "lat": 21.897417338275222,
-        "isWithinCampus": true,
-        "verified": true,
-        "distanceFromCampusMeters": 73,
-        "accuracyMeters": 12
-      }
-    },
-    {
-      "tradeId": "trade_fit",
-      "id": "att_114",
-      "geotag": {
-        "verified": true,
-        "accuracyMeters": 19,
-        "lat": 21.897517492597643,
-        "distanceFromCampusMeters": 26,
-        "lng": 83.39521394942231,
-        "isWithinCampus": true
-      },
-      "timestamp": "08:15 AM",
-      "date": "2026-10-23",
-      "rollNo": "ITI/RAI/2025/FIT-001",
-      "traineeId": "tr_6",
-      "markedBy": "trainee_gps",
-      "status": "Present",
-      "traineeName": "Dinesh Yadav",
-      "sessionId": "session_2025_2026"
-    },
-    {
-      "date": "2026-10-24",
-      "geotag": {
-        "lng": 83.39552876186787,
-        "lat": 21.897225048163083,
-        "accuracyMeters": 17,
-        "isWithinCampus": true,
-        "verified": true,
-        "distanceFromCampusMeters": 72
-      },
-      "timestamp": "08:15 AM",
-      "markedBy": "trainee_gps",
-      "sessionId": "session_2025_2026",
-      "tradeId": "trade_fit",
-      "status": "Present",
-      "traineeName": "Dinesh Yadav",
-      "id": "att_115",
-      "traineeId": "tr_6",
-      "rollNo": "ITI/RAI/2025/FIT-001"
-    },
-    {
-      "geotag": {
-        "accuracyMeters": 21,
-        "distanceFromCampusMeters": 100,
-        "verified": true,
-        "lat": 21.897350499448265,
-        "isWithinCampus": true,
-        "lng": 83.39528383489302
-      },
-      "traineeId": "tr_6",
-      "sessionId": "session_2025_2026",
-      "status": "Present",
-      "tradeId": "trade_fit",
-      "id": "att_116",
-      "markedBy": "trainee_gps",
-      "date": "2026-10-26",
-      "rollNo": "ITI/RAI/2025/FIT-001",
-      "timestamp": "08:15 AM",
-      "traineeName": "Dinesh Yadav"
-    },
-    {
-      "geotag": {
-        "lat": 21.89715999945142,
-        "isWithinCampus": true,
-        "lng": 83.39595559836721,
-        "verified": true,
-        "distanceFromCampusMeters": 68,
-        "accuracyMeters": 9
-      },
-      "traineeName": "Dinesh Yadav",
-      "traineeId": "tr_6",
-      "sessionId": "session_2025_2026",
-      "tradeId": "trade_fit",
-      "status": "Present",
-      "id": "att_117",
-      "rollNo": "ITI/RAI/2025/FIT-001",
-      "markedBy": "trainee_gps",
-      "timestamp": "08:15 AM",
-      "date": "2026-10-27"
-    },
-    {
-      "rollNo": "ITI/RAI/2025/FIT-001",
-      "timestamp": "08:15 AM",
-      "date": "2026-10-28",
-      "status": "Present",
-      "tradeId": "trade_fit",
-      "traineeName": "Dinesh Yadav",
-      "traineeId": "tr_6",
-      "id": "att_118",
-      "markedBy": "trainee_gps",
-      "sessionId": "session_2025_2026",
-      "geotag": {
-        "lat": 21.89781127831325,
-        "lng": 83.39576066542035,
-        "distanceFromCampusMeters": 103,
-        "isWithinCampus": true,
-        "accuracyMeters": 14,
-        "verified": true
-      }
-    },
-    {
-      "traineeId": "tr_6",
-      "markedBy": "trainee_gps",
-      "date": "2026-10-29",
-      "status": "Present",
-      "sessionId": "session_2025_2026",
-      "rollNo": "ITI/RAI/2025/FIT-001",
-      "traineeName": "Dinesh Yadav",
-      "geotag": {
-        "isWithinCampus": true,
-        "lat": 21.897728288125045,
-        "verified": true,
-        "lng": 83.39602882810726,
-        "distanceFromCampusMeters": 43,
-        "accuracyMeters": 8
-      },
-      "id": "att_119",
-      "timestamp": "08:15 AM",
-      "tradeId": "trade_fit"
-    },
-    {
-      "date": "2026-10-21",
-      "status": "Present",
-      "markedBy": "trainee_gps",
-      "traineeName": "Rohan Sahu",
-      "tradeId": "trade_elec",
-      "timestamp": "08:15 AM",
-      "id": "att_12",
-      "rollNo": "ITI/RAI/2025/ELE-014",
-      "geotag": {
-        "isWithinCampus": true,
-        "distanceFromCampusMeters": 61,
-        "lng": 83.39577743102278,
-        "lat": 21.897550184642988,
-        "verified": true,
-        "accuracyMeters": 11
-      },
-      "traineeId": "tr_1",
-      "sessionId": "session_2025_2026"
-    },
-    {
-      "sessionId": "session_2025_2026",
-      "tradeId": "trade_fit",
-      "geotag": {
-        "accuracyMeters": 12,
-        "verified": true,
-        "lng": 83.39556290151994,
-        "lat": 21.897053789771878,
-        "isWithinCampus": true,
-        "distanceFromCampusMeters": 90
-      },
-      "markedBy": "trainee_gps",
-      "date": "2026-10-30",
-      "traineeId": "tr_6",
-      "id": "att_120",
-      "status": "Present",
-      "timestamp": "08:15 AM",
-      "traineeName": "Dinesh Yadav",
-      "rollNo": "ITI/RAI/2025/FIT-001"
-    },
-    {
-      "sessionId": "session_2025_2026",
-      "traineeName": "Neha Agrawal",
-      "tradeId": "trade_copa",
-      "date": "2026-10-08",
-      "geotag": {
-        "distanceFromCampusMeters": 37,
-        "accuracyMeters": 12,
-        "lng": 83.39550555811273,
-        "verified": true,
-        "lat": 21.897754319830995,
-        "isWithinCampus": true
-      },
-      "markedBy": "trainee_gps",
-      "traineeId": "tr_7",
-      "status": "Present",
-      "timestamp": "08:15 AM",
-      "id": "att_121",
-      "rollNo": "ITI/RAI/2025/COP-005"
-    },
-    {
-      "sessionId": "session_2025_2026",
-      "date": "2026-10-09",
-      "geotag": {
-        "accuracyMeters": 19,
-        "verified": true,
-        "distanceFromCampusMeters": 95,
-        "lat": 21.897022140816347,
-        "isWithinCampus": true,
-        "lng": 83.39584667471851
-      },
-      "markedBy": "trainee_gps",
-      "traineeId": "tr_7",
-      "traineeName": "Neha Agrawal",
-      "rollNo": "ITI/RAI/2025/COP-005",
-      "timestamp": "08:15 AM",
-      "tradeId": "trade_copa",
-      "status": "Present",
-      "id": "att_122"
-    },
-    {
-      "date": "2026-10-10",
-      "rollNo": "ITI/RAI/2025/COP-005",
-      "status": "Present",
-      "timestamp": "08:15 AM",
-      "id": "att_123",
-      "traineeName": "Neha Agrawal",
-      "traineeId": "tr_7",
-      "markedBy": "trainee_gps",
-      "sessionId": "session_2025_2026",
-      "geotag": {
-        "lng": 83.39527645092971,
-        "isWithinCampus": true,
-        "lat": 21.897194433512535,
-        "verified": true,
-        "distanceFromCampusMeters": 63,
-        "accuracyMeters": 12
-      },
-      "tradeId": "trade_copa"
-    },
-    {
-      "timestamp": "08:15 AM",
-      "geotag": {
-        "accuracyMeters": 15,
-        "verified": true,
-        "distanceFromCampusMeters": 109,
-        "isWithinCampus": true,
-        "lat": 21.897489282955366,
-        "lng": 83.39578556861186
-      },
-      "date": "2026-10-12",
-      "markedBy": "trainee_gps",
-      "id": "att_124",
-      "sessionId": "session_2025_2026",
-      "tradeId": "trade_copa",
-      "status": "Present",
-      "traineeName": "Neha Agrawal",
-      "rollNo": "ITI/RAI/2025/COP-005",
-      "traineeId": "tr_7"
-    },
-    {
-      "rollNo": "ITI/RAI/2025/COP-005",
-      "traineeId": "tr_7",
-      "sessionId": "session_2025_2026",
-      "status": "Present",
-      "date": "2026-10-13",
-      "traineeName": "Neha Agrawal",
-      "id": "att_125",
-      "markedBy": "trainee_gps",
-      "timestamp": "08:15 AM",
-      "tradeId": "trade_copa",
-      "geotag": {
-        "distanceFromCampusMeters": 68,
-        "isWithinCampus": true,
-        "lat": 21.897199239187565,
-        "lng": 83.39581648490962,
-        "accuracyMeters": 15,
-        "verified": true
-      }
-    },
-    {
-      "status": "Present",
-      "timestamp": "08:15 AM",
-      "rollNo": "ITI/RAI/2025/COP-005",
-      "tradeId": "trade_copa",
-      "markedBy": "trainee_gps",
-      "traineeId": "tr_7",
-      "geotag": {
-        "accuracyMeters": 21,
-        "distanceFromCampusMeters": 25,
-        "verified": true,
-        "isWithinCampus": true,
-        "lat": 21.897844944741205,
-        "lng": 83.39596265782315
-      },
-      "id": "att_126",
-      "traineeName": "Neha Agrawal",
-      "sessionId": "session_2025_2026",
-      "date": "2026-10-14"
-    },
-    {
-      "rollNo": "ITI/RAI/2025/COP-005",
-      "traineeName": "Neha Agrawal",
-      "timestamp": "08:15 AM",
-      "status": "Present",
-      "date": "2026-10-15",
-      "markedBy": "trainee_gps",
-      "traineeId": "tr_7",
-      "id": "att_127",
-      "sessionId": "session_2025_2026",
-      "tradeId": "trade_copa",
-      "geotag": {
-        "accuracyMeters": 19,
-        "lng": 83.39567080559095,
-        "verified": true,
-        "lat": 21.897682954600647,
-        "isWithinCampus": true,
-        "distanceFromCampusMeters": 47
-      }
-    },
-    {
-      "status": "Present",
-      "markedBy": "trainee_gps",
-      "tradeId": "trade_copa",
-      "rollNo": "ITI/RAI/2025/COP-005",
-      "timestamp": "08:15 AM",
-      "geotag": {
-        "accuracyMeters": 13,
-        "verified": true,
-        "lat": 21.897120373730772,
-        "isWithinCampus": true,
-        "distanceFromCampusMeters": 105,
-        "lng": 83.39579576498375
-      },
-      "traineeId": "tr_7",
-      "id": "att_128",
-      "traineeName": "Neha Agrawal",
-      "date": "2026-10-16",
-      "sessionId": "session_2025_2026"
-    },
-    {
-      "tradeId": "trade_copa",
-      "traineeId": "tr_7",
-      "geotag": {
-        "isWithinCampus": true,
-        "distanceFromCampusMeters": 72,
-        "accuracyMeters": 11,
-        "lat": 21.897754400680284,
-        "lng": 83.39519002961677,
-        "verified": true
-      },
-      "sessionId": "session_2025_2026",
-      "rollNo": "ITI/RAI/2025/COP-005",
-      "traineeName": "Neha Agrawal",
-      "id": "att_129",
-      "date": "2026-10-17",
-      "status": "Present",
-      "markedBy": "trainee_gps",
-      "timestamp": "08:15 AM"
-    },
-    {
-      "geotag": {
-        "verified": true,
-        "isWithinCampus": true,
-        "distanceFromCampusMeters": 82,
-        "accuracyMeters": 8,
-        "lat": 21.897676414465504,
-        "lng": 83.39606248082441
-      },
-      "markedBy": "trainee_gps",
-      "timestamp": "08:15 AM",
-      "tradeId": "trade_elec",
-      "status": "Present",
-      "id": "att_13",
-      "traineeName": "Rohan Sahu",
-      "traineeId": "tr_1",
-      "date": "2026-10-22",
-      "sessionId": "session_2025_2026",
-      "rollNo": "ITI/RAI/2025/ELE-014"
-    },
-    {
-      "rollNo": "ITI/RAI/2025/COP-005",
-      "timestamp": "08:15 AM",
-      "status": "Present",
-      "markedBy": "trainee_gps",
-      "tradeId": "trade_copa",
-      "sessionId": "session_2025_2026",
-      "traineeId": "tr_7",
-      "geotag": {
-        "distanceFromCampusMeters": 57,
-        "lat": 21.89749808544537,
-        "isWithinCampus": true,
-        "lng": 83.39516957627004,
-        "verified": true,
-        "accuracyMeters": 21
-      },
-      "traineeName": "Neha Agrawal",
-      "id": "att_130",
-      "date": "2026-10-19"
-    },
-    {
-      "geotag": {
-        "verified": true,
-        "lat": 21.897681572756614,
-        "isWithinCampus": true,
-        "lng": 83.39570182560152,
-        "distanceFromCampusMeters": 101,
-        "accuracyMeters": 11
-      },
-      "traineeId": "tr_7",
-      "sessionId": "session_2025_2026",
-      "status": "Present",
-      "tradeId": "trade_copa",
-      "id": "att_131",
-      "markedBy": "trainee_gps",
-      "date": "2026-10-20",
-      "timestamp": "08:15 AM",
-      "rollNo": "ITI/RAI/2025/COP-005",
-      "traineeName": "Neha Agrawal"
-    },
-    {
-      "id": "att_132",
-      "timestamp": "08:15 AM",
-      "geotag": {
-        "isWithinCampus": true,
-        "lng": 83.3953385489399,
-        "lat": 21.897331088035813,
-        "distanceFromCampusMeters": 60,
-        "accuracyMeters": 12,
-        "verified": true
-      },
-      "rollNo": "ITI/RAI/2025/COP-005",
-      "markedBy": "trainee_gps",
-      "sessionId": "session_2025_2026",
-      "tradeId": "trade_copa",
-      "status": "Present",
-      "date": "2026-10-21",
-      "traineeId": "tr_7",
-      "traineeName": "Neha Agrawal"
-    },
-    {
-      "timestamp": "08:15 AM",
-      "markedBy": "trainee_gps",
-      "status": "Present",
-      "date": "2026-10-22",
-      "tradeId": "trade_copa",
-      "id": "att_133",
-      "rollNo": "ITI/RAI/2025/COP-005",
-      "traineeName": "Neha Agrawal",
-      "sessionId": "session_2025_2026",
-      "geotag": {
-        "distanceFromCampusMeters": 25,
-        "isWithinCampus": true,
-        "accuracyMeters": 21,
-        "lng": 83.3954669671963,
-        "verified": true,
-        "lat": 21.897694570677583
-      },
-      "traineeId": "tr_7"
-    },
-    {
-      "rollNo": "ITI/RAI/2025/COP-005",
-      "sessionId": "session_2025_2026",
-      "traineeName": "Neha Agrawal",
-      "traineeId": "tr_7",
-      "markedBy": "trainee_gps",
-      "status": "Present",
-      "tradeId": "trade_copa",
-      "timestamp": "08:15 AM",
-      "id": "att_134",
-      "geotag": {
-        "distanceFromCampusMeters": 75,
-        "isWithinCampus": true,
-        "lat": 21.897059084540018,
-        "verified": true,
-        "lng": 83.39537025716582,
-        "accuracyMeters": 18
-      },
-      "date": "2026-10-23"
-    },
-    {
-      "traineeName": "Neha Agrawal",
-      "tradeId": "trade_copa",
-      "geotag": {
-        "lng": 83.39533673965605,
-        "verified": true,
-        "lat": 21.897522975788014,
-        "accuracyMeters": 17,
-        "distanceFromCampusMeters": 78,
-        "isWithinCampus": true
-      },
-      "timestamp": "08:15 AM",
-      "date": "2026-10-24",
-      "traineeId": "tr_7",
-      "status": "Present",
-      "markedBy": "trainee_gps",
-      "rollNo": "ITI/RAI/2025/COP-005",
-      "sessionId": "session_2025_2026",
-      "id": "att_135"
-    },
-    {
-      "date": "2026-10-26",
-      "timestamp": "08:15 AM",
-      "markedBy": "trainee_gps",
-      "status": "Present",
-      "id": "att_136",
-      "traineeName": "Neha Agrawal",
-      "rollNo": "ITI/RAI/2025/COP-005",
-      "geotag": {
-        "accuracyMeters": 10,
-        "verified": true,
-        "lat": 21.897140550048025,
-        "distanceFromCampusMeters": 100,
-        "lng": 83.39513133995986,
-        "isWithinCampus": true
-      },
-      "sessionId": "session_2025_2026",
-      "tradeId": "trade_copa",
-      "traineeId": "tr_7"
-    },
-    {
-      "traineeName": "Neha Agrawal",
-      "tradeId": "trade_copa",
-      "date": "2026-10-27",
-      "timestamp": "08:15 AM",
-      "id": "att_137",
-      "geotag": {
-        "verified": true,
-        "isWithinCampus": true,
-        "accuracyMeters": 15,
-        "lat": 21.897891870643043,
-        "distanceFromCampusMeters": 44,
-        "lng": 83.39600752825302
-      },
-      "traineeId": "tr_7",
-      "rollNo": "ITI/RAI/2025/COP-005",
-      "markedBy": "trainee_gps",
-      "sessionId": "session_2025_2026",
-      "status": "Present"
-    },
-    {
-      "tradeId": "trade_copa",
-      "markedBy": "trainee_gps",
-      "traineeName": "Neha Agrawal",
-      "sessionId": "session_2025_2026",
-      "traineeId": "tr_7",
-      "geotag": {
-        "accuracyMeters": 13,
-        "distanceFromCampusMeters": 47,
-        "verified": true,
-        "lat": 21.89781232232331,
-        "isWithinCampus": true,
-        "lng": 83.396081779953
-      },
-      "rollNo": "ITI/RAI/2025/COP-005",
-      "timestamp": "08:15 AM",
-      "id": "att_138",
-      "status": "Present",
-      "date": "2026-10-28"
-    },
-    {
-      "traineeId": "tr_7",
-      "date": "2026-10-29",
-      "sessionId": "session_2025_2026",
-      "traineeName": "Neha Agrawal",
-      "geotag": {
-        "isWithinCampus": true,
-        "lng": 83.39585634269518,
-        "lat": 21.897509672761956,
-        "distanceFromCampusMeters": 43,
-        "verified": true,
-        "accuracyMeters": 20
-      },
-      "id": "att_139",
-      "rollNo": "ITI/RAI/2025/COP-005",
-      "tradeId": "trade_copa",
-      "status": "Present",
-      "timestamp": "08:15 AM",
-      "markedBy": "trainee_gps"
-    },
-    {
-      "traineeId": "tr_1",
-      "date": "2026-10-23",
-      "rollNo": "ITI/RAI/2025/ELE-014",
-      "traineeName": "Rohan Sahu",
-      "status": "Present",
-      "sessionId": "session_2025_2026",
-      "tradeId": "trade_elec",
-      "id": "att_14",
-      "timestamp": "08:15 AM",
-      "geotag": {
-        "distanceFromCampusMeters": 38,
-        "isWithinCampus": true,
-        "lat": 21.89736368215665,
-        "accuracyMeters": 8,
-        "lng": 83.39532898267606,
-        "verified": true
-      },
-      "markedBy": "trainee_gps"
-    },
-    {
-      "traineeName": "Neha Agrawal",
-      "status": "Present",
-      "traineeId": "tr_7",
-      "sessionId": "session_2025_2026",
-      "rollNo": "ITI/RAI/2025/COP-005",
-      "geotag": {
-        "distanceFromCampusMeters": 38,
-        "accuracyMeters": 19,
-        "verified": true,
-        "lng": 83.39546592680591,
-        "isWithinCampus": true,
-        "lat": 21.897781546999195
-      },
-      "id": "att_140",
-      "tradeId": "trade_copa",
-      "markedBy": "trainee_gps",
-      "timestamp": "08:15 AM",
-      "date": "2026-10-30"
-    },
-    {
-      "rollNo": "ITI/RAI/2025/ELE-014",
-      "traineeName": "Rohan Sahu",
-      "sessionId": "session_2025_2026",
-      "status": "Present",
-      "traineeId": "tr_1",
-      "tradeId": "trade_elec",
-      "timestamp": "08:15 AM",
-      "id": "att_15",
-      "date": "2026-10-24",
-      "geotag": {
-        "verified": true,
-        "isWithinCampus": true,
-        "lat": 21.897354676910883,
-        "lng": 83.39512148918386,
-        "distanceFromCampusMeters": 108,
-        "accuracyMeters": 9
-      },
-      "markedBy": "trainee_gps"
-    },
-    {
-      "rollNo": "ITI/RAI/2025/ELE-014",
-      "traineeName": "Rohan Sahu",
-      "date": "2026-10-26",
-      "id": "att_16",
-      "timestamp": "08:15 AM",
-      "status": "Present",
-      "markedBy": "trainee_gps",
-      "traineeId": "tr_1",
-      "sessionId": "session_2025_2026",
-      "geotag": {
-        "isWithinCampus": true,
-        "verified": true,
-        "lat": 21.897511594132446,
-        "lng": 83.39558830462101,
-        "distanceFromCampusMeters": 82,
-        "accuracyMeters": 10
-      },
-      "tradeId": "trade_elec"
-    },
-    {
-      "status": "Present",
-      "id": "att_17",
-      "traineeId": "tr_1",
-      "rollNo": "ITI/RAI/2025/ELE-014",
-      "sessionId": "session_2025_2026",
-      "traineeName": "Rohan Sahu",
-      "markedBy": "trainee_gps",
-      "geotag": {
-        "isWithinCampus": true,
-        "lng": 83.39538710929578,
-        "verified": true,
-        "lat": 21.897618943379857,
-        "accuracyMeters": 18,
-        "distanceFromCampusMeters": 108
-      },
-      "date": "2026-10-27",
-      "tradeId": "trade_elec",
-      "timestamp": "08:15 AM"
-    },
-    {
-      "traineeName": "Rohan Sahu",
-      "id": "att_1793610960738",
-      "remarks": "Verified via Trainee GPS Geotag at ITI Campus",
-      "status": "Present",
-      "tradeId": "trade_elec",
-      "date": "2026-11-02",
-      "timestamp": "09:16 am",
-      "rollNo": "ITI/RAI/2025/ELE-014",
-      "traineeId": "tr_1",
-      "geotag": {
-        "accuracyMeters": 25,
-        "verified": true,
-        "lng": 83.4125,
-        "lat": 21.8965,
-        "isWithinCampus": true,
-        "distanceFromCampusMeters": 113
-      },
-      "markedBy": "trainee_gps",
-      "sessionId": "session_2025_2026"
-    },
-    {
-      "tradeId": "trade_elec",
-      "markedBy": "trainee_gps",
-      "geotag": {
-        "lng": 83.39554363703448,
-        "verified": true,
-        "lat": 21.8975973262562,
-        "distanceFromCampusMeters": 73,
-        "accuracyMeters": 19,
-        "isWithinCampus": true
-      },
-      "date": "2026-10-28",
-      "sessionId": "session_2025_2026",
-      "traineeId": "tr_1",
-      "timestamp": "08:15 AM",
-      "traineeName": "Rohan Sahu",
-      "status": "Present",
-      "id": "att_18",
-      "rollNo": "ITI/RAI/2025/ELE-014"
-    },
-    {
-      "sessionId": "session_2025_2026",
-      "tradeId": "trade_elec",
-      "traineeName": "Rohan Sahu",
-      "date": "2026-10-29",
-      "geotag": {
-        "accuracyMeters": 17,
-        "verified": true,
-        "isWithinCampus": true,
-        "distanceFromCampusMeters": 49,
-        "lat": 21.89707483478622,
-        "lng": 83.39523559979519
-      },
-      "markedBy": "trainee_gps",
-      "traineeId": "tr_1",
-      "status": "Present",
-      "timestamp": "08:15 AM",
-      "id": "att_19",
-      "rollNo": "ITI/RAI/2025/ELE-014"
-    },
-    {
-      "rollNo": "ITI/RAI/2025/ELE-014",
-      "id": "att_2",
-      "traineeId": "tr_1",
-      "sessionId": "session_2025_2026",
-      "markedBy": "trainee_gps",
-      "status": "Present",
-      "tradeId": "trade_elec",
-      "traineeName": "Rohan Sahu",
-      "date": "2026-10-09",
-      "geotag": {
-        "lat": 21.897645134166595,
-        "lng": 83.39511365785589,
-        "isWithinCampus": true,
-        "accuracyMeters": 9,
-        "verified": true,
-        "distanceFromCampusMeters": 67
-      },
-      "timestamp": "08:15 AM"
-    },
-    {
-      "traineeName": "Rohan Sahu",
-      "timestamp": "08:15 AM",
-      "tradeId": "trade_elec",
-      "markedBy": "trainee_gps",
-      "geotag": {
-        "accuracyMeters": 8,
-        "lng": 83.39553806156857,
-        "lat": 21.897848542847555,
-        "distanceFromCampusMeters": 35,
-        "verified": true,
-        "isWithinCampus": true
-      },
-      "id": "att_20",
-      "date": "2026-10-30",
-      "rollNo": "ITI/RAI/2025/ELE-014",
-      "sessionId": "session_2025_2026",
-      "status": "Present",
-      "traineeId": "tr_1"
-    },
-    {
-      "traineeName": "Pooja Kashyap",
-      "status": "Present",
-      "traineeId": "tr_2",
-      "sessionId": "session_2025_2026",
-      "rollNo": "ITI/RAI/2025/ELE-015",
-      "geotag": {
-        "isWithinCampus": true,
-        "verified": true,
-        "lat": 21.89718242497107,
-        "accuracyMeters": 9,
-        "distanceFromCampusMeters": 98,
-        "lng": 83.39593889597685
-      },
-      "id": "att_21",
-      "tradeId": "trade_elec",
-      "markedBy": "trainee_gps",
-      "timestamp": "08:15 AM",
-      "date": "2026-10-08"
-    },
-    {
-      "date": "2026-10-09",
-      "geotag": {
-        "verified": true,
-        "accuracyMeters": 19,
-        "lat": 21.897754471219844,
-        "isWithinCampus": true,
-        "lng": 83.39541579570209,
-        "distanceFromCampusMeters": 27
-      },
-      "sessionId": "session_2025_2026",
-      "traineeId": "tr_2",
-      "traineeName": "Pooja Kashyap",
-      "tradeId": "trade_elec",
-      "timestamp": "08:15 AM",
-      "status": "Present",
-      "markedBy": "trainee_gps",
-      "rollNo": "ITI/RAI/2025/ELE-015",
-      "id": "att_22"
-    },
-    {
-      "traineeName": "Pooja Kashyap",
-      "id": "att_23",
-      "traineeId": "tr_2",
-      "geotag": {
-        "verified": true,
-        "distanceFromCampusMeters": 29,
-        "isWithinCampus": true,
-        "lat": 21.897631329733958,
-        "lng": 83.39522474925923,
-        "accuracyMeters": 9
-      },
-      "date": "2026-10-10",
-      "sessionId": "session_2025_2026",
-      "tradeId": "trade_elec",
-      "status": "Present",
-      "rollNo": "ITI/RAI/2025/ELE-015",
-      "markedBy": "trainee_gps",
-      "timestamp": "08:15 AM"
-    },
-    {
-      "timestamp": "08:15 AM",
-      "tradeId": "trade_elec",
-      "id": "att_24",
-      "geotag": {
-        "distanceFromCampusMeters": 46,
-        "lng": 83.39562583173289,
-        "isWithinCampus": true,
-        "verified": true,
-        "lat": 21.897700179582042,
-        "accuracyMeters": 20
-      },
-      "date": "2026-10-12",
-      "markedBy": "trainee_gps",
-      "sessionId": "session_2025_2026",
-      "status": "Present",
-      "traineeId": "tr_2",
-      "traineeName": "Pooja Kashyap",
-      "rollNo": "ITI/RAI/2025/ELE-015"
-    },
-    {
-      "tradeId": "trade_elec",
-      "timestamp": "08:15 AM",
-      "remarks": "Doctor prescription attached",
-      "traineeName": "Pooja Kashyap",
-      "rollNo": "ITI/RAI/2025/ELE-015",
-      "id": "att_25",
-      "sessionId": "session_2025_2026",
-      "status": "Medical Leave",
-      "markedBy": "trainee_gps",
-      "date": "2026-10-13",
-      "traineeId": "tr_2"
-    },
-    {
-      "traineeName": "Pooja Kashyap",
-      "traineeId": "tr_2",
-      "status": "Present",
-      "id": "att_26",
-      "date": "2026-10-14",
-      "tradeId": "trade_elec",
-      "rollNo": "ITI/RAI/2025/ELE-015",
-      "sessionId": "session_2025_2026",
-      "geotag": {
-        "verified": true,
-        "accuracyMeters": 21,
-        "distanceFromCampusMeters": 31,
-        "lat": 21.897828787238403,
-        "isWithinCampus": true,
-        "lng": 83.396049815528
-      },
-      "timestamp": "08:15 AM",
-      "markedBy": "trainee_gps"
-    },
-    {
-      "tradeId": "trade_elec",
-      "geotag": {
-        "distanceFromCampusMeters": 45,
-        "isWithinCampus": true,
-        "lat": 21.896967849754475,
-        "accuracyMeters": 14,
-        "lng": 83.39569735782172,
-        "verified": true
-      },
-      "timestamp": "08:15 AM",
-      "id": "att_27",
-      "markedBy": "trainee_gps",
-      "status": "Present",
-      "date": "2026-10-15",
-      "sessionId": "session_2025_2026",
-      "traineeId": "tr_2",
-      "rollNo": "ITI/RAI/2025/ELE-015",
-      "traineeName": "Pooja Kashyap"
-    },
-    {
-      "date": "2026-10-16",
-      "timestamp": "08:15 AM",
-      "geotag": {
-        "lat": 21.89694237130681,
-        "lng": 83.3952320540986,
-        "accuracyMeters": 10,
-        "isWithinCampus": true,
-        "distanceFromCampusMeters": 114,
-        "verified": true
-      },
-      "markedBy": "trainee_gps",
-      "id": "att_28",
-      "tradeId": "trade_elec",
-      "status": "Present",
-      "sessionId": "session_2025_2026",
-      "traineeId": "tr_2",
-      "traineeName": "Pooja Kashyap",
-      "rollNo": "ITI/RAI/2025/ELE-015"
-    },
-    {
-      "traineeId": "tr_2",
-      "traineeName": "Pooja Kashyap",
-      "status": "Present",
-      "date": "2026-10-17",
-      "id": "att_29",
-      "tradeId": "trade_elec",
-      "rollNo": "ITI/RAI/2025/ELE-015",
-      "sessionId": "session_2025_2026",
-      "geotag": {
-        "isWithinCampus": true,
-        "verified": true,
-        "lng": 83.39597118079222,
-        "distanceFromCampusMeters": 29,
-        "accuracyMeters": 21,
-        "lat": 21.896935176487094
-      },
-      "timestamp": "08:15 AM",
-      "markedBy": "trainee_gps"
-    },
-    {
-      "traineeId": "tr_1",
-      "traineeName": "Rohan Sahu",
-      "date": "2026-10-10",
-      "rollNo": "ITI/RAI/2025/ELE-014",
-      "status": "Present",
-      "sessionId": "session_2025_2026",
-      "tradeId": "trade_elec",
-      "id": "att_3",
-      "markedBy": "trainee_gps",
-      "timestamp": "08:15 AM",
-      "geotag": {
-        "isWithinCampus": true,
-        "distanceFromCampusMeters": 29,
-        "verified": true,
-        "lng": 83.39599356304264,
-        "accuracyMeters": 10,
-        "lat": 21.897444183601646
-      }
-    },
-    {
-      "date": "2026-10-19",
-      "timestamp": "08:15 AM",
-      "markedBy": "trainee_gps",
-      "rollNo": "ITI/RAI/2025/ELE-015",
-      "status": "Present",
-      "id": "att_30",
-      "tradeId": "trade_elec",
-      "traineeName": "Pooja Kashyap",
-      "sessionId": "session_2025_2026",
-      "traineeId": "tr_2",
-      "geotag": {
-        "accuracyMeters": 8,
-        "lng": 83.39556077617804,
-        "lat": 21.897670408893525,
-        "distanceFromCampusMeters": 46,
-        "verified": true,
-        "isWithinCampus": true
-      }
-    },
-    {
-      "sessionId": "session_2025_2026",
-      "date": "2026-10-20",
-      "traineeName": "Pooja Kashyap",
-      "traineeId": "tr_2",
-      "tradeId": "trade_elec",
-      "status": "Half-Day Leave",
-      "timestamp": "08:15 AM",
-      "id": "att_31",
-      "rollNo": "ITI/RAI/2025/ELE-015",
-      "markedBy": "trainee_gps"
-    },
-    {
-      "date": "2026-10-21",
-      "traineeId": "tr_2",
-      "rollNo": "ITI/RAI/2025/ELE-015",
-      "sessionId": "session_2025_2026",
-      "status": "Present",
-      "id": "att_32",
-      "traineeName": "Pooja Kashyap",
-      "markedBy": "trainee_gps",
-      "geotag": {
-        "verified": true,
-        "isWithinCampus": true,
-        "distanceFromCampusMeters": 47,
-        "lat": 21.89782059300547,
-        "lng": 83.39551725704041,
-        "accuracyMeters": 18
-      },
-      "timestamp": "08:15 AM",
-      "tradeId": "trade_elec"
-    },
-    {
-      "tradeId": "trade_elec",
-      "traineeId": "tr_2",
-      "geotag": {
-        "distanceFromCampusMeters": 35,
-        "lng": 83.39608759035407,
-        "accuracyMeters": 11,
-        "lat": 21.897791650211133,
-        "isWithinCampus": true,
-        "verified": true
-      },
-      "date": "2026-10-22",
-      "sessionId": "session_2025_2026",
-      "markedBy": "trainee_gps",
-      "status": "Present",
-      "timestamp": "08:15 AM",
-      "traineeName": "Pooja Kashyap",
-      "rollNo": "ITI/RAI/2025/ELE-015",
-      "id": "att_33"
-    },
-    {
-      "markedBy": "trainee_gps",
-      "status": "Present",
-      "timestamp": "08:15 AM",
-      "rollNo": "ITI/RAI/2025/ELE-015",
-      "sessionId": "session_2025_2026",
-      "geotag": {
-        "accuracyMeters": 9,
-        "verified": true,
-        "distanceFromCampusMeters": 98,
-        "lat": 21.897526744746298,
-        "isWithinCampus": true,
-        "lng": 83.39551798005557
-      },
-      "tradeId": "trade_elec",
-      "id": "att_34",
-      "traineeId": "tr_2",
-      "date": "2026-10-23",
-      "traineeName": "Pooja Kashyap"
-    },
-    {
-      "tradeId": "trade_elec",
-      "traineeName": "Pooja Kashyap",
-      "geotag": {
-        "distanceFromCampusMeters": 44,
-        "isWithinCampus": true,
-        "lng": 83.39573974167482,
-        "accuracyMeters": 21,
-        "lat": 21.897214326832138,
-        "verified": true
-      },
-      "traineeId": "tr_2",
-      "sessionId": "session_2025_2026",
-      "id": "att_35",
-      "status": "Present",
-      "rollNo": "ITI/RAI/2025/ELE-015",
-      "markedBy": "trainee_gps",
-      "timestamp": "08:15 AM",
-      "date": "2026-10-24"
-    },
-    {
-      "geotag": {
-        "accuracyMeters": 13,
-        "verified": true,
-        "distanceFromCampusMeters": 31,
-        "lat": 21.897133716838564,
-        "isWithinCampus": true,
-        "lng": 83.39517510830424
-      },
-      "traineeName": "Pooja Kashyap",
-      "id": "att_36",
-      "timestamp": "08:15 AM",
-      "tradeId": "trade_elec",
-      "status": "Present",
-      "markedBy": "trainee_gps",
-      "date": "2026-10-26",
-      "traineeId": "tr_2",
-      "sessionId": "session_2025_2026",
-      "rollNo": "ITI/RAI/2025/ELE-015"
-    },
-    {
-      "traineeName": "Pooja Kashyap",
-      "id": "att_37",
-      "traineeId": "tr_2",
-      "geotag": {
-        "verified": true,
-        "accuracyMeters": 10,
-        "lng": 83.39599321540193,
-        "lat": 21.89705635304137,
-        "distanceFromCampusMeters": 87,
-        "isWithinCampus": true
-      },
-      "sessionId": "session_2025_2026",
-      "date": "2026-10-27",
-      "rollNo": "ITI/RAI/2025/ELE-015",
-      "tradeId": "trade_elec",
-      "status": "Present",
-      "markedBy": "trainee_gps",
-      "timestamp": "08:15 AM"
-    },
-    {
-      "traineeId": "tr_2",
-      "status": "Present",
-      "tradeId": "trade_elec",
-      "sessionId": "session_2025_2026",
-      "date": "2026-10-28",
-      "traineeName": "Pooja Kashyap",
-      "rollNo": "ITI/RAI/2025/ELE-015",
-      "markedBy": "trainee_gps",
-      "geotag": {
-        "verified": true,
-        "accuracyMeters": 11,
-        "isWithinCampus": true,
-        "lng": 83.39598914681893,
-        "lat": 21.89719985270831,
-        "distanceFromCampusMeters": 106
-      },
-      "timestamp": "08:15 AM",
-      "id": "att_38"
-    },
-    {
-      "tradeId": "trade_elec",
-      "sessionId": "session_2025_2026",
-      "geotag": {
-        "isWithinCampus": true,
-        "lng": 83.39606250257175,
-        "distanceFromCampusMeters": 99,
-        "lat": 21.89773285670934,
-        "verified": true,
-        "accuracyMeters": 8
-      },
-      "markedBy": "trainee_gps",
-      "date": "2026-10-29",
-      "traineeId": "tr_2",
-      "id": "att_39",
-      "timestamp": "08:15 AM",
-      "traineeName": "Pooja Kashyap",
-      "status": "Present",
-      "rollNo": "ITI/RAI/2025/ELE-015"
-    },
-    {
-      "geotag": {
-        "isWithinCampus": true,
-        "verified": true,
-        "distanceFromCampusMeters": 95,
-        "accuracyMeters": 21,
-        "lng": 83.39598148586096,
-        "lat": 21.897604104847225
-      },
-      "sessionId": "session_2025_2026",
-      "traineeId": "tr_1",
-      "traineeName": "Rohan Sahu",
-      "date": "2026-10-12",
-      "tradeId": "trade_elec",
-      "timestamp": "08:15 AM",
-      "markedBy": "trainee_gps",
-      "status": "Present",
-      "id": "att_4",
-      "rollNo": "ITI/RAI/2025/ELE-014"
-    },
-    {
-      "timestamp": "08:15 AM",
-      "markedBy": "trainee_gps",
-      "geotag": {
-        "isWithinCampus": true,
-        "lat": 21.89692803955264,
-        "lng": 83.39574346175704,
-        "distanceFromCampusMeters": 79,
-        "verified": true,
-        "accuracyMeters": 17
-      },
-      "traineeName": "Pooja Kashyap",
-      "rollNo": "ITI/RAI/2025/ELE-015",
-      "date": "2026-10-30",
-      "tradeId": "trade_elec",
-      "sessionId": "session_2025_2026",
-      "status": "Present",
-      "traineeId": "tr_2",
-      "id": "att_40"
-    },
-    {
-      "traineeId": "tr_3",
-      "sessionId": "session_2025_2026",
-      "date": "2026-10-08",
-      "traineeName": "Amit Bhagat",
-      "rollNo": "ITI/RAI/2025/ELE-016",
-      "tradeId": "trade_elec",
-      "id": "att_41",
-      "timestamp": "10:01 AM (Cutoff)",
-      "status": "Absent",
-      "markedBy": "system_auto_absent"
-    },
-    {
-      "tradeId": "trade_elec",
-      "timestamp": "08:15 AM",
-      "traineeName": "Amit Bhagat",
-      "date": "2026-10-09",
-      "geotag": {
-        "lng": 83.39573374605699,
-        "distanceFromCampusMeters": 85,
-        "accuracyMeters": 15,
-        "lat": 21.896930578396557,
-        "verified": true,
-        "isWithinCampus": true
-      },
-      "traineeId": "tr_3",
-      "rollNo": "ITI/RAI/2025/ELE-016",
-      "markedBy": "trainee_gps",
-      "sessionId": "session_2025_2026",
-      "id": "att_42",
-      "status": "Present"
-    },
-    {
-      "tradeId": "trade_elec",
-      "traineeId": "tr_3",
-      "geotag": {
-        "accuracyMeters": 12,
-        "distanceFromCampusMeters": 33,
-        "lat": 21.89736954242483,
-        "lng": 83.39531340273417,
-        "verified": true,
-        "isWithinCampus": true
-      },
-      "markedBy": "trainee_gps",
-      "id": "att_43",
-      "sessionId": "session_2025_2026",
-      "status": "Present",
-      "timestamp": "08:15 AM",
-      "date": "2026-10-10",
-      "rollNo": "ITI/RAI/2025/ELE-016",
-      "traineeName": "Amit Bhagat"
-    },
-    {
-      "traineeId": "tr_3",
-      "status": "Absent",
-      "tradeId": "trade_elec",
-      "rollNo": "ITI/RAI/2025/ELE-016",
-      "sessionId": "session_2025_2026",
-      "date": "2026-10-12",
-      "traineeName": "Amit Bhagat",
-      "markedBy": "system_auto_absent",
-      "id": "att_44",
-      "timestamp": "10:01 AM (Cutoff)"
-    },
-    {
-      "rollNo": "ITI/RAI/2025/ELE-016",
-      "status": "Present",
-      "markedBy": "trainee_gps",
-      "timestamp": "08:15 AM",
-      "id": "att_45",
-      "traineeId": "tr_3",
-      "traineeName": "Amit Bhagat",
-      "geotag": {
-        "verified": true,
-        "accuracyMeters": 15,
-        "isWithinCampus": true,
-        "distanceFromCampusMeters": 85,
-        "lat": 21.897018604931656,
-        "lng": 83.3953228310336
-      },
-      "sessionId": "session_2025_2026",
-      "tradeId": "trade_elec",
-      "date": "2026-10-13"
-    },
-    {
-      "traineeId": "tr_3",
-      "sessionId": "session_2025_2026",
-      "date": "2026-10-14",
-      "traineeName": "Amit Bhagat",
-      "rollNo": "ITI/RAI/2025/ELE-016",
-      "tradeId": "trade_elec",
-      "id": "att_46",
-      "remarks": "Approved Casual Leave",
-      "timestamp": "08:00 AM",
-      "status": "CL",
-      "markedBy": "officer_manual"
-    },
-    {
-      "date": "2026-10-15",
-      "traineeId": "tr_3",
-      "traineeName": "Amit Bhagat",
-      "markedBy": "system_auto_absent",
-      "id": "att_47",
-      "sessionId": "session_2025_2026",
-      "tradeId": "trade_elec",
-      "rollNo": "ITI/RAI/2025/ELE-016",
-      "timestamp": "10:01 AM (Cutoff)",
-      "status": "Absent"
-    },
-    {
-      "date": "2026-10-16",
-      "timestamp": "08:15 AM",
-      "rollNo": "ITI/RAI/2025/ELE-016",
-      "id": "att_48",
-      "markedBy": "trainee_gps",
-      "status": "Present",
-      "sessionId": "session_2025_2026",
-      "traineeName": "Amit Bhagat",
-      "geotag": {
-        "lat": 21.89726718611761,
-        "lng": 83.39522459527375,
-        "isWithinCampus": true,
-        "distanceFromCampusMeters": 56,
-        "verified": true,
-        "accuracyMeters": 11
-      },
-      "traineeId": "tr_3",
-      "tradeId": "trade_elec"
-    },
-    {
-      "date": "2026-10-17",
-      "geotag": {
-        "lat": 21.897689375881004,
-        "lng": 83.39595845902988,
-        "distanceFromCampusMeters": 53,
-        "verified": true,
-        "accuracyMeters": 20,
-        "isWithinCampus": true
-      },
-      "id": "att_49",
-      "timestamp": "08:15 AM",
-      "markedBy": "trainee_gps",
-      "tradeId": "trade_elec",
-      "status": "Present",
-      "traineeId": "tr_3",
-      "sessionId": "session_2025_2026",
-      "traineeName": "Amit Bhagat",
-      "rollNo": "ITI/RAI/2025/ELE-016"
-    },
-    {
-      "timestamp": "08:15 AM",
-      "status": "Present",
-      "markedBy": "trainee_gps",
-      "tradeId": "trade_elec",
-      "rollNo": "ITI/RAI/2025/ELE-014",
-      "date": "2026-10-13",
-      "sessionId": "session_2025_2026",
-      "id": "att_5",
-      "geotag": {
-        "accuracyMeters": 10,
-        "distanceFromCampusMeters": 96,
-        "isWithinCampus": true,
-        "lng": 83.39511781935266,
-        "verified": true,
-        "lat": 21.897267077042862
-      },
-      "traineeId": "tr_1",
-      "traineeName": "Rohan Sahu"
-    },
-    {
-      "tradeId": "trade_elec",
-      "traineeName": "Amit Bhagat",
-      "markedBy": "system_auto_absent",
-      "id": "att_50",
-      "timestamp": "10:01 AM (Cutoff)",
-      "status": "Absent",
-      "traineeId": "tr_3",
-      "date": "2026-10-19",
-      "rollNo": "ITI/RAI/2025/ELE-016",
-      "sessionId": "session_2025_2026"
-    },
-    {
-      "status": "CL",
-      "id": "att_51",
-      "traineeId": "tr_3",
-      "remarks": "Approved Casual Leave",
-      "traineeName": "Amit Bhagat",
-      "sessionId": "session_2025_2026",
-      "tradeId": "trade_elec",
-      "rollNo": "ITI/RAI/2025/ELE-016",
-      "markedBy": "officer_manual",
-      "date": "2026-10-20",
-      "timestamp": "08:00 AM"
-    },
-    {
-      "markedBy": "trainee_gps",
-      "traineeName": "Amit Bhagat",
-      "sessionId": "session_2025_2026",
-      "status": "Present",
-      "traineeId": "tr_3",
-      "tradeId": "trade_elec",
-      "rollNo": "ITI/RAI/2025/ELE-016",
-      "date": "2026-10-21",
-      "timestamp": "08:15 AM",
-      "geotag": {
-        "verified": true,
-        "accuracyMeters": 11,
-        "distanceFromCampusMeters": 26,
-        "lat": 21.897830310647088,
-        "isWithinCampus": true,
-        "lng": 83.39587354091057
-      },
-      "id": "att_52"
-    },
-    {
-      "traineeName": "Amit Bhagat",
-      "date": "2026-10-22",
-      "timestamp": "10:01 AM (Cutoff)",
-      "id": "att_53",
-      "tradeId": "trade_elec",
-      "status": "Absent",
-      "traineeId": "tr_3",
-      "sessionId": "session_2025_2026",
-      "markedBy": "system_auto_absent",
-      "rollNo": "ITI/RAI/2025/ELE-016"
-    },
-    {
-      "traineeName": "Amit Bhagat",
-      "sessionId": "session_2025_2026",
-      "date": "2026-10-23",
-      "geotag": {
-        "verified": true,
-        "accuracyMeters": 13,
-        "distanceFromCampusMeters": 96,
-        "isWithinCampus": true,
-        "lng": 83.39581216009645,
-        "lat": 21.89722388941978
-      },
-      "traineeId": "tr_3",
-      "markedBy": "trainee_gps",
-      "rollNo": "ITI/RAI/2025/ELE-016",
-      "tradeId": "trade_elec",
-      "timestamp": "08:15 AM",
-      "id": "att_54",
-      "status": "Present"
-    },
-    {
-      "traineeName": "Amit Bhagat",
-      "traineeId": "tr_3",
-      "date": "2026-10-24",
-      "tradeId": "trade_elec",
-      "geotag": {
-        "verified": true,
-        "lng": 83.39566546030179,
-        "lat": 21.89747765724823,
-        "accuracyMeters": 8,
-        "isWithinCampus": true,
-        "distanceFromCampusMeters": 61
-      },
-      "sessionId": "session_2025_2026",
-      "markedBy": "trainee_gps",
-      "rollNo": "ITI/RAI/2025/ELE-016",
-      "id": "att_55",
-      "timestamp": "08:15 AM",
-      "status": "Present"
-    },
-    {
-      "id": "att_56",
-      "status": "Absent",
-      "date": "2026-10-26",
-      "rollNo": "ITI/RAI/2025/ELE-016",
-      "timestamp": "10:01 AM (Cutoff)",
-      "markedBy": "system_auto_absent",
-      "traineeId": "tr_3",
-      "traineeName": "Amit Bhagat",
-      "sessionId": "session_2025_2026",
-      "tradeId": "trade_elec"
-    },
-    {
-      "tradeId": "trade_elec",
-      "geotag": {
-        "accuracyMeters": 10,
-        "lat": 21.89691038329367,
-        "lng": 83.3959097047384,
-        "distanceFromCampusMeters": 79,
-        "isWithinCampus": true,
-        "verified": true
-      },
-      "traineeName": "Amit Bhagat",
-      "date": "2026-10-27",
-      "timestamp": "08:15 AM",
-      "id": "att_57",
-      "traineeId": "tr_3",
-      "status": "Present",
-      "markedBy": "trainee_gps",
-      "sessionId": "session_2025_2026",
-      "rollNo": "ITI/RAI/2025/ELE-016"
-    },
-    {
-      "timestamp": "08:15 AM",
-      "markedBy": "trainee_gps",
-      "geotag": {
-        "accuracyMeters": 12,
-        "verified": true,
-        "distanceFromCampusMeters": 107,
-        "isWithinCampus": true,
-        "lat": 21.897461868801717,
-        "lng": 83.395331921215
-      },
-      "traineeName": "Amit Bhagat",
-      "rollNo": "ITI/RAI/2025/ELE-016",
-      "tradeId": "trade_elec",
-      "date": "2026-10-28",
-      "sessionId": "session_2025_2026",
-      "status": "Present",
-      "id": "att_58",
-      "traineeId": "tr_3"
-    },
-    {
-      "sessionId": "session_2025_2026",
-      "traineeName": "Amit Bhagat",
-      "tradeId": "trade_elec",
-      "date": "2026-10-29",
-      "traineeId": "tr_3",
-      "id": "att_59",
-      "rollNo": "ITI/RAI/2025/ELE-016",
-      "timestamp": "10:01 AM (Cutoff)",
-      "status": "Absent",
-      "markedBy": "system_auto_absent"
-    },
-    {
-      "traineeName": "Rohan Sahu",
-      "traineeId": "tr_1",
-      "date": "2026-10-14",
-      "tradeId": "trade_elec",
-      "geotag": {
-        "lat": 21.897061639665917,
-        "lng": 83.39541502922894,
-        "isWithinCampus": true,
-        "accuracyMeters": 8,
-        "distanceFromCampusMeters": 102,
-        "verified": true
-      },
-      "sessionId": "session_2025_2026",
-      "markedBy": "trainee_gps",
-      "rollNo": "ITI/RAI/2025/ELE-014",
-      "id": "att_6",
-      "timestamp": "08:15 AM",
-      "status": "Present"
-    },
-    {
-      "traineeId": "tr_3",
-      "date": "2026-10-30",
-      "rollNo": "ITI/RAI/2025/ELE-016",
-      "traineeName": "Amit Bhagat",
-      "status": "Present",
-      "tradeId": "trade_elec",
-      "sessionId": "session_2025_2026",
-      "id": "att_60",
-      "timestamp": "08:15 AM",
-      "geotag": {
-        "lat": 21.89748898367329,
-        "isWithinCampus": true,
-        "lng": 83.39601011161636,
-        "distanceFromCampusMeters": 111,
-        "accuracyMeters": 16,
-        "verified": true
-      },
-      "markedBy": "trainee_gps"
-    },
-    {
-      "date": "2026-10-08",
-      "tradeId": "trade_elec",
-      "timestamp": "08:15 AM",
-      "id": "att_61",
-      "geotag": {
-        "accuracyMeters": 20,
-        "lng": 83.3952036624117,
-        "lat": 21.897622874990013,
-        "distanceFromCampusMeters": 85,
-        "verified": true,
-        "isWithinCampus": true
-      },
-      "markedBy": "trainee_gps",
-      "sessionId": "session_2025_2026",
-      "traineeName": "Kavita Patel",
-      "rollNo": "ITI/RAI/2025/ELE-017",
-      "status": "Present",
-      "traineeId": "tr_4"
-    },
-    {
-      "geotag": {
-        "isWithinCampus": true,
-        "lat": 21.897243551054693,
-        "lng": 83.39537824613257,
-        "distanceFromCampusMeters": 114,
-        "verified": true,
-        "accuracyMeters": 19
-      },
-      "tradeId": "trade_elec",
-      "sessionId": "session_2025_2026",
-      "id": "att_62",
-      "markedBy": "trainee_gps",
-      "traineeName": "Kavita Patel",
-      "traineeId": "tr_4",
-      "status": "Present",
-      "date": "2026-10-09",
-      "timestamp": "08:15 AM",
-      "rollNo": "ITI/RAI/2025/ELE-017"
-    },
-    {
-      "geotag": {
-        "isWithinCampus": true,
-        "verified": true,
-        "lat": 21.897660472055485,
-        "lng": 83.39566365521816,
-        "distanceFromCampusMeters": 30,
-        "accuracyMeters": 20
-      },
-      "id": "att_63",
-      "traineeId": "tr_4",
-      "markedBy": "trainee_gps",
-      "sessionId": "session_2025_2026",
-      "tradeId": "trade_elec",
-      "traineeName": "Kavita Patel",
-      "status": "Present",
-      "rollNo": "ITI/RAI/2025/ELE-017",
-      "date": "2026-10-10",
-      "timestamp": "08:15 AM"
-    },
-    {
-      "geotag": {
-        "distanceFromCampusMeters": 89,
-        "accuracyMeters": 18,
-        "verified": true,
-        "lng": 83.3956197197331,
-        "lat": 21.89743742247457,
-        "isWithinCampus": true
-      },
-      "tradeId": "trade_elec",
-      "sessionId": "session_2025_2026",
-      "traineeName": "Kavita Patel",
-      "id": "att_64",
-      "traineeId": "tr_4",
-      "status": "Present",
-      "date": "2026-10-12",
-      "timestamp": "08:15 AM",
-      "rollNo": "ITI/RAI/2025/ELE-017",
-      "markedBy": "trainee_gps"
-    },
-    {
-      "date": "2026-10-13",
-      "timestamp": "08:15 AM",
-      "rollNo": "ITI/RAI/2025/ELE-017",
-      "id": "att_65",
-      "traineeName": "Kavita Patel",
-      "markedBy": "trainee_gps",
-      "status": "Present",
-      "tradeId": "trade_elec",
-      "sessionId": "session_2025_2026",
-      "traineeId": "tr_4",
-      "geotag": {
-        "distanceFromCampusMeters": 45,
-        "accuracyMeters": 15,
-        "lng": 83.39598617384354,
-        "lat": 21.897565649636853,
-        "verified": true,
-        "isWithinCampus": true
-      }
-    },
-    {
-      "sessionId": "session_2025_2026",
-      "rollNo": "ITI/RAI/2025/ELE-017",
-      "traineeName": "Kavita Patel",
-      "date": "2026-10-14",
-      "traineeId": "tr_4",
-      "id": "att_66",
-      "status": "Present",
-      "timestamp": "08:15 AM",
-      "markedBy": "trainee_gps",
-      "tradeId": "trade_elec",
-      "geotag": {
-        "isWithinCampus": true,
-        "lat": 21.897117746200752,
-        "lng": 83.3952668714469,
-        "distanceFromCampusMeters": 83,
-        "accuracyMeters": 8,
-        "verified": true
-      }
-    },
-    {
-      "id": "att_67",
-      "tradeId": "trade_elec",
-      "traineeName": "Kavita Patel",
-      "geotag": {
-        "accuracyMeters": 8,
-        "verified": true,
-        "lat": 21.89726227833684,
-        "isWithinCampus": true,
-        "lng": 83.3955294430717,
-        "distanceFromCampusMeters": 66
-      },
-      "markedBy": "trainee_gps",
-      "timestamp": "08:15 AM",
-      "date": "2026-10-15",
-      "rollNo": "ITI/RAI/2025/ELE-017",
-      "traineeId": "tr_4",
-      "status": "Present",
-      "sessionId": "session_2025_2026"
-    },
-    {
-      "date": "2026-10-16",
-      "id": "att_68",
-      "rollNo": "ITI/RAI/2025/ELE-017",
-      "timestamp": "08:15 AM",
-      "status": "Present",
-      "markedBy": "trainee_gps",
-      "tradeId": "trade_elec",
-      "traineeId": "tr_4",
-      "traineeName": "Kavita Patel",
-      "sessionId": "session_2025_2026",
-      "geotag": {
-        "distanceFromCampusMeters": 65,
-        "isWithinCampus": true,
-        "verified": true,
-        "accuracyMeters": 11,
-        "lat": 21.897563086875284,
-        "lng": 83.39516571374071
-      }
-    },
-    {
-      "timestamp": "08:15 AM",
-      "status": "Present",
-      "markedBy": "trainee_gps",
-      "traineeName": "Kavita Patel",
-      "id": "att_69",
-      "rollNo": "ITI/RAI/2025/ELE-017",
-      "geotag": {
-        "verified": true,
-        "isWithinCampus": true,
-        "accuracyMeters": 17,
-        "lng": 83.39547147922755,
-        "lat": 21.897601274035846,
-        "distanceFromCampusMeters": 56
-      },
-      "date": "2026-10-17",
-      "sessionId": "session_2025_2026",
-      "tradeId": "trade_elec",
-      "traineeId": "tr_4"
-    },
-    {
-      "date": "2026-10-15",
-      "tradeId": "trade_elec",
-      "traineeId": "tr_1",
-      "sessionId": "session_2025_2026",
-      "geotag": {
-        "lat": 21.89699351703859,
-        "lng": 83.39594688175644,
-        "isWithinCampus": true,
-        "verified": true,
-        "accuracyMeters": 15,
-        "distanceFromCampusMeters": 101
-      },
-      "markedBy": "trainee_gps",
-      "rollNo": "ITI/RAI/2025/ELE-014",
-      "id": "att_7",
-      "status": "Present",
-      "timestamp": "08:15 AM",
-      "traineeName": "Rohan Sahu"
-    },
-    {
-      "tradeId": "trade_elec",
-      "geotag": {
-        "accuracyMeters": 18,
-        "lng": 83.39534169613495,
-        "lat": 21.8971714565585,
-        "isWithinCampus": true,
-        "verified": true,
-        "distanceFromCampusMeters": 84
-      },
-      "traineeName": "Kavita Patel",
-      "id": "att_70",
-      "date": "2026-10-19",
-      "markedBy": "trainee_gps",
-      "timestamp": "08:15 AM",
-      "status": "Present",
-      "traineeId": "tr_4",
-      "sessionId": "session_2025_2026",
-      "rollNo": "ITI/RAI/2025/ELE-017"
-    },
-    {
-      "geotag": {
-        "isWithinCampus": true,
-        "verified": true,
-        "distanceFromCampusMeters": 97,
-        "accuracyMeters": 19,
-        "lng": 83.39575357786072,
-        "lat": 21.897363531064137
-      },
-      "timestamp": "08:15 AM",
-      "status": "Present",
-      "tradeId": "trade_elec",
-      "markedBy": "trainee_gps",
-      "date": "2026-10-20",
-      "sessionId": "session_2025_2026",
-      "traineeName": "Kavita Patel",
-      "id": "att_71",
-      "rollNo": "ITI/RAI/2025/ELE-017",
-      "traineeId": "tr_4"
-    },
-    {
-      "markedBy": "trainee_gps",
-      "date": "2026-10-21",
-      "rollNo": "ITI/RAI/2025/ELE-017",
-      "timestamp": "08:15 AM",
-      "status": "Present",
-      "traineeId": "tr_4",
-      "traineeName": "Kavita Patel",
-      "id": "att_72",
-      "geotag": {
-        "isWithinCampus": true,
-        "distanceFromCampusMeters": 35,
-        "lat": 21.89736123759468,
-        "verified": true,
-        "lng": 83.39514666253207,
-        "accuracyMeters": 14
-      },
-      "sessionId": "session_2025_2026",
-      "tradeId": "trade_elec"
-    },
-    {
-      "tradeId": "trade_elec",
-      "geotag": {
-        "accuracyMeters": 8,
-        "lat": 21.896930234862676,
-        "distanceFromCampusMeters": 53,
-        "isWithinCampus": true,
-        "verified": true,
-        "lng": 83.39517781363014
-      },
-      "traineeName": "Kavita Patel",
-      "timestamp": "08:15 AM",
-      "traineeId": "tr_4",
-      "status": "Present",
-      "markedBy": "trainee_gps",
-      "id": "att_73",
-      "rollNo": "ITI/RAI/2025/ELE-017",
-      "date": "2026-10-22",
-      "sessionId": "session_2025_2026"
-    },
-    {
-      "timestamp": "08:15 AM",
-      "traineeName": "Kavita Patel",
-      "status": "Absent",
-      "rollNo": "ITI/RAI/2025/ELE-017",
-      "date": "2026-10-23",
-      "markedBy": "trainee_gps",
-      "sessionId": "session_2025_2026",
-      "id": "att_74",
-      "tradeId": "trade_elec",
-      "traineeId": "tr_4"
-    },
-    {
-      "traineeId": "tr_4",
-      "traineeName": "Kavita Patel",
-      "rollNo": "ITI/RAI/2025/ELE-017",
-      "date": "2026-10-24",
-      "tradeId": "trade_elec",
-      "sessionId": "session_2025_2026",
-      "status": "Present",
-      "id": "att_75",
-      "timestamp": "08:15 AM",
-      "geotag": {
-        "verified": true,
-        "accuracyMeters": 18,
-        "isWithinCampus": true,
-        "lat": 21.897017962992965,
-        "distanceFromCampusMeters": 60,
-        "lng": 83.39572291417312
-      },
-      "markedBy": "trainee_gps"
-    },
-    {
-      "tradeId": "trade_elec",
-      "traineeId": "tr_4",
-      "geotag": {
-        "distanceFromCampusMeters": 52,
-        "lng": 83.39516508316646,
-        "lat": 21.897273612109473,
-        "accuracyMeters": 12,
-        "verified": true,
-        "isWithinCampus": true
-      },
-      "sessionId": "session_2025_2026",
-      "rollNo": "ITI/RAI/2025/ELE-017",
-      "traineeName": "Kavita Patel",
-      "status": "Present",
-      "date": "2026-10-26",
-      "id": "att_76",
-      "timestamp": "08:15 AM",
-      "markedBy": "trainee_gps"
-    },
-    {
-      "date": "2026-10-27",
-      "tradeId": "trade_elec",
-      "timestamp": "08:15 AM",
-      "geotag": {
-        "accuracyMeters": 18,
-        "verified": true,
-        "lat": 21.89725907927306,
-        "lng": 83.3957770180147,
-        "distanceFromCampusMeters": 98,
-        "isWithinCampus": true
-      },
-      "traineeName": "Kavita Patel",
-      "traineeId": "tr_4",
-      "rollNo": "ITI/RAI/2025/ELE-017",
-      "markedBy": "trainee_gps",
-      "id": "att_77",
-      "status": "Present",
-      "sessionId": "session_2025_2026"
-    },
-    {
-      "markedBy": "trainee_gps",
-      "sessionId": "session_2025_2026",
-      "date": "2026-10-28",
-      "rollNo": "ITI/RAI/2025/ELE-017",
-      "traineeId": "tr_4",
-      "status": "Present",
-      "tradeId": "trade_elec",
-      "id": "att_78",
-      "timestamp": "08:15 AM",
-      "traineeName": "Kavita Patel",
-      "geotag": {
-        "verified": true,
-        "accuracyMeters": 12,
-        "distanceFromCampusMeters": 110,
-        "lng": 83.39597110740371,
-        "lat": 21.897415646647254,
-        "isWithinCampus": true
-      }
-    },
-    {
-      "traineeId": "tr_4",
-      "markedBy": "trainee_gps",
-      "status": "Present",
-      "id": "att_79",
-      "rollNo": "ITI/RAI/2025/ELE-017",
-      "sessionId": "session_2025_2026",
-      "geotag": {
-        "lat": 21.897021372308252,
-        "lng": 83.39586700224481,
-        "isWithinCampus": true,
-        "verified": true,
-        "accuracyMeters": 20,
-        "distanceFromCampusMeters": 96
-      },
-      "timestamp": "08:15 AM",
-      "tradeId": "trade_elec",
-      "date": "2026-10-29",
-      "traineeName": "Kavita Patel"
-    },
-    {
-      "tradeId": "trade_elec",
-      "remarks": "Approved Casual Leave",
-      "timestamp": "08:15 AM",
-      "rollNo": "ITI/RAI/2025/ELE-014",
-      "traineeId": "tr_1",
-      "date": "2026-10-16",
-      "traineeName": "Rohan Sahu",
-      "markedBy": "trainee_gps",
-      "status": "CL",
-      "id": "att_8",
-      "sessionId": "session_2025_2026"
-    },
-    {
-      "date": "2026-10-30",
-      "traineeId": "tr_4",
-      "rollNo": "ITI/RAI/2025/ELE-017",
-      "sessionId": "session_2025_2026",
-      "status": "Present",
-      "id": "att_80",
-      "traineeName": "Kavita Patel",
-      "markedBy": "trainee_gps",
-      "timestamp": "08:15 AM",
-      "geotag": {
-        "lng": 83.39523407047596,
-        "accuracyMeters": 15,
-        "lat": 21.897163559029476,
-        "verified": true,
-        "isWithinCampus": true,
-        "distanceFromCampusMeters": 51
-      },
-      "tradeId": "trade_elec"
-    },
-    {
-      "tradeId": "trade_elec",
-      "id": "att_81",
-      "geotag": {
-        "distanceFromCampusMeters": 45,
-        "isWithinCampus": true,
-        "accuracyMeters": 14,
-        "lng": 83.39540699272158,
-        "lat": 21.897515048093187,
-        "verified": true
-      },
-      "date": "2026-10-08",
-      "timestamp": "08:15 AM",
-      "traineeId": "tr_5",
-      "status": "Present",
-      "traineeName": "Vikas Tande",
-      "sessionId": "session_2025_2026",
-      "rollNo": "ITI/RAI/2025/ELE-018",
-      "markedBy": "trainee_gps"
-    },
-    {
-      "sessionId": "session_2025_2026",
-      "rollNo": "ITI/RAI/2025/ELE-018",
-      "traineeName": "Vikas Tande",
-      "status": "Present",
-      "markedBy": "trainee_gps",
-      "tradeId": "trade_elec",
-      "traineeId": "tr_5",
-      "id": "att_82",
-      "timestamp": "08:15 AM",
-      "date": "2026-10-09",
-      "geotag": {
-        "isWithinCampus": true,
-        "distanceFromCampusMeters": 46,
-        "verified": true,
-        "lng": 83.39557002473195,
-        "accuracyMeters": 17,
-        "lat": 21.897379345109417
-      }
-    },
-    {
-      "id": "att_83",
-      "sessionId": "session_2025_2026",
-      "status": "Present",
-      "date": "2026-10-10",
-      "rollNo": "ITI/RAI/2025/ELE-018",
-      "traineeId": "tr_5",
-      "markedBy": "trainee_gps",
-      "timestamp": "08:15 AM",
-      "geotag": {
-        "accuracyMeters": 13,
-        "verified": true,
-        "lat": 21.89746440055426,
-        "isWithinCampus": true,
-        "lng": 83.39513256090257,
-        "distanceFromCampusMeters": 106
-      },
-      "tradeId": "trade_elec",
-      "traineeName": "Vikas Tande"
-    },
-    {
-      "id": "att_84",
-      "status": "Present",
-      "tradeId": "trade_elec",
-      "markedBy": "trainee_gps",
-      "rollNo": "ITI/RAI/2025/ELE-018",
-      "timestamp": "08:15 AM",
-      "geotag": {
-        "lat": 21.89723662484146,
-        "accuracyMeters": 15,
-        "verified": true,
-        "distanceFromCampusMeters": 56,
-        "lng": 83.39513397687966,
-        "isWithinCampus": true
-      },
-      "date": "2026-10-12",
-      "traineeName": "Vikas Tande",
-      "traineeId": "tr_5",
-      "sessionId": "session_2025_2026"
-    },
-    {
-      "date": "2026-10-13",
-      "tradeId": "trade_elec",
-      "geotag": {
-        "isWithinCampus": true,
-        "distanceFromCampusMeters": 59,
-        "verified": true,
-        "lat": 21.89733985779685,
-        "lng": 83.39604278691363,
-        "accuracyMeters": 19
-      },
-      "traineeName": "Vikas Tande",
-      "id": "att_85",
-      "timestamp": "08:15 AM",
-      "traineeId": "tr_5",
-      "status": "Present",
-      "markedBy": "trainee_gps",
-      "rollNo": "ITI/RAI/2025/ELE-018",
-      "sessionId": "session_2025_2026"
-    },
-    {
-      "date": "2026-10-14",
-      "status": "Present",
-      "timestamp": "08:15 AM",
-      "rollNo": "ITI/RAI/2025/ELE-018",
-      "traineeName": "Vikas Tande",
-      "traineeId": "tr_5",
-      "geotag": {
-        "distanceFromCampusMeters": 34,
-        "accuracyMeters": 18,
-        "isWithinCampus": true,
-        "lng": 83.39562517968251,
-        "lat": 21.89749947790842,
-        "verified": true
-      },
-      "markedBy": "trainee_gps",
-      "sessionId": "session_2025_2026",
-      "id": "att_86",
-      "tradeId": "trade_elec"
-    },
-    {
-      "traineeId": "tr_5",
-      "markedBy": "trainee_gps",
-      "date": "2026-10-15",
-      "rollNo": "ITI/RAI/2025/ELE-018",
-      "status": "Present",
-      "traineeName": "Vikas Tande",
-      "sessionId": "session_2025_2026",
-      "tradeId": "trade_elec",
-      "timestamp": "08:15 AM",
-      "id": "att_87",
-      "geotag": {
-        "distanceFromCampusMeters": 27,
-        "verified": true,
-        "accuracyMeters": 19,
-        "isWithinCampus": true,
-        "lat": 21.897868706391087,
-        "lng": 83.39541515416386
-      }
-    },
-    {
-      "timestamp": "08:15 AM",
-      "date": "2026-10-16",
-      "tradeId": "trade_elec",
-      "markedBy": "trainee_gps",
-      "id": "att_88",
-      "geotag": {
-        "accuracyMeters": 12,
-        "lng": 83.39604501339058,
-        "lat": 21.896979844330488,
-        "verified": true,
-        "distanceFromCampusMeters": 36,
-        "isWithinCampus": true
-      },
-      "traineeName": "Vikas Tande",
-      "status": "Present",
-      "sessionId": "session_2025_2026",
-      "traineeId": "tr_5",
-      "rollNo": "ITI/RAI/2025/ELE-018"
-    },
-    {
-      "traineeName": "Vikas Tande",
-      "timestamp": "08:15 AM",
-      "tradeId": "trade_elec",
-      "date": "2026-10-17",
-      "id": "att_89",
-      "geotag": {
-        "isWithinCampus": true,
-        "distanceFromCampusMeters": 51,
-        "lng": 83.39588799155352,
-        "verified": true,
-        "accuracyMeters": 17,
-        "lat": 21.89774313328697
-      },
-      "sessionId": "session_2025_2026",
-      "rollNo": "ITI/RAI/2025/ELE-018",
-      "traineeId": "tr_5",
-      "status": "Present",
-      "markedBy": "trainee_gps"
-    },
-    {
-      "date": "2026-10-17",
-      "tradeId": "trade_elec",
-      "geotag": {
-        "accuracyMeters": 20,
-        "distanceFromCampusMeters": 39,
-        "lat": 21.897171976959527,
-        "lng": 83.39554649016048,
-        "verified": true,
-        "isWithinCampus": true
-      },
-      "id": "att_9",
-      "timestamp": "08:15 AM",
-      "status": "Present",
-      "traineeId": "tr_1",
-      "traineeName": "Rohan Sahu",
-      "sessionId": "session_2025_2026",
-      "markedBy": "trainee_gps",
-      "rollNo": "ITI/RAI/2025/ELE-014"
-    },
-    {
-      "sessionId": "session_2025_2026",
-      "traineeId": "tr_5",
-      "date": "2026-10-19",
-      "geotag": {
-        "distanceFromCampusMeters": 112,
-        "accuracyMeters": 17,
-        "isWithinCampus": true,
-        "lat": 21.89749955828978,
-        "verified": true,
-        "lng": 83.3953155114285
-      },
-      "rollNo": "ITI/RAI/2025/ELE-018",
-      "timestamp": "08:15 AM",
-      "tradeId": "trade_elec",
-      "markedBy": "trainee_gps",
-      "status": "Present",
-      "id": "att_90",
-      "traineeName": "Vikas Tande"
-    },
-    {
-      "rollNo": "ITI/RAI/2025/ELE-018",
-      "status": "Present",
-      "timestamp": "08:15 AM",
-      "traineeId": "tr_5",
-      "id": "att_91",
-      "traineeName": "Vikas Tande",
-      "sessionId": "session_2025_2026",
-      "markedBy": "trainee_gps",
-      "geotag": {
-        "distanceFromCampusMeters": 31,
-        "isWithinCampus": true,
-        "accuracyMeters": 13,
-        "lng": 83.39585659187235,
-        "verified": true,
-        "lat": 21.897479090570233
-      },
-      "tradeId": "trade_elec",
-      "date": "2026-10-20"
-    },
-    {
-      "id": "att_92",
-      "traineeName": "Vikas Tande",
-      "markedBy": "trainee_gps",
-      "sessionId": "session_2025_2026",
-      "traineeId": "tr_5",
-      "geotag": {
-        "isWithinCampus": true,
-        "lng": 83.39572625902845,
-        "lat": 21.897698757044818,
-        "verified": true,
-        "distanceFromCampusMeters": 37,
-        "accuracyMeters": 18
-      },
-      "rollNo": "ITI/RAI/2025/ELE-018",
-      "timestamp": "08:15 AM",
-      "tradeId": "trade_elec",
-      "status": "Present",
-      "date": "2026-10-21"
-    },
-    {
-      "timestamp": "08:15 AM",
-      "traineeName": "Vikas Tande",
-      "status": "Present",
-      "rollNo": "ITI/RAI/2025/ELE-018",
-      "date": "2026-10-22",
-      "markedBy": "trainee_gps",
-      "sessionId": "session_2025_2026",
-      "id": "att_93",
-      "geotag": {
-        "verified": true,
-        "accuracyMeters": 11,
-        "lat": 21.89739490593467,
-        "distanceFromCampusMeters": 25,
-        "isWithinCampus": true,
-        "lng": 83.39547713017936
-      },
-      "tradeId": "trade_elec",
-      "traineeId": "tr_5"
-    },
-    {
-      "rollNo": "ITI/RAI/2025/ELE-018",
-      "traineeId": "tr_5",
-      "status": "Present",
-      "id": "att_94",
-      "sessionId": "session_2025_2026",
-      "markedBy": "trainee_gps",
-      "traineeName": "Vikas Tande",
-      "date": "2026-10-23",
-      "geotag": {
-        "distanceFromCampusMeters": 93,
-        "accuracyMeters": 19,
-        "isWithinCampus": true,
-        "verified": true,
-        "lng": 83.39592224166564,
-        "lat": 21.89771311185104
-      },
-      "tradeId": "trade_elec",
-      "timestamp": "08:15 AM"
-    },
-    {
-      "geotag": {
-        "verified": true,
-        "isWithinCampus": true,
-        "distanceFromCampusMeters": 107,
-        "lng": 83.39529519122097,
-        "lat": 21.89721274155322,
-        "accuracyMeters": 18
-      },
-      "timestamp": "08:15 AM",
-      "id": "att_95",
-      "date": "2026-10-24",
-      "status": "Present",
-      "tradeId": "trade_elec",
-      "sessionId": "session_2025_2026",
-      "markedBy": "trainee_gps",
-      "rollNo": "ITI/RAI/2025/ELE-018",
-      "traineeId": "tr_5",
-      "traineeName": "Vikas Tande"
-    },
-    {
-      "tradeId": "trade_elec",
-      "traineeId": "tr_5",
-      "geotag": {
-        "lat": 21.897784577011674,
-        "accuracyMeters": 14,
-        "lng": 83.39572628289122,
-        "isWithinCampus": true,
-        "distanceFromCampusMeters": 84,
-        "verified": true
-      },
-      "markedBy": "trainee_gps",
-      "traineeName": "Vikas Tande",
-      "sessionId": "session_2025_2026",
-      "status": "Present",
-      "timestamp": "08:15 AM",
-      "rollNo": "ITI/RAI/2025/ELE-018",
-      "id": "att_96",
-      "date": "2026-10-26"
-    },
-    {
-      "sessionId": "session_2025_2026",
-      "rollNo": "ITI/RAI/2025/ELE-018",
-      "date": "2026-10-27",
-      "traineeId": "tr_5",
-      "tradeId": "trade_elec",
-      "id": "att_97",
-      "traineeName": "Vikas Tande",
-      "status": "Present",
-      "timestamp": "08:15 AM",
-      "markedBy": "trainee_gps",
-      "geotag": {
-        "accuracyMeters": 16,
-        "lat": 21.896952364211046,
-        "lng": 83.39594993487444,
-        "verified": true,
-        "distanceFromCampusMeters": 106,
-        "isWithinCampus": true
-      }
-    },
-    {
-      "geotag": {
-        "verified": true,
-        "isWithinCampus": true,
-        "distanceFromCampusMeters": 101,
-        "accuracyMeters": 16,
-        "lng": 83.39599972292731,
-        "lat": 21.8978863165035
-      },
-      "timestamp": "08:15 AM",
-      "date": "2026-10-28",
-      "traineeName": "Vikas Tande",
-      "tradeId": "trade_elec",
-      "traineeId": "tr_5",
-      "markedBy": "trainee_gps",
-      "status": "Present",
-      "rollNo": "ITI/RAI/2025/ELE-018",
-      "id": "att_98",
-      "sessionId": "session_2025_2026"
-    },
-    {
-      "markedBy": "trainee_gps",
-      "traineeId": "tr_5",
-      "status": "Present",
-      "id": "att_99",
-      "rollNo": "ITI/RAI/2025/ELE-018",
-      "sessionId": "session_2025_2026",
-      "geotag": {
-        "lng": 83.39606625470749,
-        "isWithinCampus": true,
-        "lat": 21.89773495302111,
-        "accuracyMeters": 20,
-        "distanceFromCampusMeters": 112,
-        "verified": true
-      },
-      "timestamp": "08:15 AM",
-      "tradeId": "trade_elec",
-      "date": "2026-10-29",
-      "traineeName": "Vikas Tande"
-    },
-    {
-      "id": "att_lv_1793373997598_ezn4",
-      "traineeId": "tr_1",
-      "tradeId": "trade_elec",
-      "status": "CL",
-      "correctedBy": "Er. Rajesh Kumar Dewangan",
-      "sessionId": "session_2025_2026",
-      "traineeName": "Rohan Sahu",
-      "markedBy": "officer_manual",
-      "timestamp": "08:00 AM",
-      "rollNo": "ITI/RAI/2025/ELE-014",
-      "date": "2026-11-04",
-      "remarks": "Approved leave (Casual Leave (CL)): Leave verified and sanctioned.",
-      "authorizedCorrection": true
-    },
-    {
-      "date": "2026-11-03",
-      "correctedBy": "Er. Rajesh Kumar Dewangan",
-      "markedBy": "officer_manual",
-      "remarks": "Approved leave (Casual Leave (CL)): Leave verified and sanctioned.",
-      "sessionId": "session_2025_2026",
-      "status": "CL",
-      "traineeId": "tr_1",
-      "tradeId": "trade_elec",
-      "timestamp": "08:00 AM",
-      "authorizedCorrection": true,
-      "id": "att_lv_1793373997598_y9r2",
-      "traineeName": "Rohan Sahu",
-      "rollNo": "ITI/RAI/2025/ELE-014"
-    }
-  ],
-  "leaves": [
-    {
-      "status": "approved",
-      "id": "lv_101",
-      "appliedAt": "2026-10-29 04:30 PM",
-      "days": 2,
-      "reviewedBy": "Er. Rajesh Kumar Dewangan",
-      "toDate": "2026-11-04",
-      "traineeId": "tr_1",
-      "reviewerRemarks": "Leave verified and sanctioned.",
-      "fromDate": "2026-11-03",
-      "traineeName": "Rohan Sahu",
-      "rollNo": "ITI/RAI/2025/ELE-014",
-      "leaveType": "Casual Leave (CL)",
-      "tradeId": "trade_elec",
-      "reason": "Urgent family work in native village (Sarangarh).",
-      "reviewedAt": "30/10/2026, 8:56:37 pm"
-    },
-    {
-      "days": 2,
-      "reason": "Viral fever, medical fitness certificate submitted.",
-      "leaveType": "Medical Leave (ML)",
-      "reviewerRemarks": "Medical certificate verified. Approved.",
-      "reviewedBy": "Er. Rajesh Kumar Dewangan",
-      "rollNo": "ITI/RAI/2025/ELE-015",
-      "tradeId": "trade_elec",
-      "toDate": "2026-10-16",
-      "traineeName": "Pooja Kashyap",
-      "id": "lv_102",
-      "reviewedAt": "2026-10-14 11:30 AM",
-      "appliedAt": "2026-10-14 09:00 AM",
-      "fromDate": "2026-10-15",
-      "status": "approved",
-      "traineeId": "tr_2"
-    },
-    {
-      "traineeName": "Amit Bhagat",
-      "reason": "Aadhaar update camp at Tehsildar office Raigarh.",
-      "reviewedAt": "2026-10-27 04:00 PM",
-      "leaveType": "Half-Day Leave",
-      "fromDate": "2026-10-28",
-      "days": 0.5,
-      "rollNo": "ITI/RAI/2025/ELE-016",
-      "traineeId": "tr_3",
-      "tradeId": "trade_elec",
-      "id": "lv_103",
-      "reviewerRemarks": "Half-day post-lunch granted.",
-      "reviewedBy": "Er. Rajesh Kumar Dewangan",
-      "toDate": "2026-10-28",
-      "status": "approved",
-      "appliedAt": "2026-10-27 02:15 PM"
-    },
-    {
-      "traineeName": "Rohan Sahu",
-      "leaveType": "Casual Leave (CL)",
-      "reason": "Medical Issue",
-      "appliedAt": "30/10/2026, 8:16:30 pm",
-      "toDate": "2026-10-30",
-      "rollNo": "ITI/RAI/2025/ELE-014",
-      "traineeId": "tr_1",
-      "id": "lv_1793371590010",
-      "tradeId": "trade_elec",
-      "fromDate": "2026-10-30",
-      "days": 1,
-      "status": "pending"
-    }
-  ],
-  "warnings": [
-    {
-      "message": "Your recorded attendance for the current quarter has dropped to 68.4%, which is severely below the mandatory 80% NCVT training standard. You are directed to attend regular practical workshops and explain your repeated absenteeism within 3 working days.",
-      "tradeName": "Electrician",
-      "id": "warn_1",
-      "rollNo": "ITI/RAI/2025/ELE-016",
-      "subject": "Official Warning: Deficit Attendance Below NCVT Minimum Threshold (80%)",
-      "traineeId": "tr_3",
-      "officerId": "off_1",
-      "tradeId": "trade_elec",
-      "issuedDate": "2026-10-25",
-      "officerName": "Er. Rajesh Kumar Dewangan",
-      "traineeName": "Amit Bhagat",
-      "attendancePercent": 68.4,
-      "refNumber": "ITI-RAI/ELEC/WARN/2025/03",
-      "status": "issued"
-    }
-  ],
+  "trainees": [],
+  "attendance": [],
+  "leaves": [],
+  "warnings": [],
   "inventory": [
     {
+      "issuedCount": 0,
+      "damagedCount": 0,
+      "totalStock": 25,
       "tradeId": "trade_elec",
-      "toolCode": "ELEC-MM-01",
-      "issuedCount": 6,
       "binLocation": "Rack A-2, Cupboard 1",
-      "category": "Testing & Measuring",
-      "damagedCount": 1,
       "name": "Digital Multimeter (Auto-Ranging 600V)",
       "lastInspected": "2026-10-20",
-      "totalStock": 25,
-      "availableStock": 18,
       "id": "inv_elec_1",
-      "specification": "CAT III 600V with thermocouple probe, backlit LCD"
+      "toolCode": "ELEC-MM-01",
+      "specification": "CAT III 600V with thermocouple probe, backlit LCD",
+      "category": "Testing & Measuring",
+      "availableStock": 25
     },
     {
-      "id": "inv_elec_2",
-      "toolCode": "ELEC-PL-02",
-      "tradeId": "trade_elec",
-      "availableStock": 26,
+      "issuedCount": 0,
       "totalStock": 40,
-      "category": "Hand Tools",
-      "specification": "Forged chrome vanadium steel, high leverage 1000V tested",
-      "issuedCount": 12,
-      "damagedCount": 2,
+      "lastInspected": "2026-10-18",
       "binLocation": "Tool Board Station 1-4",
+      "category": "Hand Tools",
+      "availableStock": 40,
+      "toolCode": "ELEC-PL-02",
       "name": "Insulated Combination Pliers 8 Inch (1000V)",
-      "lastInspected": "2026-10-18"
+      "tradeId": "trade_elec",
+      "specification": "Forged chrome vanadium steel, high leverage 1000V tested",
+      "damagedCount": 0,
+      "id": "inv_elec_2"
     },
     {
       "lastInspected": "2026-10-24",
+      "availableStock": 6,
       "tradeId": "trade_elec",
-      "availableStock": 4,
-      "name": "Digital Insulation Tester (Megger 500V/1000V)",
+      "issuedCount": 0,
       "toolCode": "ELEC-MEG-03",
+      "damagedCount": 0,
       "category": "Testing & Measuring",
-      "specification": "Range up to 2000 MΩ with test leads and calibration card",
-      "id": "inv_elec_3",
       "binLocation": "Instrument Safe Room C",
-      "issuedCount": 2,
-      "damagedCount": 0,
-      "totalStock": 6
+      "id": "inv_elec_3",
+      "name": "Digital Insulation Tester (Megger 500V/1000V)",
+      "totalStock": 6,
+      "specification": "Range up to 2000 MΩ with test leads and calibration card"
     },
     {
-      "issuedCount": 4,
-      "id": "inv_elec_4",
-      "damagedCount": 0,
-      "binLocation": "PCB Workstation Bay A",
-      "availableStock": 11,
-      "tradeId": "trade_elec",
-      "lastInspected": "2026-10-15",
-      "toolCode": "ELEC-SOL-04",
-      "name": "Temperature Controlled Soldering Station 60W",
       "category": "Power Machinery",
+      "lastInspected": "2026-10-15",
+      "totalStock": 15,
+      "toolCode": "ELEC-SOL-04",
+      "id": "inv_elec_4",
+      "name": "Temperature Controlled Soldering Station 60W",
+      "availableStock": 15,
+      "binLocation": "PCB Workstation Bay A",
+      "tradeId": "trade_elec",
+      "damagedCount": 0,
       "specification": "200-480°C ESD safe with brass sponge cleaner",
-      "totalStock": 15
+      "issuedCount": 0
     },
     {
-      "name": "Copper Enamelled Winding Wire (22 SWG)",
-      "tradeId": "trade_elec",
-      "toolCode": "ELEC-RAW-05",
-      "binLocation": "Consumables Locker 4",
-      "issuedCount": 5,
-      "totalStock": 18,
-      "category": "Consumables & Raw Materials",
       "id": "inv_elec_5",
       "damagedCount": 0,
+      "totalStock": 18,
       "specification": "Grade 2 dual coated super enamelled copper wire spool",
-      "availableStock": 13,
-      "lastInspected": "2026-10-26"
+      "name": "Copper Enamelled Winding Wire (22 SWG)",
+      "toolCode": "ELEC-RAW-05",
+      "category": "Consumables & Raw Materials",
+      "tradeId": "trade_elec",
+      "availableStock": 18,
+      "binLocation": "Consumables Locker 4",
+      "lastInspected": "2026-10-26",
+      "issuedCount": 0
     },
     {
-      "tradeId": "trade_fit",
-      "category": "Testing & Measuring",
-      "binLocation": "Cabinet Fit-01",
-      "issuedCount": 8,
-      "damagedCount": 1,
-      "totalStock": 30,
-      "name": "Vernier Caliper 0-150mm (0.02mm LC)",
-      "toolCode": "FIT-CAL-01",
-      "lastInspected": "2026-10-19",
       "specification": "Stainless steel hardened jaws, metric and imperial dual scale",
-      "availableStock": 21,
+      "availableStock": 30,
+      "issuedCount": 0,
+      "totalStock": 30,
+      "binLocation": "Cabinet Fit-01",
+      "damagedCount": 0,
+      "tradeId": "trade_fit",
+      "toolCode": "FIT-CAL-01",
+      "name": "Vernier Caliper 0-150mm (0.02mm LC)",
+      "category": "Testing & Measuring",
+      "lastInspected": "2026-10-19",
       "id": "inv_fit_1"
     },
     {
       "tradeId": "trade_fit",
+      "totalStock": 20,
+      "specification": "Heavy cast iron body, hardened serrated steel jaws",
       "lastInspected": "2026-10-12",
+      "category": "Power Machinery",
+      "issuedCount": 0,
+      "availableStock": 20,
+      "toolCode": "FIT-VIC-02",
+      "damagedCount": 0,
       "binLocation": "Workbench Rows 1-5",
       "name": "Swivel Base Bench Vice 6 Inch",
-      "issuedCount": 0,
-      "damagedCount": 0,
-      "availableStock": 20,
-      "specification": "Heavy cast iron body, hardened serrated steel jaws",
-      "toolCode": "FIT-VIC-02",
-      "id": "inv_fit_2",
-      "totalStock": 20,
-      "category": "Power Machinery"
+      "id": "inv_fit_2"
     }
   ],
-  "indents": [
-    {
-      "issueDate": "2026-10-29",
-      "remarks": "Issued for 3-Phase induction motor impedance measurement experiment.",
-      "status": "issued",
-      "itemName": "Digital Multimeter (Auto-Ranging 600V)",
-      "expectedReturnDate": "2026-10-30",
-      "itemId": "inv_elec_1",
-      "quantity": 1,
-      "tradeId": "trade_elec",
-      "traineeId": "tr_1",
-      "officerId": "off_1",
-      "id": "ind_01",
-      "traineeName": "Rohan Sahu",
-      "officerName": "Er. Rajesh Kumar Dewangan",
-      "rollNo": "ITI/RAI/2025/ELE-014",
-      "indentNo": "IND/2026/ELEC/089"
-    },
-    {
-      "returnCondition": "Good",
-      "status": "returned",
-      "id": "ind_02",
-      "itemId": "inv_elec_2",
-      "expectedReturnDate": "2026-10-27",
-      "indentNo": "IND/2026/ELEC/085",
-      "officerId": "off_1",
-      "remarks": "Returned in clean working condition after staircase wiring practical.",
-      "traineeId": "tr_2",
-      "traineeName": "Pooja Kashyap",
-      "officerName": "Er. Rajesh Kumar Dewangan",
-      "rollNo": "ITI/RAI/2025/ELE-015",
-      "actualReturnDate": "2026-10-27",
-      "quantity": 1,
-      "issueDate": "2026-10-27",
-      "tradeId": "trade_elec",
-      "itemName": "Insulated Combination Pliers 8 Inch (1000V)"
-    }
-  ],
+  "indents": [],
   "auditLogs": [
     {
-      "id": "log_1794306906243_cydu",
-      "timestamp": "10/11/2026, 4:05:06 pm",
+      "id": "log_1794498432227_qmz5",
+      "timestamp": "12/11/2026, 9:17:12 pm",
       "userId": "usr_admin",
-      "userName": "Principal / Admin",
-      "userRole": "admin",
-      "action": "UPDATE_SETTINGS",
-      "details": "Updated campus geofence, attendance window, or leave rules."
-    },
-    {
-      "userId": "usr_admin",
-      "id": "log_1",
-      "timestamp": "2026-10-25 09:30:15",
-      "userName": "Principal / Admin (Govt ITI Raigarh)",
-      "action": "ACADEMIC_SESSION_CONFIG",
-      "userRole": "admin",
-      "details": "Configured Academic Session 2025-2026 with 240 working days."
-    },
-    {
-      "userName": "Principal / Admin",
-      "timestamp": "30/10/2026, 8:13:55 pm",
-      "userRole": "admin",
-      "id": "log_1793371435788_fh3g",
-      "userId": "usr_admin",
-      "ipAddress": "127.0.0.1",
-      "action": "ADMIN_LOGIN",
-      "details": "Admin logged into administration portal."
-    },
-    {
-      "userId": "usr_admin",
-      "details": "Updated campus geofence, attendance window, or leave rules.",
-      "timestamp": "30/10/2026, 8:15:11 pm",
-      "id": "log_1793371511199_let7",
-      "action": "UPDATE_SETTINGS",
-      "userName": "Principal / Admin",
-      "userRole": "admin"
-    },
-    {
-      "id": "log_1793371540316_a8gf",
-      "userId": "tr_1",
-      "ipAddress": "127.0.0.1",
-      "details": "Trainee logged in: Roll No ITI/RAI/2025/ELE-014.",
-      "action": "TRAINEE_LOGIN",
-      "userName": "Rohan Sahu",
-      "timestamp": "30/10/2026, 8:15:40 pm",
-      "userRole": "trainee"
-    },
-    {
-      "id": "log_1793371590012_9ekt",
-      "userId": "tr_1",
-      "details": "Applied for Casual Leave (CL) from 2026-10-30 to 2026-10-30 (1 days).",
-      "timestamp": "30/10/2026, 8:16:30 pm",
-      "action": "LEAVE_APPLICATION",
-      "userName": "Rohan Sahu",
-      "userRole": "trainee"
-    },
-    {
-      "ipAddress": "127.0.0.1",
-      "userId": "off_1",
-      "details": "Training Officer logged in for trade(s): trade_elec.",
-      "userName": "Er. Rajesh Kumar Dewangan",
+      "userName": "Training Officer",
       "userRole": "officer",
-      "id": "log_1793371618420_4zmb",
-      "timestamp": "30/10/2026, 8:16:58 pm",
-      "action": "OFFICER_LOGIN"
+      "action": "DELETE_TRAINEE",
+      "details": "Deleted trainee record: Aakash Verma (ITI/RAI/2026/ELEC-101)."
     },
     {
-      "userId": "off_1",
-      "ipAddress": "127.0.0.1",
-      "userName": "Er. Rajesh Kumar Dewangan",
-      "action": "OFFICER_LOGIN",
-      "timestamp": "30/10/2026, 8:32:19 pm",
-      "userRole": "officer",
       "details": "Training Officer logged in for trade(s): trade_elec.",
-      "id": "log_1793372539771_lo6n"
-    },
-    {
-      "timestamp": "30/10/2026, 8:47:31 pm",
-      "userName": "Rohan Sahu",
-      "userRole": "trainee",
-      "id": "log_1793373451386_5bad",
-      "userId": "tr_1",
-      "ipAddress": "127.0.0.1",
-      "action": "TRAINEE_LOGIN",
-      "details": "Trainee logged in: Roll No ITI/RAI/2025/ELE-014."
-    },
-    {
-      "userId": "off_1",
-      "ipAddress": "127.0.0.1",
-      "details": "Training Officer logged in for trade(s): trade_elec.",
-      "id": "log_1793373520170_bxgg",
-      "action": "OFFICER_LOGIN",
-      "timestamp": "30/10/2026, 8:48:40 pm",
       "userName": "Er. Rajesh Kumar Dewangan",
+      "ipAddress": "127.0.0.1",
+      "action": "OFFICER_LOGIN",
+      "timestamp": "12/11/2026, 9:14:56 pm",
+      "id": "log_1794498296503_zfpj",
+      "userId": "off_1",
       "userRole": "officer"
     },
     {
-      "ipAddress": "127.0.0.1",
-      "userId": "off_1",
-      "userName": "Er. Rajesh Kumar Dewangan",
-      "details": "Training Officer logged in for trade(s): trade_elec.",
+      "details": "Added new trainee: Aakash Verma (Roll: ITI/RAI/2026/ELEC-101).",
+      "timestamp": "12/11/2026, 9:15:05 pm",
+      "userId": "usr_admin",
+      "userName": "Training Officer",
+      "id": "log_1794498305273_kpe0",
       "userRole": "officer",
-      "timestamp": "30/10/2026, 8:49:17 pm",
-      "action": "OFFICER_LOGIN",
-      "id": "log_1793373557429_oono"
+      "action": "ADD_TRAINEE"
     },
     {
-      "id": "log_1793373997600_16k3",
-      "userName": "Er. Rajesh Kumar Dewangan",
-      "userId": "officer",
+      "action": "DELETE_TRAINEE",
       "userRole": "officer",
-      "details": "APPROVED leave request for Rohan Sahu (Casual Leave (CL)).",
-      "timestamp": "30/10/2026, 8:56:37 pm",
-      "action": "LEAVE_APPROVED"
-    },
-    {
-      "timestamp": "31/10/2026, 8:27:00 pm",
-      "details": "Admin logged into administration portal.",
+      "details": "Deleted trainee record: Aakash Verma (ITI/RAI/2026/ELEC-101).",
       "userId": "usr_admin",
-      "id": "log_1793458620076_9112",
-      "userName": "Principal / Admin",
-      "ipAddress": "127.0.0.1",
-      "userRole": "admin",
-      "action": "ADMIN_LOGIN"
-    },
-    {
-      "id": "log_1793458925278_v67b",
-      "details": "Administrator authenticated successfully.",
-      "timestamp": "31/10/2026, 8:32:05 pm",
-      "action": "ADMIN_LOGIN",
-      "userRole": "admin",
-      "userName": "Shri S. K. Patel (Principal / Admin)",
-      "ipAddress": "127.0.0.1",
-      "userId": "usr_admin"
-    },
-    {
-      "action": "OFFICER_LOGIN",
-      "timestamp": "31/10/2026, 8:32:05 pm",
-      "userId": "off_0",
-      "details": "Training Officer logged in for trade(s): trade_elec, trade_copa.",
-      "userRole": "officer",
-      "userName": "Abhishek Swarnkar",
-      "ipAddress": "127.0.0.1",
-      "id": "log_1793458925352_3vxq"
-    },
-    {
-      "action": "TRAINEE_LOGIN",
-      "details": "Trainee authenticated: Roll No ITI/RAI/2025/ELE-014.",
-      "ipAddress": "127.0.0.1",
-      "userId": "tr_1",
-      "id": "log_1793458925390_6v0p",
-      "timestamp": "31/10/2026, 8:32:05 pm",
-      "userRole": "trainee",
-      "userName": "Rohan Sahu"
-    },
-    {
-      "action": "CLEAR_DEFAULT_SESSION",
-      "id": "log_1793460669214_k71d",
-      "details": "Cleared default active academic session.",
-      "userRole": "admin",
-      "userId": "usr_admin",
-      "userName": "Principal / Admin",
-      "timestamp": "31/10/2026, 9:01:09 pm"
-    },
-    {
-      "details": "Set default active academic session to: session_2025_2026",
-      "userId": "usr_admin",
-      "timestamp": "31/10/2026, 9:01:14 pm",
-      "userName": "Principal / Admin",
-      "id": "log_1793460674750_qcjg",
-      "action": "SET_DEFAULT_SESSION",
-      "userRole": "admin"
-    },
-    {
-      "userId": "usr_admin",
-      "timestamp": "31/10/2026, 9:01:20 pm",
-      "action": "BULK_CONFIG_WORKING_DAYS",
-      "id": "log_1793460680709_x1ky",
-      "userName": "Principal / Admin",
-      "userRole": "admin",
-      "details": "Saved 1 monthly working days records for session session_2026_2027 (Total 23 working days)."
-    },
-    {
-      "userId": "usr_admin",
-      "ipAddress": "127.0.0.1",
-      "userRole": "admin",
-      "id": "log_1793533322218_7qju",
-      "userName": "Shri S. K. Patel (Principal / Admin)",
-      "details": "Password recovery token dispatched for admin.iti.raigarh@cg.gov.in (Token valid for 15 minutes).",
-      "action": "PASSWORD_RESET_TOKEN_ISSUED",
-      "timestamp": "1/11/2026, 5:12:02 pm"
-    },
-    {
-      "id": "log_1793533342978_3plk",
-      "action": "PASSWORD_RESET_TOKEN_ISSUED",
-      "timestamp": "1/11/2026, 5:12:22 pm",
-      "userRole": "trainee",
-      "userName": "Rohan Sahu",
-      "details": "Password recovery token dispatched for rohan.sahu@student.iti.cg.in (Token valid for 15 minutes).",
-      "userId": "tr_1",
-      "ipAddress": "127.0.0.1"
-    },
-    {
-      "userName": "Rohan Sahu",
-      "timestamp": "1/11/2026, 5:12:28 pm",
-      "userRole": "trainee",
-      "userId": "tr_1",
-      "ipAddress": "127.0.0.1",
-      "id": "log_1793533348555_pzzw",
-      "details": "Password securely updated for account rohan.sahu@student.iti.cg.in via verified token.",
-      "action": "PASSWORD_RESET_COMPLETED"
-    },
-    {
-      "userId": "tr_1",
-      "ipAddress": "127.0.0.1",
-      "details": "Trainee authenticated: Roll No ITI/RAI/2025/ELE-014.",
-      "action": "TRAINEE_LOGIN",
-      "userName": "Rohan Sahu",
-      "timestamp": "1/11/2026, 5:12:34 pm",
-      "id": "log_1793533354296_qbsj",
-      "userRole": "trainee"
-    },
-    {
-      "id": "log_1793533360118_1lue",
-      "userId": "tr_1",
-      "action": "UPDATE_TRAINEE_RECORD",
-      "timestamp": "1/11/2026, 5:12:40 pm",
-      "details": "Updated email for trainee Rohan Sahu (ITI/RAI/2025/ELE-014) to: rohan.sahu.updated@student.iti.cg.in.",
-      "userName": "Rohan Sahu",
-      "userRole": "trainee"
-    },
-    {
-      "action": "UPDATE_TRAINEE_RECORD",
-      "timestamp": "1/11/2026, 5:12:46 pm",
-      "details": "Updated email for trainee Rohan Sahu (ITI/RAI/2025/ELE-014) to: rohan.sahu@student.iti.cg.in.",
-      "userId": "tr_1",
-      "userName": "Rohan Sahu",
-      "userRole": "trainee",
-      "id": "log_1793533366235_fkh5"
-    },
-    {
-      "userId": "usr_admin",
-      "details": "Updated Training Officer details and trade assignments for: Er. Rajesh Kumar Dewangan (2 trades).",
-      "timestamp": "1/11/2026, 5:58:21 pm",
-      "id": "log_1793536101351_ewsv",
-      "action": "ALTER_OFFICER",
-      "userName": "Principal / Admin",
-      "userRole": "admin"
-    },
-    {
-      "action": "OFFICER_LOGIN",
-      "timestamp": "1/11/2026, 5:58:27 pm",
-      "id": "log_1793536107609_ig6s",
-      "userRole": "officer",
-      "userName": "Er. Rajesh Kumar Dewangan",
-      "details": "Training Officer logged in for trade(s): trade_elec, trade_copa.",
-      "userId": "off_1",
-      "ipAddress": "127.0.0.1"
-    },
-    {
-      "timestamp": "2/11/2026, 2:46:00 pm",
-      "userId": "tr_1",
-      "userName": "Rohan Sahu",
-      "userRole": "trainee",
-      "id": "log_1793610960740_mw1u",
-      "action": "GPS_ATTENDANCE_MARKED",
-      "details": "Marked Present via GPS. Distance: 113m, Accuracy: 25m."
-    },
-    {
-      "timestamp": "2026-10-25 10:15:00",
-      "userRole": "admin",
-      "action": "TRADE_ASSIGNMENT",
-      "id": "log_2",
-      "userName": "Principal / Admin (Govt ITI Raigarh)",
-      "details": "Assigned trade Electrician (ELE-01) to Er. Rajesh Kumar Dewangan.",
-      "userId": "usr_admin"
-    },
-    {
-      "timestamp": "2026-10-25 11:20:45",
-      "action": "ATTENDANCE_WARNING_ISSUED",
-      "details": "Issued formal warning notice ITI-RAI/ELEC/WARN/2025/03 to trainee Amit Bhagat for low attendance (68.4%).",
-      "id": "log_3",
-      "userName": "Er. Rajesh Kumar Dewangan",
-      "userRole": "officer",
-      "userId": "off_1"
-    },
-    {
-      "userId": "tr_1",
-      "details": "Marked Present via GPS geofence at ITI campus (Distance: 38m, Accuracy: 12m).",
-      "action": "GPS_ATTENDANCE_MARKED",
-      "timestamp": "2026-10-29 08:14:22",
-      "userName": "Rohan Sahu",
-      "userRole": "trainee",
-      "id": "log_4"
+      "timestamp": "12/11/2026, 9:15:09 pm",
+      "id": "log_1794498309437_ohai",
+      "userName": "Training Officer"
     }
   ],
-  "lessonPlans": [
-    {
-      "startDate": "2026-08-10",
-      "reference": "DGT CTS Curriculum & Trade Theory Book (NSQF Level 3.5) published by NIMI, Chennai.",
-      "unitName": "Module (M1): Safety precautions, Hand & Power Tools, Systems of Measurement",
-      "teachingAid": "Whiteboard, Marker, कट-सेक्शन डीजल इंजन मॉडल, प्रिसिजन मापक यंत्र (माइक्रोमीटर, बोर गेज), एनआईएमआई चार्ट्स",
-      "id": "lp_01",
-      "status": "Completed",
-      "endDate": "2026-08-15",
-      "syllabusRef": "NCVT CTS Syllabus 2025 - Unit 1",
-      "tradeId": "trade_elec",
-      "assignment": "Trade Scope, General Discipline & First Aid पर आधारित विस्तृत एवं लघु उत्तरीय प्रश्नों के उत्तर अपनी Theory Notebook में लिखकर अगली कक्षा में प्रस्तुत करें।",
-      "keyLearningPoints": "Trade Scope, General Discipline & First Aid की परिभाषा, तकनीकी महत्ता, कार्यविधि एवं वास्तविक अनुप्रयोगों को चरणबद्ध उदाहरण सहित स्पष्ट करें।",
-      "objectives": "प्रशिक्षुार्थी Trade Scope, General Discipline & First Aid के सिद्धांतों एवं मुख्य संकल्पनाओं को पूर्ण रूप से समझ सकें तथा तकनीकी कार्यप्रणाली की व्याख्या कर सकेंगे।",
-      "officerName": "Abhishek Swarnkar",
-      "__type": "lesson"
-    },
-    {
-      "syllabusRef": "NCVT COPA Syllabus 2025 - Module 1",
-      "assignment": "Write steps to format hard disk and create partition in lab record book.",
-      "teachingAid": "Projector, PC Workstation, Motherboard cut-section, NIMI Digital Modules",
-      "status": "Completed",
-      "objectives": "Understand basic computer architecture, CPU, memory hierarchy, and Windows/Linux CLI fundamentals.",
-      "endDate": "2026-08-22",
-      "unitName": "Module (M1): Computer Fundamentals & Operating Systems",
-      "tradeId": "trade_copa",
-      "id": "lp_02",
-      "officerName": "Smt. Priyanka Sharma",
-      "__type": "lesson",
-      "keyLearningPoints": "Hardware vs Software, Booting Process, BIOS/UEFI configuration, File system structure.",
-      "startDate": "2026-08-16",
-      "reference": "DGT COPA Curriculum (NSQF Level 3.5) published by NIMI, Chennai."
-    }
-  ],
-  "demonstrationPlans": [
-    {
-      "procedureSteps": [
-        "कार्यस्थल (Workshop/Workstation) की सुरक्षा जाँच करें तथा आवश्यक टूल्स/उपकरण तैयार रखें।",
-        "अनुदेशक (Training Officer) द्वारा प्रदर्शित मानक प्रक्रिया के अनुसारचरणबद्ध रूप से निष्पादित करें।",
-        "परिणाम एवं रीडिंग का सत्यापन तथा रिकॉर्ड्स को नियत प्रारूप में दर्ज करें।",
-        "संपूर्ण कार्य को अपनी Trade Practical Record Book में सर्किट डायग्राम/रीडिंग्स सहित दर्ज करें।"
-      ],
-      "targetDate": "2026-08-12",
-      "allottedHours": 8,
-      "id": "dp_01",
-      "hints": "ऑटोमोबाइल वर्कशाप में सदैव सुरक्षा जूते और सुरक्षा चश्मा पहनें। गर्म इंजन और घूमते हुए पुर्जों से सुरक्षित दूरी बनाए रखें।",
-      "practicalTitle": "Demonstration of machinery used in the trade & electrical safety measures",
-      "objectives": "प्रशिक्षुार्थी \"Demonstration of machinery used in the trade\" को निर्धारित DGT मानक व सुरक्षा नियमों के अनुसार सफलतापूर्वक पूरा करना।",
-      "tradeId": "trade_elec",
-      "toolsRequired": "Safety Helmet, Goggles, Safety Shoes, Apron, CO2 Extinguisher, Steel Rule, Try Square, Combination Pliers, Insulation Tester",
-      "status": "Completed",
-      "officerName": "Abhishek Swarnkar",
-      "__type": "demo"
-    }
-  ],
-  "weeklyPlans": [
-    {
-      "weekNumber": 1,
-      "summaryPracticalDone": 5,
-      "summaryTheoryPlanned": 5,
-      "summaryPracticalPlanned": 5,
-      "dailyBreakdown": [
-        {
-          "day": "सोमवार",
-          "theoryTopic": "Introduction to Computers & Safe Working Practices",
-          "date": "10-Aug-2026",
-          "practicalTopic": "Visit COPA Lab and locate electrical connections with computer system setup",
-          "status": "Completed"
-        },
-        {
-          "status": "Completed",
-          "date": "11-Aug-2026",
-          "theoryTopic": "Introduction to Computers & Safe Working Practices",
-          "practicalTopic": "Identifying safety symbols and hazard identification in IT Lab",
-          "day": "मंगलवार"
-        },
-        {
-          "day": "बुधवार",
-          "theoryTopic": "Introduction to Computers & Safe Working Practices",
-          "date": "12-Aug-2026",
-          "status": "Completed",
-          "practicalTopic": "Practice safe methods of fire fighting in case of electrical fire"
-        },
-        {
-          "theoryTopic": "Introduction to Computers & Safe Working Practices",
-          "status": "Completed",
-          "day": "गुरुवार",
-          "date": "13-Aug-2026",
-          "practicalTopic": "Demonstration and Hands-on Use of Fire Extinguishers"
-        },
-        {
-          "status": "Completed",
-          "practicalTopic": "Identify computer peripherals and internal components of a desktop computer",
-          "date": "14-Aug-2026",
-          "day": "शुक्रवार",
-          "theoryTopic": "Computer Hardware Architecture & Component Functions"
-        }
-      ],
-      "tradeId": "trade_copa",
-      "summaryTheoryDone": 5,
-      "id": "wp_1",
-      "officerName": "Shoaib Ahmad",
-      "__type": "weekly",
-      "dateRange": "10-Aug-2026 to 16-Aug-2026"
-    }
-  ],
-  "assessments": [
-    {
-      "parameters": {
-        "vivaVoce": 8,
-        "progressChart": 9,
-        "jobCarriedOut": 8,
-        "assignment": 5,
-        "attendancePunctuality": 8,
-        "practicalExam": 7,
-        "answerSheet": 16,
-        "cbtExam": 8,
-        "projectWork": 4,
-        "recordBook": 8
-      },
-      "attendancePercent": 88,
-      "traineeId": "tr_1",
-      "month": "2026-08",
-      "remarks": "Good progress and consistent practical attendance.",
-      "sessionId": "session_2025_2026",
-      "id": "asm_1",
-      "testMarks": 81
-    },
-    {
-      "testMarks": 85,
-      "month": "2026-09",
-      "id": "asm_1793812500711_skoq",
-      "sessionId": "session_2025_2026",
-      "parameters": {
-        "answerSheet": 17,
-        "jobCarriedOut": 9,
-        "progressChart": 9,
-        "vivaVoce": 8,
-        "practicalExam": 8,
-        "recordBook": 8,
-        "projectWork": 4,
-        "attendancePunctuality": 9,
-        "assignment": 5,
-        "cbtExam": 8
-      },
-      "remarks": "Great improvement in trade theory",
-      "traineeId": "tr_1",
-      "attendancePercent": 85
-    }
-  ]
+  "lessonPlans": [],
+  "demonstrationPlans": [],
+  "weeklyPlans": [],
+  "assessments": []
 }

@@ -318,24 +318,24 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
   const handleDownloadExcelTemplate = () => {
     const templateData = [
       {
-        rollNo: 'ITI/RAI/2026/ELE-01',
-        name: 'Rohan Kumar Sahu',
-        fatherName: 'Shri Rameshwar Sahu',
-        email: 'rohan.sahu@student.iti.cg.in',
-        mobile: '+91 98260 12345',
-        category: 'OBC',
+        rollNo: 'ITI/RAI/2026/001',
+        name: 'First Candidate Name',
+        fatherName: 'Father / Guardian Name',
+        email: 'trainee01@student.iti.cg.in',
+        mobile: '+91 98000 00001',
+        category: 'GEN',
         gender: 'Male',
-        dob: '2005-04-15',
+        dob: '2005-01-01',
       },
       {
-        rollNo: 'ITI/RAI/2026/ELE-02',
-        name: 'Pooja Verma',
-        fatherName: 'Shri Suresh Verma',
-        email: 'pooja.verma@student.iti.cg.in',
-        mobile: '+91 94252 67890',
-        category: 'GEN',
+        rollNo: 'ITI/RAI/2026/002',
+        name: 'Second Candidate Name',
+        fatherName: 'Father / Guardian Name',
+        email: 'trainee02@student.iti.cg.in',
+        mobile: '+91 98000 00002',
+        category: 'OBC',
         gender: 'Female',
-        dob: '2006-01-20',
+        dob: '2005-02-02',
       },
     ];
     const ws = XLSX.utils.json_to_sheet(templateData);
@@ -566,9 +566,9 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
     }
   };
 
-  // Run 10:00 AM Auto-Absent for unmarked trainees
+  // Run 17:00 (5:00 PM) Auto-Absent for unmarked trainees
   const handleTriggerAutoAbsent = async () => {
-    if (!confirm('Run automatic absent recording for any trainees who have not recorded attendance by 10:00 AM?')) return;
+    if (!confirm('Run automatic absent recording for any trainees who have not recorded attendance by 17:00 (05:00 PM)?')) return;
     try {
       const res = await triggerAutoAbsent(attendanceDate, selectedTradeId);
       showToast(`Auto-absent executed. ${res.markedCount} unmarked trainees flagged as Absent.`);
@@ -1463,9 +1463,9 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                 <button
                   onClick={handleTriggerAutoAbsent}
                   className="px-3 py-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 rounded-lg font-medium transition-colors whitespace-nowrap flex-1 sm:flex-initial text-center cursor-pointer"
-                  title="Marks all unmarked trainees past 10:00 AM as Absent automatically"
+                  title="Marks all unmarked trainees past 17:00 (05:00 PM) as Absent automatically"
                 >
-                  10 AM Auto-Absent
+                  17:00 Auto-Absent
                 </button>
                 <button
                   onClick={handleSaveAttendance}

@@ -9,10 +9,12 @@ export interface CampusLocation {
 }
 
 export interface AttendanceWindow {
-  startHour: number;    // e.g. 7
+  startHour: number;    // e.g. 7 (07:00 AM)
   startMinute: number;  // e.g. 0
-  endHour: number;      // e.g. 10
+  endHour: number;      // e.g. 15 (03:00 PM / 15:00)
   endMinute: number;    // e.g. 0
+  autoAbsentHour?: number;   // e.g. 17 (05:00 PM / 17:00)
+  autoAbsentMinute?: number; // e.g. 0
 }
 
 export interface LeaveLimits {

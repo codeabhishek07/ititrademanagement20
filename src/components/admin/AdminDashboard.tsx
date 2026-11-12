@@ -2367,9 +2367,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
                 <span>Attendance Window &amp; Minimum Threshold</span>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-slate-600 mb-1">Start Time (Hour 24h)</label>
+                  <label className="block text-slate-600 mb-1">Opening Time (24h)</label>
                   <input
                     type="number"
                     min="0"
@@ -2386,11 +2386,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
                     }
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded font-mono"
                   />
-                  <span className="text-[10px] text-slate-500">7 = 07:00 AM</span>
+                  <span className="text-[10px] text-slate-500 font-mono">7 = 07:00 AM</span>
                 </div>
 
                 <div>
-                  <label className="block text-slate-600 mb-1">Cutoff Time (Hour 24h)</label>
+                  <label className="block text-slate-600 mb-1">Closing Time (24h)</label>
                   <input
                     type="number"
                     min="0"
@@ -2401,13 +2401,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
                         ...settingsForm,
                         attendanceWindow: {
                           ...settingsForm.attendanceWindow,
-                          endHour: parseInt(e.target.value) || 10,
+                          endHour: parseInt(e.target.value) || 15,
                         },
                       })
                     }
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded font-mono"
                   />
-                  <span className="text-[10px] text-slate-500">10 = 10:00 AM</span>
+                  <span className="text-[10px] text-slate-500 font-mono">15 = 03:00 PM (15:00)</span>
+                </div>
+
+                <div>
+                  <label className="block text-slate-600 mb-1">Auto-Absent Cutoff (24h)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="23"
+                    value={settingsForm.attendanceWindow.autoAbsentHour !== undefined ? settingsForm.attendanceWindow.autoAbsentHour : 17}
+                    onChange={(e) =>
+                      setSettingsForm({
+                        ...settingsForm,
+                        attendanceWindow: {
+                          ...settingsForm.attendanceWindow,
+                          autoAbsentHour: parseInt(e.target.value) || 17,
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded font-mono"
+                  />
+                  <span className="text-[10px] text-slate-500 font-mono">17 = 05:00 PM (17:00)</span>
                 </div>
               </div>
 

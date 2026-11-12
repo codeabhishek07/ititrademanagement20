@@ -593,7 +593,7 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-1">
-                Authorized check-in between 07:00 AM and 10:00 AM within Govt ITI Raigarh campus perimeter ({settings.campusLocation.radiusMeters}m).
+                Authorized check-in between 07:00 AM and 03:00 PM (15:00) within Govt ITI Raigarh campus perimeter ({settings.campusLocation.radiusMeters}m). Auto-absent applies at 17:00.
               </p>
             </div>
 
@@ -603,7 +603,7 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
                 <Clock className="w-4 h-4 text-blue-600" />
                 <span className="font-medium text-slate-700">Daily Attendance Window:</span>
                 <span className="font-mono font-bold text-slate-900">
-                  {settings.attendanceWindow.startHour}:00 AM – {settings.attendanceWindow.endHour}:00 AM
+                  {settings.attendanceWindow.startHour}:00 AM – {settings.attendanceWindow.endHour > 12 ? `${settings.attendanceWindow.endHour - 12}:00 PM` : `${settings.attendanceWindow.endHour}:00 AM`} ({settings.attendanceWindow.startHour.toString().padStart(2, '0')}:00 – {settings.attendanceWindow.endHour.toString().padStart(2, '0')}:00)
                 </span>
               </div>
               <span
@@ -909,7 +909,7 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
                     <td className="py-2.5 px-3 text-slate-600 text-xs">
                       {rec.markedBy === 'trainee_gps' && 'Student GPS Geotag'}
                       {rec.markedBy === 'officer_manual' && 'Officer Manual'}
-                      {rec.markedBy === 'system_auto_absent' && '10 AM Cutoff System'}
+                      {rec.markedBy === 'system_auto_absent' && '17:00 Cutoff Auto-Absent'}
                     </td>
                     <td className="py-2.5 px-3 font-mono text-slate-700">
                       {rec.geotag ? `${rec.geotag.distanceFromCampusMeters}m (Campus)` : '—'}

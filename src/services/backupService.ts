@@ -2,6 +2,7 @@ import {
   saveSystemBackup,
   getLatestSystemBackup,
   getAllSystemBackups,
+  clearAllSystemBackupsAndDemoCache,
   type SystemBackupRecord,
 } from '../offline/indexedDb.ts';
 
@@ -9,6 +10,7 @@ export {
   saveSystemBackup,
   getLatestSystemBackup,
   getAllSystemBackups,
+  clearAllSystemBackupsAndDemoCache,
   type SystemBackupRecord,
 };
 
@@ -125,69 +127,21 @@ export async function restoreBackupPayload(
 }
 
 /**
- * Inspects whether the server appears to have rebooted with fresh/empty demo data,
- * while the browser has a newer, richer backup stored in IndexedDB.
+ * Checks whether the user has a manually created, valid non-demo backup
  */
 export async function checkForRestorableBackup(): Promise<{
   hasRestorableBackup: boolean;
   backup: SystemBackupRecord | null;
   reason?: string;
 }> {
-  try {
-    const latestBackup = await getLatestSystemBackup();
-    if (!latestBackup || !latestBackup.payload) {
-      return { hasRestorableBackup: false, backup: null };
-    }
-
-    // Check server status
-    const bootRes = await fetch('/api/bootstrap');
-    if (!bootRes.ok) {
-      return { hasRestorableBackup: false, backup: latestBackup };
-    }
-    const bootData = await bootRes.json();
-    const serverTrainees = bootData.stats?.totalTrainees || 0;
-
-    // Check if backup has more trainees, or assessment records that are missing
-    const backupAssessments = Array.isArray(latestBackup.payload.assessments)
-      ? latestBackup.payload.assessments.length
-      : 0;
-    const backupTrainees = latestBackup.summary?.traineesCount || 0;
-
-    // If backup has assessments recorded or more trainees, or custom admin settings
-    if (backupAssessments > 0 || backupTrainees > serverTrainees) {
-      return {
-        hasRestorableBackup: true,
-        backup: latestBackup,
-        reason: `${backupAssessments} formative assessment record(s) and ${backupTrainees} trainee profile(s) found in browser persistent storage.`,
-      };
-    }
-
-    return { hasRestorableBackup: false, backup: latestBackup };
-  } catch (err) {
-    console.warn('Error checking restorable backup:', err);
-    return { hasRestorableBackup: false, backup: null };
-  }
+  // Automatic restorable backup popup is disabled to ensure clean production operation
+  return { hasRestorableBackup: false, backup: null };
 }
 
 /**
- * Auto-restores database if the server was restarted or scaled down to zero.
- * Returns true if auto-restore occurred.
+ * Disables automatic restore on boot to prevent demo data reincarnation
  */
 export async function autoRestoreIfServerWashedOut(): Promise<boolean> {
-  try {
-    // Check user preference (enabled by default)
-    const isAutoRestoreDisabled = localStorage.getItem('iti_auto_restore_disabled') === 'true';
-    if (isAutoRestoreDisabled) return false;
-
-    const check = await checkForRestorableBackup();
-    if (check.hasRestorableBackup && check.backup?.payload) {
-      console.log('Detected washed-out container state. Automatically restoring saved backup from IndexedDB...');
-      await restoreBackupPayload(check.backup.payload, 'auto_restore_on_boot');
-      return true;
-    }
-    return false;
-  } catch (err) {
-    console.warn('Auto-restore failed:', err);
-    return false;
-  }
+  return false;
 }
+
