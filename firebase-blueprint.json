@@ -144,6 +144,20 @@
         "holidays": { "type": "number" }
       },
       "required": ["id", "sessionId", "month", "workingDays"]
+    },
+    "holiday": {
+      "title": "HolidayRecord",
+      "description": "Admin-designated holiday dates restricting attendance",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string" },
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "sessionId": { "type": "string" },
+        "remarks": { "type": "string" }
+      },
+      "required": ["id", "date", "title", "category"]
     }
   },
   "firestore": {
@@ -186,6 +200,10 @@
     "/workingDays/{workingDayId}": {
       "schema": "workingDay",
       "description": "Academic calendar monthly working days"
+    },
+    "/holidays/{holidayId}": {
+      "schema": "holiday",
+      "description": "Admin-designated session holidays restricting attendance"
     }
   }
 }

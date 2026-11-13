@@ -26,6 +26,9 @@ import {
   Star,
   StarOff,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Ban,
   Menu,
   Database,
   Download,
@@ -43,6 +46,8 @@ import {
 import {
   AcademicSession,
   MonthlyWorkingDay,
+  HolidayRecord,
+  HolidayCategory,
   Trade,
   TrainingOfficer,
   SystemSettings,
@@ -58,6 +63,10 @@ import {
   saveMonthlyWorkingDay,
   saveBulkMonthlyWorkingDays,
   deleteMonthlyWorkingDay,
+  fetchHolidays,
+  createHoliday,
+  updateHoliday,
+  deleteHoliday,
   fetchTrades,
   createTrade,
   updateTrade,
@@ -120,6 +129,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
   // Data states
   const [sessions, setSessions] = useState<AcademicSession[]>([]);
   const [monthlyDays, setMonthlyDays] = useState<MonthlyWorkingDay[]>([]);
+  const [holidays, setHolidays] = useState<HolidayRecord[]>([]);
   const [trades, setTrades] = useState<Trade[]>([]);
   const [officers, setOfficers] = useState<TrainingOfficer[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
@@ -137,7 +147,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
   const [successToast, setSuccessToast] = useState('');
   const [calibratingGps, setCalibratingGps] = useState(false);
 
-  // Selected session for monthly working days
+  // Selected session for monthly working days & holiday calendar
   const [selectedSessionId, setSelectedSessionId] = useState(settings.currentSessionId || '');
   const [editableMonthlyDays, setEditableMonthlyDays] = useState<MonthlyWorkingDay[]>([]);
   const [savingWorkingDays, setSavingWorkingDays] = useState(false);
@@ -147,6 +157,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
     workingDays: 22,
     holidays: 8,
     totalDays: 30,
+    remarks: '',
+  });
+
+  // Holiday Calendar State & Modal
+  const [calendarMonth, setCalendarMonth] = useState<string>(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [holidayModalOpen, setHolidayModalOpen] = useState(false);
+  const [editingHoliday, setEditingHoliday] = useState<HolidayRecord | null>(null);
+  const [savingHoliday, setSavingHoliday] = useState(false);
+  const [holidayForm, setHolidayForm] = useState<{
+    date: string;
+    title: string;
+    category: HolidayCategory;
+    sessionId: string;
+    remarks: string;
+  }>({
+    date: new Date().toISOString().split('T')[0],
+    title: '',
+    category: 'National Holiday',
+    sessionId: 'all',
     remarks: '',
   });
 
@@ -224,16 +256,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
   const reloadData = async () => {
     setLoading(true);
     try {
-      const [sList, tList, oList, aList] = await Promise.all([
+      const [sList, tList, oList, aList, hList] = await Promise.all([
         fetchSessions(),
         fetchTrades(),
         fetchOfficers(),
         fetchAuditLogs(),
+        fetchHolidays(),
       ]);
       setSessions(sList);
       setTrades(tList);
       setOfficers(oList);
       setAuditLogs(aList);
+      setHolidays(hList);
       if (sList.length > 0 && !selectedSessionId) {
         setSelectedSessionId(sList[0].id);
       }
@@ -259,6 +293,75 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
       setEditableMonthlyDays([]);
     }
   }, [selectedSessionId]);
+
+  // Holiday CRUD Handlers
+  const handleOpenHolidayModal = (holiday?: HolidayRecord, prefillDate?: string) => {
+    if (holiday) {
+      setEditingHoliday(holiday);
+      setHolidayForm({
+        date: holiday.date,
+        title: holiday.title,
+        category: holiday.category || 'National Holiday',
+        sessionId: holiday.sessionId || 'all',
+        remarks: holiday.remarks || '',
+      });
+    } else {
+      setEditingHoliday(null);
+      setHolidayForm({
+        date: prefillDate || new Date().toISOString().split('T')[0],
+        title: '',
+        category: 'National Holiday',
+        sessionId: selectedSessionId || 'all',
+        remarks: '',
+      });
+    }
+    setHolidayModalOpen(true);
+  };
+
+  const handleSaveHoliday = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!holidayForm.date || !holidayForm.title.trim()) {
+      alert('Please specify both holiday date and holiday title.');
+      return;
+    }
+    setSavingHoliday(true);
+    try {
+      if (editingHoliday) {
+        await updateHoliday(editingHoliday.id, holidayForm);
+        showToast(`Holiday "${holidayForm.title}" updated (${holidayForm.date})`);
+      } else {
+        await createHoliday(holidayForm);
+        showToast(`Holiday "${holidayForm.title}" designated on ${holidayForm.date}. Attendance is now restricted.`);
+      }
+      setHolidayModalOpen(false);
+      const updated = await fetchHolidays();
+      setHolidays(updated);
+      fetchAuditLogs().then(setAuditLogs).catch(() => {});
+    } catch (err: any) {
+      alert(err.message || 'Failed to save holiday');
+    } finally {
+      setSavingHoliday(false);
+    }
+  };
+
+  const handleDeleteHoliday = async (holiday: HolidayRecord) => {
+    if (!confirm(`Remove Holiday "${holiday.title}" on ${holiday.date}? Attendance marking will be re-enabled for this date.`)) return;
+    try {
+      await deleteHoliday(holiday.id);
+      showToast(`Removed holiday "${holiday.title}" (${holiday.date})`);
+      const updated = await fetchHolidays();
+      setHolidays(updated);
+      fetchAuditLogs().then(setAuditLogs).catch(() => {});
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete holiday');
+    }
+  };
+
+  const handleCalendarMonthStep = (delta: number) => {
+    const [y, m] = calendarMonth.split('-').map(Number);
+    const d = new Date(y, m - 1 + delta, 1);
+    setCalendarMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+  };
 
   // Helper to generate 12 monthly slots based on session dates
   const generateMonthsForSession = (session: AcademicSession): MonthlyWorkingDay[] => {
@@ -857,7 +960,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
               <h3 className="font-extrabold text-sm text-white truncate">
                 {activeTab === 'overview' && 'System Overview'}
                 {activeTab === 'sessions' && 'Academic Sessions'}
-                {activeTab === 'working_days' && 'Monthly Working Days'}
+                {activeTab === 'working_days' && 'Session Calendar & Holidays'}
                 {activeTab === 'trades' && 'Trade Management'}
                 {activeTab === 'officers' && 'Officers & Accounts'}
                 {activeTab === 'rules' && 'Campus Geofence & Rules'}
@@ -903,7 +1006,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
               {[
                 { id: 'overview', label: 'System Overview', hindi: 'सिस्टम विवरण', icon: Building },
                 { id: 'sessions', label: 'Academic Sessions', hindi: 'शैक्षणिक सत्र', icon: Calendar, badge: sessions.length },
-                { id: 'working_days', label: 'Monthly Working Days', hindi: 'मासिक कार्य दिवस', icon: CalendarDays, badge: monthlyDays.length > 0 ? `${monthlyDays.length}` : undefined },
+                { id: 'working_days', label: 'Session Calendar & Holidays', hindi: 'सत्र कैलेंडर व अवकाश', icon: CalendarDays, badge: holidays.length > 0 ? `${holidays.length}` : monthlyDays.length > 0 ? `${monthlyDays.length}` : undefined },
               ].map((item) => {
                 const Icon = item.icon;
                 const isActive = activeTab === item.id;
@@ -1082,10 +1185,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
                 },
                 {
                   id: 'working_days',
-                  label: 'Monthly Working Days',
-                  hindi: 'मासिक कार्य दिवस',
+                  label: 'Session Calendar & Holidays',
+                  hindi: 'सत्र कैलेंडर व अवकाश',
                   icon: CalendarDays,
-                  badge: monthlyDays.length > 0 ? `${monthlyDays.length}` : undefined,
+                  badge: holidays.length > 0 ? `${holidays.length}` : monthlyDays.length > 0 ? `${monthlyDays.length}` : undefined,
                 },
               ].map((item) => {
                 const Icon = item.icon;
@@ -1611,10 +1714,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
                               setActiveTab('working_days');
                             }}
                             className="p-1.5 text-blue-600 hover:bg-blue-50 rounded flex items-center gap-1 text-[11px] font-medium"
-                            title="Configure Monthly Working Days"
+                            title="Open Session Calendar, Holidays & Monthly Working Days"
                           >
                             <CalendarDays className="w-3.5 h-3.5" />
-                            <span className="hidden sm:inline">Days</span>
+                            <span className="hidden sm:inline">Calendar &amp; Holidays</span>
                           </button>
                           <button
                             onClick={() => handleOpenSessionModal(sess)}
@@ -1641,7 +1744,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
         </div>
       )}
 
-      {/* TAB 3: MONTHLY WORKING DAYS */}
+      {/* TAB 3: SESSION CALENDAR, HOLIDAYS & MONTHLY WORKING DAYS */}
       {activeTab === 'working_days' && (() => {
         const currentSession = sessions.find((s) => s.id === selectedSessionId);
         const totalWorkingDaysSum = editableMonthlyDays.reduce(
@@ -1653,47 +1756,323 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
           0
         );
 
-        return (
-          <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-5 space-y-5">
-            {/* Header with Session Selector & Main Actions */}
-            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-4">
-              <div>
-                <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-blue-600" />
-                  <span>Monthly Working Days Configuration</span>
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Define exact scheduled working days, holidays, and practical sessions per calendar month for trainee attendance calculations.
-                </p>
-              </div>
+        const sessionHolidays = holidays
+          .filter((h) => !h.sessionId || h.sessionId === 'all' || h.sessionId === selectedSessionId)
+          .sort((a, b) => a.date.localeCompare(b.date));
 
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="flex items-center gap-2 text-xs bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg">
-                  <span className="text-slate-700 font-semibold">Academic Session:</span>
-                  <select
-                    value={selectedSessionId}
-                    onChange={(e) => setSelectedSessionId(e.target.value)}
-                    className="px-2 py-1 border border-slate-300 rounded font-medium text-slate-800 bg-white"
-                  >
-                    {sessions.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name} ({s.status.toUpperCase()})
-                      </option>
-                    ))}
-                  </select>
+        const [calYearStr, calMonStr] = calendarMonth.split('-');
+        const calYear = parseInt(calYearStr, 10);
+        const calMon = parseInt(calMonStr, 10);
+        const daysInCalMonth = new Date(calYear, calMon, 0).getDate();
+        const firstDayOfWeek = new Date(calYear, calMon - 1, 1).getDay();
+        const calCells: Array<{ dayNum: number | null; dateStr?: string; isSunday?: boolean; holiday?: HolidayRecord }> = [];
+        for (let i = 0; i < firstDayOfWeek; i++) {
+          calCells.push({ dayNum: null });
+        }
+        for (let d = 1; d <= daysInCalMonth; d++) {
+          const dateStr = `${calYearStr}-${calMonStr}-${String(d).padStart(2, '0')}`;
+          const dow = new Date(calYear, calMon - 1, d).getDay();
+          const matchedHoliday = sessionHolidays.find((h) => h.date === dateStr);
+          calCells.push({
+            dayNum: d,
+            dateStr,
+            isSunday: dow === 0,
+            holiday: matchedHoliday,
+          });
+        }
+
+        const calMonthHolidayCount = calCells.filter((c) => c.holiday).length;
+
+        return (
+          <div className="space-y-6">
+            {/* SECTION A: INTERACTIVE SESSION CALENDAR & HOLIDAY DESIGNATION */}
+            <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-5 space-y-5">
+              <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-4">
+                <div>
+                  <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-rose-600" />
+                    <span>Session Calendar &amp; Designated Holidays</span>
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Add, edit, or manage institutional holidays on exact dates. Attendance is automatically restricted and disabled for Officers &amp; Trainees on all designated holidays.
+                  </p>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={handleSaveBulkMonthlyDays}
-                  disabled={savingWorkingDays || editableMonthlyDays.length === 0}
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 rounded-lg transition-colors shadow-xs"
-                >
-                  <Save className={`w-3.5 h-3.5 ${savingWorkingDays ? 'animate-spin' : ''}`} />
-                  <span>{savingWorkingDays ? 'Saving...' : 'Save Monthly Working Days'}</span>
-                </button>
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <div className="flex items-center gap-2 text-xs bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg">
+                    <span className="text-slate-700 font-semibold">Session:</span>
+                    <select
+                      value={selectedSessionId}
+                      onChange={(e) => setSelectedSessionId(e.target.value)}
+                      className="px-2 py-0.5 border border-slate-300 rounded font-medium text-slate-800 bg-white"
+                    >
+                      {sessions.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} ({s.status.toUpperCase()})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleOpenHolidayModal(undefined, `${calendarMonth}-01`)}
+                    className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition-colors shadow-xs cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Holiday Date</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Attendance Restriction Policy Strip */}
+              <div className="p-3 rounded-lg bg-rose-50/80 border border-rose-200 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2 text-rose-900">
+                  <Ban className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>
+                    <strong>Automatic Attendance Lock:</strong> On any Admin-designated Holiday, GPS check-in, Officer batch attendance, and 17:00 Auto-Absent are automatically blocked.
+                  </span>
+                </div>
+                <span className="px-2.5 py-0.5 rounded-full bg-white border border-rose-200 text-rose-700 font-mono font-bold text-[11px]">
+                  {sessionHolidays.length} Active Holiday{sessionHolidays.length === 1 ? '' : 's'}
+                </span>
+              </div>
+
+              {/* Visual Monthly Calendar Grid */}
+              <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50/40">
+                <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-slate-100/80 border-b border-slate-200">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleCalendarMonthStep(-1)}
+                      className="p-1.5 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg text-slate-700 cursor-pointer"
+                      title="Previous Month"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <input
+                      type="month"
+                      value={calendarMonth}
+                      onChange={(e) => e.target.value && setCalendarMonth(e.target.value)}
+                      className="px-2.5 py-1 bg-white border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-900"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleCalendarMonthStep(1)}
+                      className="p-1.5 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg text-slate-700 cursor-pointer"
+                      title="Next Month"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3 text-[11px]">
+                    <span className="inline-flex items-center gap-1.5 font-semibold text-rose-800">
+                      <span className="w-3 h-3 rounded bg-rose-500 inline-block" />
+                      Admin Holiday ({calMonthHolidayCount} this month)
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 font-semibold text-amber-800">
+                      <span className="w-3 h-3 rounded bg-amber-300 inline-block" />
+                      Sunday
+                    </span>
+                    <span className="text-slate-500 hidden sm:inline">Click any calendar date to add or edit a holiday</span>
+                  </div>
+                </div>
+
+                {/* Weekday Headers */}
+                <div className="grid grid-cols-7 bg-slate-100 border-b border-slate-200 text-center text-[11px] font-bold text-slate-600">
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((wd, i) => (
+                    <div key={wd} className={`py-2 ${i === 0 ? 'text-amber-800 bg-amber-50/70' : ''}`}>
+                      {wd}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Calendar Day Cells */}
+                <div className="grid grid-cols-7 divide-x divide-y divide-slate-200 bg-white">
+                  {calCells.map((cell, idx) => {
+                    if (!cell.dayNum || !cell.dateStr) {
+                      return <div key={`empty_${idx}`} className="min-h-[68px] sm:min-h-[78px] bg-slate-50/60" />;
+                    }
+                    const isToday = cell.dateStr === new Date().toISOString().split('T')[0];
+                    return (
+                      <button
+                        key={cell.dateStr}
+                        type="button"
+                        onClick={() =>
+                          cell.holiday
+                            ? handleOpenHolidayModal(cell.holiday)
+                            : handleOpenHolidayModal(undefined, cell.dateStr)
+                        }
+                        className={`min-h-[68px] sm:min-h-[78px] p-1.5 sm:p-2 text-left flex flex-col justify-between transition-colors cursor-pointer group ${
+                          cell.holiday
+                            ? 'bg-rose-50 hover:bg-rose-100/80 ring-1 ring-inset ring-rose-300'
+                            : cell.isSunday
+                            ? 'bg-amber-50/50 hover:bg-amber-50'
+                            : 'bg-white hover:bg-blue-50/40'
+                        }`}
+                        title={
+                          cell.holiday
+                            ? `Holiday: ${cell.holiday.title} (Click to edit)`
+                            : `Click to mark ${cell.dateStr} as Holiday`
+                        }
+                      >
+                        <div className="flex items-center justify-between w-full">
+                          <span
+                            className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded ${
+                              isToday
+                                ? 'bg-blue-600 text-white'
+                                : cell.holiday
+                                ? 'text-rose-900'
+                                : cell.isSunday
+                                ? 'text-amber-800'
+                                : 'text-slate-800'
+                            }`}
+                          >
+                            {cell.dayNum}
+                          </span>
+                          {cell.holiday ? (
+                            <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-rose-600 text-white shadow-2xs">
+                              Holiday
+                            </span>
+                          ) : cell.isSunday ? (
+                            <span className="text-[9px] font-semibold text-amber-700 hidden sm:inline">Sunday</span>
+                          ) : (
+                            <span className="text-[9px] text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity font-semibold">
+                              + Holiday
+                            </span>
+                          )}
+                        </div>
+
+                        {cell.holiday ? (
+                          <div className="text-[10px] font-semibold text-rose-900 line-clamp-2 leading-tight mt-1">
+                            {cell.holiday.title}
+                          </div>
+                        ) : (
+                          <div className="text-[9px] text-slate-400 truncate">
+                            {cell.isSunday ? 'Weekly Off' : 'Working Day'}
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Designated Holidays List Table */}
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-xs text-slate-800 uppercase tracking-wider">
+                    Configured Holidays Register ({currentSession?.name || 'All Sessions'})
+                  </h4>
+                  <span className="text-[11px] text-slate-500">Sorted chronologically by date</span>
+                </div>
+
+                {sessionHolidays.length === 0 ? (
+                  <div className="p-6 text-center bg-slate-50 rounded-xl border border-dashed border-slate-300 text-xs text-slate-500 space-y-2">
+                    <p className="font-semibold text-slate-700">No custom Admin holidays added yet for this session.</p>
+                    <p>Click any date on the calendar above or click <strong>"Add Holiday Date"</strong> to mark Gazetted/Festival/Institute holidays.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200 text-slate-600">
+                          <th className="py-2.5 px-3 font-semibold">Date &amp; Day</th>
+                          <th className="py-2.5 px-3 font-semibold">Holiday Title</th>
+                          <th className="py-2.5 px-3 font-semibold">Category</th>
+                          <th className="py-2.5 px-3 font-semibold">Scope</th>
+                          <th className="py-2.5 px-3 font-semibold">Attendance Status</th>
+                          <th className="py-2.5 px-3 font-semibold text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {sessionHolidays.map((h) => {
+                          const dObj = new Date(`${h.date}T00:00:00`);
+                          const dayLabel = !isNaN(dObj.getTime())
+                            ? dObj.toLocaleDateString('en-IN', { weekday: 'short' })
+                            : '';
+                          const sessName =
+                            !h.sessionId || h.sessionId === 'all'
+                              ? 'All Sessions'
+                              : sessions.find((s) => s.id === h.sessionId)?.name || h.sessionId;
+                          return (
+                            <tr key={h.id} className="hover:bg-rose-50/30 transition-colors">
+                              <td className="py-2.5 px-3 font-mono font-semibold text-slate-900">
+                                {h.date} <span className="text-[10px] font-sans text-slate-500 ml-1">({dayLabel})</span>
+                              </td>
+                              <td className="py-2.5 px-3">
+                                <div className="font-bold text-slate-900">{h.title}</div>
+                                {h.remarks && <div className="text-[11px] text-slate-500">{h.remarks}</div>}
+                              </td>
+                              <td className="py-2.5 px-3">
+                                <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200 text-[10px] font-semibold">
+                                  {h.category}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3 text-[11px] text-slate-600">{sessName}</td>
+                              <td className="py-2.5 px-3">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-200 text-[10px] font-bold">
+                                  <Ban className="w-3 h-3" />
+                                  Holiday (Locked)
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3 text-right">
+                                <div className="inline-flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenHolidayModal(h)}
+                                    className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded cursor-pointer"
+                                    title="Edit Holiday"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteHoliday(h)}
+                                    className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded cursor-pointer"
+                                    title="Delete Holiday"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </div>
+
+            {/* SECTION B: MONTHLY WORKING DAYS CONFIGURATION */}
+            <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-5 space-y-5">
+              {/* Header with Session Selector & Main Actions */}
+              <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-4">
+                <div>
+                  <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-blue-600" />
+                    <span>Monthly Working Days Configuration</span>
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Define scheduled working days, holidays count, and practical sessions per calendar month for trainee attendance calculations.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleSaveBulkMonthlyDays}
+                    disabled={savingWorkingDays || editableMonthlyDays.length === 0}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 rounded-lg transition-colors shadow-xs"
+                  >
+                    <Save className={`w-3.5 h-3.5 ${savingWorkingDays ? 'animate-spin' : ''}`} />
+                    <span>{savingWorkingDays ? 'Saving...' : 'Save Monthly Working Days'}</span>
+                  </button>
+                </div>
+              </div>
 
             {/* Session Summary & Target Metrics */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
@@ -2021,6 +2400,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
                 </div>
               </div>
             )}
+            </div>
           </div>
         );
       })()}
@@ -3022,6 +3402,114 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
                   className="flex-1 py-2 px-3 bg-amber-600 text-white rounded hover:bg-amber-700"
                 >
                   Confirm Reset
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ADD / EDIT SESSION HOLIDAY */}
+      {holidayModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-md w-full p-6 text-xs text-slate-800">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-rose-600" />
+                <span>{editingHoliday ? 'Edit Designated Holiday' : 'Add Session Holiday'}</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setHolidayModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-700 rounded cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-500 mb-4">
+              Attendance marking and automatic absent cutoffs will be automatically disabled on this date.
+            </p>
+            <form onSubmit={handleSaveHoliday} className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1">Holiday Date *</label>
+                  <input
+                    type="date"
+                    value={holidayForm.date}
+                    onChange={(e) => setHolidayForm({ ...holidayForm, date: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Category *</label>
+                  <select
+                    value={holidayForm.category}
+                    onChange={(e) => setHolidayForm({ ...holidayForm, category: e.target.value as HolidayCategory })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"
+                  >
+                    <option value="National Holiday">National Holiday</option>
+                    <option value="State Holiday">State Holiday</option>
+                    <option value="Festival">Festival</option>
+                    <option value="Institute Break">Institute Break</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-1">Holiday Name / Occasion *</label>
+                <input
+                  type="text"
+                  value={holidayForm.title}
+                  onChange={(e) => setHolidayForm({ ...holidayForm, title: e.target.value })}
+                  placeholder="e.g. Republic Day, Diwali Vacation, Foundation Day"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-1">Academic Session Scope</label>
+                <select
+                  value={holidayForm.sessionId}
+                  onChange={(e) => setHolidayForm({ ...holidayForm, sessionId: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"
+                >
+                  <option value="all">All Academic Sessions (Institute-Wide)</option>
+                  {sessions.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.status.toUpperCase()})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-1">Remarks / Circular Ref (Optional)</label>
+                <input
+                  type="text"
+                  value={holidayForm.remarks}
+                  onChange={(e) => setHolidayForm({ ...holidayForm, remarks: e.target.value })}
+                  placeholder="e.g. Govt. Order No. 142/CG-ITI"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                />
+              </div>
+
+              <div className="pt-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setHolidayModalOpen(false)}
+                  className="flex-1 py-2 px-3 border border-slate-300 rounded-lg hover:bg-slate-100 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingHoliday}
+                  className="flex-1 py-2 px-3 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-bold rounded-lg cursor-pointer"
+                >
+                  {savingHoliday ? 'Saving...' : editingHoliday ? 'Update Holiday' : 'Designate Holiday'}
                 </button>
               </div>
             </form>

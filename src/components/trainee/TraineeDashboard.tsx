@@ -19,7 +19,10 @@ import {
   X,
   Mail,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Menu,
+  Ban,
 } from 'lucide-react';
 import {
   AttendanceRecord,
@@ -28,6 +31,7 @@ import {
   IndentRecord,
   SystemSettings,
   LeaveType,
+  HolidayRecord,
 } from '../../types.ts';
 import {
   fetchAttendance,
@@ -37,6 +41,7 @@ import {
   fetchWarnings,
   acknowledgeWarning,
   fetchIndents,
+  fetchHolidays,
 } from '../../api.ts';
 
 interface TraineeDashboardProps {
@@ -110,6 +115,11 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
   const [leavesList, setLeavesList] = useState<LeaveRequest[]>([]);
   const [warningsList, setWarningsList] = useState<WarningNotice[]>([]);
   const [indentsList, setIndentsList] = useState<IndentRecord[]>([]);
+  const [holidays, setHolidays] = useState<HolidayRecord[]>([]);
+  const [historyMonth, setHistoryMonth] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  });
   const [noticeLanguage, setNoticeLanguage] = useState<'hindi' | 'bilingual' | 'english'>('bilingual');
   const [viewOrderNotice, setViewOrderNotice] = useState<WarningNotice | null>(null);
 
@@ -125,6 +135,10 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
 
   const todayStr = new Date().toISOString().split('T')[0];
   const todayRecord = attendanceList.find((a) => a.date === todayStr);
+  const traineeHolidays = holidays.filter(
+    (h) => !h.sessionId || h.sessionId === 'all' || !trainee.sessionId || h.sessionId === trainee.sessionId
+  );
+  const todayHoliday = traineeHolidays.find((h) => h.date === todayStr);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -134,16 +148,18 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
   const loadTraineeData = async () => {
     setLoading(true);
     try {
-      const [att, lvs, wrns, inds] = await Promise.all([
+      const [att, lvs, wrns, inds, hols] = await Promise.all([
         fetchAttendance({ traineeId: trainee.id }),
         fetchLeaves({ traineeId: trainee.id }),
         fetchWarnings({ traineeId: trainee.id }),
         fetchIndents({ traineeId: trainee.id }),
+        fetchHolidays(),
       ]);
       setAttendanceList(att);
       setLeavesList(lvs);
       setWarningsList(wrns);
       setIndentsList(inds);
+      setHolidays(hols);
     } catch (err) {
       console.error(err);
     } finally {
@@ -225,6 +241,10 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
 
   // Mark Attendance via GPS
   const handleMarkAttendance = async () => {
+    if (todayHoliday) {
+      alert(`Attendance is disabled today (${todayStr}): Designated as Holiday ("${todayHoliday.title}").`);
+      return;
+    }
     if (!currentCoords && !simulateOnCampus) {
       alert('Please wait for GPS coordinates or enable Test Simulator mode.');
       return;
@@ -608,17 +628,57 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
               </div>
               <span
                 className={`px-2 py-0.5 rounded text-[11px] font-semibold ${
-                  isTimeWithinWindow
+                  todayHoliday
+                    ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                    : isTimeWithinWindow
                     ? 'bg-emerald-100 text-emerald-800'
                     : 'bg-amber-100 text-amber-800'
                 }`}
               >
-                {isTimeWithinWindow ? 'WINDOW OPEN' : 'WINDOW CLOSED / CUTOFF'}
+                {todayHoliday ? 'HOLIDAY (DISABLED)' : isTimeWithinWindow ? 'WINDOW OPEN' : 'WINDOW CLOSED / CUTOFF'}
               </span>
             </div>
 
-            {/* Today's Already Marked Card */}
-            {todayRecord ? (
+            {/* Today Holiday Lock Banner */}
+            {todayHoliday ? (
+              <div className="p-5 rounded-xl border-2 border-rose-200 bg-rose-50/70 text-xs space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2 text-rose-900 font-bold text-sm">
+                    <Ban className="w-5 h-5 text-rose-600 shrink-0" />
+                    <span>Today is an Official Holiday — Attendance Disabled</span>
+                  </div>
+                  <span className="px-2.5 py-0.5 rounded bg-rose-600 text-white font-extrabold text-[10px] uppercase tracking-wider">
+                    Holiday
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-slate-800">
+                  <div className="bg-white p-2.5 rounded border border-rose-200">
+                    <span className="text-[10px] text-slate-500">Occasion</span>
+                    <div className="font-bold text-rose-900 mt-0.5">{todayHoliday.title}</div>
+                  </div>
+                  <div className="bg-white p-2.5 rounded border border-rose-200">
+                    <span className="text-[10px] text-slate-500">Category</span>
+                    <div className="font-bold text-slate-900 mt-0.5">{todayHoliday.category}</div>
+                  </div>
+                  <div className="bg-white p-2.5 rounded border border-rose-200">
+                    <span className="text-[10px] text-slate-500">Date</span>
+                    <div className="font-bold text-slate-900 mt-0.5 font-mono">{todayHoliday.date}</div>
+                  </div>
+                </div>
+                <p className="text-rose-800">
+                  Attendance check-in and GPS verification are automatically disabled on Admin-designated holidays. No absent deduction applies today.
+                  {todayHoliday.remarks ? ` (${todayHoliday.remarks})` : ''}
+                </p>
+                <button
+                  type="button"
+                  disabled
+                  className="w-full py-3 px-4 bg-slate-200 text-slate-500 font-bold rounded-xl text-xs flex items-center justify-center gap-2 cursor-not-allowed"
+                >
+                  <Ban className="w-4 h-4" />
+                  <span>Mark Attendance Disabled (Holiday: {todayHoliday.title})</span>
+                </button>
+              </div>
+            ) : todayRecord ? (
               <div className="p-5 rounded-xl border border-emerald-200 bg-emerald-50/60 text-xs space-y-3">
                 <div className="flex items-center gap-2 text-emerald-800 font-bold text-sm">
                   <CheckCircle2 className="w-5 h-5 text-emerald-600" />
@@ -811,9 +871,9 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
                 <span>Attendance Regulations</span>
               </h4>
               <ul className="space-y-2 text-[11px] text-slate-600 list-disc pl-4">
-                <li>Attendance must be marked between 07:00 AM and 10:00 AM daily.</li>
-                <li>Candidates failing to check in before 10:00 AM are automatically marked Absent.</li>
-                <li>Any corrections or late entries require explicit Training Officer authorization.</li>
+                <li>Attendance must be marked between 07:00 AM and 03:00 PM (15:00) daily.</li>
+                <li>Candidates failing to check in before 17:00 (05:00 PM) are automatically marked Absent.</li>
+                <li>Attendance marking is disabled on Sundays and Admin-designated Holidays.</li>
                 <li>Minimum required attendance for All India Trade Test (AITT) is 80%.</li>
               </ul>
             </div>
@@ -874,6 +934,144 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
               />
             </div>
           </div>
+
+          {/* Session Calendar & Holidays View */}
+          {(() => {
+            const [yStr, mStr] = historyMonth.split('-');
+            const y = parseInt(yStr, 10);
+            const m = parseInt(mStr, 10);
+            const totalDays = new Date(y, m, 0).getDate();
+            const firstDow = new Date(y, m - 1, 1).getDay();
+            const cells: Array<{ day: number | null; dateStr?: string; isSunday?: boolean; holiday?: HolidayRecord; rec?: AttendanceRecord }> = [];
+            for (let i = 0; i < firstDow; i++) cells.push({ day: null });
+            for (let d = 1; d <= totalDays; d++) {
+              const dateStr = `${yStr}-${mStr}-${String(d).padStart(2, '0')}`;
+              const dow = new Date(y, m - 1, d).getDay();
+              const holiday = traineeHolidays.find((h) => h.date === dateStr);
+              const rec = attendanceList.find((a) => a.date === dateStr);
+              cells.push({ day: d, dateStr, isSunday: dow === 0, holiday, rec });
+            }
+            const stepMonth = (delta: number) => {
+              const dt = new Date(y, m - 1 + delta, 1);
+              setHistoryMonth(`${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`);
+            };
+            const monthHolidays = cells.filter((c) => c.holiday);
+
+            return (
+              <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+                <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 bg-slate-50 border-b border-slate-200">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-rose-600" />
+                    <span className="font-bold text-slate-900 text-xs">Session Attendance &amp; Holiday Calendar</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => stepMonth(-1)}
+                      className="p-1 bg-white hover:bg-slate-100 border border-slate-300 rounded text-slate-700 cursor-pointer"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                    </button>
+                    <input
+                      type="month"
+                      value={historyMonth}
+                      onChange={(e) => e.target.value && setHistoryMonth(e.target.value)}
+                      className="px-2 py-0.5 bg-white border border-slate-300 rounded font-mono text-xs font-bold text-slate-800"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => stepMonth(1)}
+                      className="p-1 bg-white hover:bg-slate-100 border border-slate-300 rounded text-slate-700 cursor-pointer"
+                    >
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-7 bg-slate-100 border-b border-slate-200 text-center text-[10px] font-bold text-slate-600">
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((wd, idx) => (
+                    <div key={wd} className={`py-1.5 ${idx === 0 ? 'text-amber-800 bg-amber-50/70' : ''}`}>
+                      {wd}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-7 divide-x divide-y divide-slate-200">
+                  {cells.map((c, idx) => {
+                    if (!c.day || !c.dateStr) {
+                      return <div key={`empty_tr_${idx}`} className="min-h-[54px] bg-slate-50/60" />;
+                    }
+                    const isToday = c.dateStr === todayStr;
+                    return (
+                      <div
+                        key={c.dateStr}
+                        className={`min-h-[54px] p-1.5 flex flex-col justify-between ${
+                          c.holiday
+                            ? 'bg-rose-50 ring-1 ring-inset ring-rose-300'
+                            : c.rec?.status === 'Present'
+                            ? 'bg-emerald-50/50'
+                            : c.rec?.status === 'Absent'
+                            ? 'bg-rose-50/30'
+                            : c.isSunday
+                            ? 'bg-amber-50/40'
+                            : 'bg-white'
+                        }`}
+                        title={c.holiday ? `Holiday: ${c.holiday.title}` : c.rec?.status || (c.isSunday ? 'Sunday' : '')}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span
+                            className={`text-[11px] font-mono font-bold px-1 rounded ${
+                              isToday ? 'bg-amber-600 text-white' : c.holiday ? 'text-rose-900' : 'text-slate-700'
+                            }`}
+                          >
+                            {c.day}
+                          </span>
+                          {c.holiday ? (
+                            <span className="text-[8px] font-extrabold uppercase px-1 py-0.5 rounded bg-rose-600 text-white">
+                              Holiday
+                            </span>
+                          ) : c.rec ? (
+                            <span
+                              className={`text-[9px] font-bold px-1 rounded ${
+                                c.rec.status === 'Present'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : c.rec.status === 'Absent'
+                                  ? 'bg-rose-100 text-rose-800'
+                                  : 'bg-amber-100 text-amber-800'
+                              }`}
+                            >
+                              {c.rec.status === 'Present' ? 'P' : c.rec.status === 'Absent' ? 'A' : c.rec.status === 'CL' ? 'CL' : c.rec.status === 'Medical Leave' ? 'ML' : 'HD'}
+                            </span>
+                          ) : c.isSunday ? (
+                            <span className="text-[8px] text-amber-700 font-semibold">Sun</span>
+                          ) : null}
+                        </div>
+                        {c.holiday && (
+                          <div className="text-[9px] font-semibold text-rose-900 line-clamp-1 leading-tight">
+                            {c.holiday.title}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {monthHolidays.length > 0 && (
+                  <div className="px-4 py-2.5 bg-rose-50/70 border-t border-rose-200 flex flex-wrap items-center gap-2 text-[11px]">
+                    <span className="font-bold text-rose-900">Holidays in {historyMonth}:</span>
+                    {monthHolidays.map((c) => (
+                      <span
+                        key={c.dateStr}
+                        className="px-2 py-0.5 rounded bg-white border border-rose-200 text-rose-800 font-semibold"
+                      >
+                        <span className="font-mono">{c.dateStr}</span> — Holiday: {c.holiday?.title}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Detailed Log Table */}
           <div className="overflow-x-auto">

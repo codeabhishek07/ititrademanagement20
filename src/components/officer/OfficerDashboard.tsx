@@ -26,6 +26,8 @@ import {
   Upload,
   ChevronDown,
   Menu,
+  Ban,
+  Calendar,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import {
@@ -39,6 +41,7 @@ import {
   AttendanceStatus,
   SystemSettings,
   AcademicSession,
+  HolidayRecord,
 } from '../../types.ts';
 import {
   fetchOfficer,
@@ -62,6 +65,7 @@ import {
   issueIndent,
   returnIndent,
   bulkImportTrainees,
+  fetchHolidays,
 } from '../../api.ts';
 import { OfficerRegisters, RegisterType } from './OfficerRegisters.tsx';
 import { LessonPlanManager } from './LessonPlanManager.tsx';
@@ -273,6 +277,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
   const [warnings, setWarnings] = useState<WarningNotice[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [indents, setIndents] = useState<IndentRecord[]>([]);
+  const [holidays, setHolidays] = useState<HolidayRecord[]>([]);
 
   // Local pending attendance changes for batch saving
   const [attendanceEdits, setAttendanceEdits] = useState<Record<string, AttendanceStatus>>({});
@@ -474,7 +479,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
     if (!selectedTradeId) return;
     setLoading(true);
     try {
-      const [tList, attDayList, attAllList, lList, wList, invList, indList] = await Promise.all([
+      const [tList, attDayList, attAllList, lList, wList, invList, indList, holList] = await Promise.all([
         fetchTrainees(selectedTradeId, selectedSessionId),
         fetchAttendance({ date: attendanceDate, tradeId: selectedTradeId }),
         fetchAttendance({ tradeId: selectedTradeId, sessionId: selectedSessionId }),
@@ -482,6 +487,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
         fetchWarnings({ tradeId: selectedTradeId }),
         fetchInventory({ tradeId: selectedTradeId }),
         fetchIndents({ tradeId: selectedTradeId }),
+        fetchHolidays(),
       ]);
 
       setTrainees(tList);
@@ -491,6 +497,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
       setWarnings(wList);
       setInventory(invList);
       setIndents(indList);
+      setHolidays(holList);
 
       // Initialize local edits with existing records
       const initialMap: Record<string, AttendanceStatus> = {};
@@ -515,6 +522,11 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
   }, [selectedTradeId, selectedSessionId, attendanceDate]);
 
   const currentTrade = activeTradePool.find((t) => t.id === selectedTradeId) || activeTradePool[0];
+  const activeHoliday = holidays.find(
+    (h) =>
+      h.date === attendanceDate &&
+      (!h.sessionId || h.sessionId === 'all' || h.sessionId === selectedSessionId)
+  );
 
   // Compute attendance stats per trainee
   const traineeStats = trainees.map((tr) => {
@@ -545,6 +557,10 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
 
   // Batch Save Attendance
   const handleSaveAttendance = async () => {
+    if (activeHoliday) {
+      alert(`Attendance is disabled: ${attendanceDate} is an Admin-designated Holiday ("${activeHoliday.title}").`);
+      return;
+    }
     try {
       const recordsToSave = Object.entries(attendanceEdits).map(([traineeId, status]) => ({
         traineeId,
@@ -568,6 +584,10 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
 
   // Run 17:00 (5:00 PM) Auto-Absent for unmarked trainees
   const handleTriggerAutoAbsent = async () => {
+    if (activeHoliday) {
+      alert(`Auto-absent is disabled on Holiday ("${activeHoliday.title}" — ${attendanceDate}).`);
+      return;
+    }
     if (!confirm('Run automatic absent recording for any trainees who have not recorded attendance by 17:00 (05:00 PM)?')) return;
     try {
       const res = await triggerAutoAbsent(attendanceDate, selectedTradeId);
@@ -1458,24 +1478,70 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                   type="date"
                   value={attendanceDate}
                   onChange={(e) => setAttendanceDate(e.target.value)}
-                  className="px-2.5 py-1.5 border border-slate-300 rounded-lg text-slate-800 bg-white font-mono flex-1 sm:flex-initial"
+                  className={`px-2.5 py-1.5 border rounded-lg font-mono flex-1 sm:flex-initial ${
+                    activeHoliday ? 'border-rose-300 bg-rose-50 text-rose-900 font-bold' : 'border-slate-300 bg-white text-slate-800'
+                  }`}
                 />
                 <button
                   onClick={handleTriggerAutoAbsent}
-                  className="px-3 py-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 rounded-lg font-medium transition-colors whitespace-nowrap flex-1 sm:flex-initial text-center cursor-pointer"
-                  title="Marks all unmarked trainees past 17:00 (05:00 PM) as Absent automatically"
+                  disabled={Boolean(activeHoliday)}
+                  className={`px-3 py-1.5 rounded-lg font-medium transition-colors whitespace-nowrap flex-1 sm:flex-initial text-center border ${
+                    activeHoliday
+                      ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
+                      : 'bg-rose-50 text-rose-700 hover:bg-rose-100 border-rose-200 cursor-pointer'
+                  }`}
+                  title={
+                    activeHoliday
+                      ? `Disabled on Holiday: ${activeHoliday.title}`
+                      : 'Marks all unmarked trainees past 17:00 (05:00 PM) as Absent automatically'
+                  }
                 >
                   17:00 Auto-Absent
                 </button>
                 <button
                   onClick={handleSaveAttendance}
-                  className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-medium rounded-lg shadow-xs transition-colors whitespace-nowrap flex-1 sm:flex-initial text-center cursor-pointer active:scale-95"
+                  disabled={Boolean(activeHoliday)}
+                  className={`px-3.5 py-1.5 font-medium rounded-lg shadow-xs transition-colors whitespace-nowrap flex-1 sm:flex-initial text-center ${
+                    activeHoliday
+                      ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                      : 'bg-emerald-700 hover:bg-emerald-800 text-white cursor-pointer active:scale-95'
+                  }`}
                 >
-                  Save Changes
+                  {activeHoliday ? 'Holiday (Locked)' : 'Save Changes'}
                 </button>
               </div>
             </div>
           </div>
+
+          {activeHoliday && (
+            <div className="p-4 rounded-xl bg-rose-50 border-2 border-rose-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex items-start gap-3">
+                <span className="p-2 rounded-lg bg-rose-600 text-white shrink-0">
+                  <Ban className="w-4 h-4" />
+                </span>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="px-2 py-0.5 rounded bg-rose-600 text-white font-extrabold text-[10px] uppercase tracking-wider">
+                      Holiday
+                    </span>
+                    <span className="font-bold text-rose-950 text-sm">
+                      {activeHoliday.title} ({attendanceDate})
+                    </span>
+                    <span className="text-[11px] font-medium text-rose-700 bg-white px-2 py-0.5 rounded border border-rose-200">
+                      {activeHoliday.category}
+                    </span>
+                  </div>
+                  <p className="text-rose-800 mt-1">
+                    This date has been marked as a <strong>Holiday</strong> by the Admin. All officer and trainee attendance submissions and 17:00 auto-absent actions are disabled for this date.
+                    {activeHoliday.remarks ? ` (${activeHoliday.remarks})` : ''}
+                  </p>
+                </div>
+              </div>
+              <span className="px-2.5 py-1 rounded-lg bg-white border border-rose-300 text-rose-800 font-bold text-[11px]">
+                Attendance Restricted
+              </span>
+            </div>
+          )}
 
           <div className="overflow-x-auto max-w-full border border-slate-200 rounded-lg">
             <div className="sm:hidden flex items-center justify-between text-[11px] text-slate-500 bg-slate-50 px-3 py-1.5 border-b border-slate-200">
@@ -1498,42 +1564,52 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                   const record = dayAttendance.find((a) => a.traineeId === tr.id);
 
                   return (
-                    <tr key={tr.id} className="hover:bg-slate-50/80 transition-colors">
+                    <tr key={tr.id} className={`transition-colors ${activeHoliday ? 'bg-rose-50/20' : 'hover:bg-slate-50/80'}`}>
                       <td className="py-3 px-4">
                         <div className="font-semibold text-slate-900">{tr.name}</div>
                         <div className="font-mono text-[11px] text-slate-500">{tr.rollNo}</div>
                       </td>
 
                       <td className="py-3 px-4 text-center">
-                        <div className="inline-flex rounded-lg border border-slate-300 p-0.5 bg-slate-100">
-                          {(['Present', 'Absent', 'CL', 'Medical Leave', 'Half-Day Leave'] as AttendanceStatus[]).map((st) => {
-                            const isSelected = currentStatus === st;
-                            const label = st === 'Medical Leave' ? 'ML' : st === 'Half-Day Leave' ? 'HD' : st === 'Present' ? 'P' : st === 'Absent' ? 'A' : 'CL';
+                        {activeHoliday ? (
+                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-rose-100 text-rose-800 border border-rose-200 font-bold text-[11px]">
+                            <Calendar className="w-3.5 h-3.5" />
+                            <span>Holiday — Disabled</span>
+                          </span>
+                        ) : (
+                          <div className="inline-flex rounded-lg border border-slate-300 p-0.5 bg-slate-100">
+                            {(['Present', 'Absent', 'CL', 'Medical Leave', 'Half-Day Leave'] as AttendanceStatus[]).map((st) => {
+                              const isSelected = currentStatus === st;
+                              const label = st === 'Medical Leave' ? 'ML' : st === 'Half-Day Leave' ? 'HD' : st === 'Present' ? 'P' : st === 'Absent' ? 'A' : 'CL';
 
-                            return (
-                              <button
-                                key={st}
-                                onClick={() => setAttendanceEdits({ ...attendanceEdits, [tr.id]: st })}
-                                className={`px-2.5 py-1 text-[11px] font-semibold rounded transition-colors ${
-                                  isSelected
-                                    ? st === 'Present'
-                                      ? 'bg-emerald-600 text-white shadow-xs'
-                                      : st === 'Absent'
-                                      ? 'bg-rose-600 text-white shadow-xs'
-                                      : 'bg-amber-600 text-white shadow-xs'
-                                    : 'text-slate-600 hover:text-slate-900'
-                                }`}
-                                title={st}
-                              >
-                                {label}
-                              </button>
-                            );
-                          })}
-                        </div>
+                              return (
+                                <button
+                                  key={st}
+                                  disabled={Boolean(activeHoliday)}
+                                  onClick={() => setAttendanceEdits({ ...attendanceEdits, [tr.id]: st })}
+                                  className={`px-2.5 py-1 text-[11px] font-semibold rounded transition-colors ${
+                                    isSelected
+                                      ? st === 'Present'
+                                        ? 'bg-emerald-600 text-white shadow-xs'
+                                        : st === 'Absent'
+                                        ? 'bg-rose-600 text-white shadow-xs'
+                                        : 'bg-amber-600 text-white shadow-xs'
+                                      : 'text-slate-600 hover:text-slate-900'
+                                  }`}
+                                  title={st}
+                                >
+                                  {label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
                       </td>
 
                       <td className="py-3 px-4">
-                        {record ? (
+                        {activeHoliday ? (
+                          <span className="text-rose-700 font-medium text-[11px]">Holiday ({activeHoliday.title})</span>
+                        ) : record ? (
                           <div>
                             <span className="font-mono text-slate-800">{record.timestamp}</span>
                             <div className="text-[10px] text-slate-500">
@@ -1559,13 +1635,15 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                             </div>
                           </div>
                         ) : (
-                          <span className="text-slate-400 text-[11px]">No GPS geotag</span>
+                          <span className="text-slate-400 text-[11px]">{activeHoliday ? '—' : 'No GPS geotag'}</span>
                         )}
                       </td>
 
                       <td className="py-3 px-4 text-slate-600 text-[11px]">
-                        {record?.remarks || 'Regular workshop scheduled'}
-                        {record?.authorizedCorrection && (
+                        {activeHoliday
+                          ? `Holiday: ${activeHoliday.title} (Attendance Locked)`
+                          : record?.remarks || 'Regular workshop scheduled'}
+                        {record?.authorizedCorrection && !activeHoliday && (
                           <span className="block text-[10px] text-amber-700 font-medium">
                             Authorized correction by: {record.correctedBy}
                           </span>
@@ -1842,6 +1920,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
           inventory={inventory}
           indents={indents}
           settings={settings}
+          holidays={holidays}
           initialRegister={selectedRegister}
         />
       )}

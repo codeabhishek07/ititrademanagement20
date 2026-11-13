@@ -150,6 +150,7 @@ export async function loadDatabaseFromFirestore(): Promise<DatabaseSchema | null
     const [
       sessions,
       monthlyWorkingDays,
+      holidays,
       trades,
       officers,
       rawTrainees,
@@ -164,6 +165,7 @@ export async function loadDatabaseFromFirestore(): Promise<DatabaseSchema | null
     ] = await Promise.all([
       fetchCollection('sessions'),
       fetchCollection('workingDays'),
+      fetchCollection('holidays'),
       fetchCollection('trades'),
       fetchCollection('officers'),
       fetchCollection('trainees'),
@@ -216,6 +218,7 @@ export async function loadDatabaseFromFirestore(): Promise<DatabaseSchema | null
       settings,
       sessions,
       monthlyWorkingDays,
+      holidays: holidays || [],
       trades,
       officers,
       trainees,
@@ -335,6 +338,7 @@ export async function syncDiffToFirestore(
 
     diffCollection('sessions', prevData.sessions, nextData.sessions);
     diffCollection('workingDays', prevData.monthlyWorkingDays, nextData.monthlyWorkingDays);
+    diffCollection('holidays', prevData.holidays || [], nextData.holidays || []);
     diffCollection('trades', prevData.trades, nextData.trades);
     diffCollection('officers', prevData.officers, nextData.officers);
     diffCollection('trainees', prevData.trainees, nextData.trainees);
@@ -414,6 +418,7 @@ export async function seedDatabaseToFirestore(dbData: DatabaseSchema): Promise<v
     await Promise.all([
       batchWriteList('sessions', dbData.sessions),
       batchWriteList('workingDays', dbData.monthlyWorkingDays),
+      batchWriteList('holidays', dbData.holidays || []),
       batchWriteList('trades', dbData.trades),
       batchWriteList('officers', dbData.officers),
       batchWriteList('trainees', dbData.trainees),

@@ -64,6 +64,24 @@ export interface MonthlyWorkingDay {
   remarks?: string;
 }
 
+export type HolidayCategory =
+  | 'National Holiday'
+  | 'State Holiday'
+  | 'Festival'
+  | 'Institute Break'
+  | 'Other';
+
+export interface HolidayRecord {
+  id: string;
+  date: string; // YYYY-MM-DD
+  title: string;
+  category: HolidayCategory;
+  sessionId?: string; // specific AcademicSession id or 'all'
+  remarks?: string;
+  createdBy?: string;
+  updatedAt?: string;
+}
+
 export interface Trade {
   id: string;
   name: string; // e.g. "Electrician", "Fitter"

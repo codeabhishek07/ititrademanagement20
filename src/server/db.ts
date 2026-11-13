@@ -27,12 +27,14 @@ import type {
   DemonstrationPlan,
   WeeklyPlan,
   TraineeAssessment,
+  HolidayRecord,
 } from '../types.ts';
 
 export interface DatabaseSchema {
   settings: SystemSettings;
   sessions: AcademicSession[];
   monthlyWorkingDays: MonthlyWorkingDay[];
+  holidays: HolidayRecord[];
   trades: Trade[];
   officers: TrainingOfficer[];
   trainees: Trainee[];
@@ -132,6 +134,8 @@ function getInitialDatabase(): DatabaseSchema {
     { id: 'mwd_9', sessionId: 'session_2025_2026', month: '2026-04', totalDays: 30, workingDays: 22, holidays: 8, remarks: 'Ambedkar Jayanti, Ram Navami' },
     { id: 'mwd_10', sessionId: 'session_2025_2026', month: '2026-05', totalDays: 31, workingDays: 25, holidays: 6, remarks: 'Regular trade practical tests' },
   ];
+
+  const holidays: HolidayRecord[] = [];
 
   const trades: Trade[] = [
     {
@@ -359,6 +363,7 @@ function getInitialDatabase(): DatabaseSchema {
     settings,
     sessions,
     monthlyWorkingDays,
+    holidays,
     trades,
     officers,
     trainees,
@@ -417,9 +422,12 @@ class Database {
         const cleanWeeklyPlans = (Array.isArray(parsed.weeklyPlans) ? parsed.weeklyPlans : []).filter((p: any) => !isDemoIdOrName(p));
         const cleanAuditLogs = (Array.isArray(parsed.auditLogs) ? parsed.auditLogs : []).filter((log: any) => !isDemoIdOrName(log));
 
+        const cleanHolidays = (Array.isArray(parsed.holidays) ? parsed.holidays : []).filter((h: any) => !isDemoIdOrName(h));
+
         const merged: DatabaseSchema = {
           ...initial,
           ...parsed,
+          holidays: cleanHolidays,
           trainees: cleanTrainees,
           attendance: cleanAttendance,
           assessments: cleanAssessments,
@@ -511,6 +519,7 @@ class Database {
             (asm: any) => validTraineeIds.has(asm.traineeId) && !isDemoIdOrName(asm)
           ),
           monthlyWorkingDays: Array.isArray(cloudData.monthlyWorkingDays) ? cloudData.monthlyWorkingDays : this.data.monthlyWorkingDays,
+          holidays: Array.isArray(cloudData.holidays) ? cloudData.holidays : this.data.holidays,
           leaves: (Array.isArray(cloudData.leaves) ? cloudData.leaves : []).filter(
             (l: any) => validTraineeIds.has(l.traineeId) && !isDemoIdOrName(l)
           ),
@@ -598,6 +607,7 @@ class Database {
   }
 
   public get(): DatabaseSchema {
+    if (!Array.isArray(this.data.holidays)) this.data.holidays = [];
     if (!Array.isArray(this.data.assessments)) this.data.assessments = [];
     if (!Array.isArray(this.data.lessonPlans)) this.data.lessonPlans = [];
     if (!Array.isArray(this.data.demonstrationPlans)) this.data.demonstrationPlans = [];
@@ -653,6 +663,7 @@ class Database {
       officers: Array.isArray(rawData.officers) && rawData.officers.length > 0 ? rawData.officers : initial.officers,
       trainees: cleanTrainees,
       monthlyWorkingDays: Array.isArray(rawData.monthlyWorkingDays) ? rawData.monthlyWorkingDays : initial.monthlyWorkingDays,
+      holidays: Array.isArray(rawData.holidays) ? rawData.holidays : initial.holidays,
       attendance: cleanAttendance,
       leaves: cleanLeaves,
       warnings: cleanWarnings,

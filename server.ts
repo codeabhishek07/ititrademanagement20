@@ -4,7 +4,17 @@ import path from 'path';
 import fs from 'fs';
 import { db } from './src/server/db.ts';
 import { isFirestoreWriteQuotaExceeded } from './src/server/firestoreAdapter.ts';
-import type { AttendanceRecord, LeaveRequest, WarningNotice, InventoryItem, IndentRecord, Trainee, TrainingOfficer, Trade, AcademicSession, MonthlyWorkingDay, AppNotification, LessonPlan, DemonstrationPlan, WeeklyPlan, TraineeAssessment } from './src/types.ts';
+import type { AttendanceRecord, LeaveRequest, WarningNotice, InventoryItem, IndentRecord, Trainee, TrainingOfficer, Trade, AcademicSession, MonthlyWorkingDay, HolidayRecord, HolidayCategory, AppNotification, LessonPlan, DemonstrationPlan, WeeklyPlan, TraineeAssessment } from './src/types.ts';
+
+function findHolidayForDate(data: ReturnType<typeof db.get>, dateStr: string, sessionId?: string): HolidayRecord | undefined {
+  const list = data.holidays || [];
+  return list.find((h) => {
+    if (h.date !== dateStr) return false;
+    if (!h.sessionId || h.sessionId === 'all') return true;
+    if (!sessionId) return true;
+    return h.sessionId === sessionId;
+  });
+}
 
 function calculateDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371000; // Radius of Earth in meters
@@ -55,6 +65,7 @@ async function startServer() {
       settings: data.settings,
       sessions: data.sessions,
       trades: data.trades,
+      holidays: data.holidays || [],
       stats: {
         totalTrades: data.trades.filter((t) => t.status === 'active').length,
         totalOfficers: data.officers.filter((o) => o.status === 'active').length,
@@ -720,6 +731,152 @@ async function startServer() {
     res.json({ success: true });
   });
 
+  // -------------------------------------------------------------
+  // Admin Holiday Calendar Management
+  // -------------------------------------------------------------
+  app.get('/api/holidays', (req: Request, res: Response) => {
+    const { sessionId, month, date } = req.query;
+    const data = db.get();
+    let list = [...(data.holidays || [])];
+
+    if (sessionId && sessionId !== 'all') {
+      list = list.filter((h) => !h.sessionId || h.sessionId === 'all' || h.sessionId === sessionId.toString());
+    }
+    if (month) {
+      list = list.filter((h) => h.date.startsWith(month.toString()));
+    }
+    if (date) {
+      list = list.filter((h) => h.date === date.toString());
+    }
+
+    list.sort((a, b) => a.date.localeCompare(b.date));
+    res.json(list);
+  });
+
+  app.post('/api/holidays', (req: Request, res: Response) => {
+    const { date, title, category, sessionId, remarks, createdBy } = req.body;
+    const cleanDate = String(date || '').trim();
+    const cleanTitle = String(title || '').trim();
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(cleanDate)) {
+      return res.status(400).json({ error: 'Valid holiday date in YYYY-MM-DD format is required.' });
+    }
+    if (!cleanTitle) {
+      return res.status(400).json({ error: 'Holiday title / occasion name is required.' });
+    }
+
+    const data = db.get();
+    if (!Array.isArray(data.holidays)) data.holidays = [];
+    const targetScope = sessionId ? String(sessionId).trim() : 'all';
+
+    const existing = data.holidays.find(
+      (h) =>
+        h.date === cleanDate &&
+        ((h.sessionId || 'all') === targetScope || h.sessionId === 'all' || targetScope === 'all')
+    );
+    if (existing) {
+      return res.status(409).json({
+        error: `A holiday ("${existing.title}") is already designated on ${cleanDate}. Edit the existing holiday instead.`,
+      });
+    }
+
+    const newHoliday: HolidayRecord = {
+      id: `hol_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      date: cleanDate,
+      title: cleanTitle,
+      category: (category || 'National Holiday') as HolidayCategory,
+      sessionId: targetScope,
+      remarks: String(remarks || '').trim(),
+      createdBy: String(createdBy || 'Principal / Admin'),
+      updatedAt: new Date().toISOString(),
+    };
+
+    data.holidays.push(newHoliday);
+    db.save();
+    db.persistItem('holidays', newHoliday.id, newHoliday);
+    db.addAuditLog({
+      userId: 'usr_admin',
+      userName: newHoliday.createdBy || 'Principal / Admin',
+      userRole: 'admin',
+      action: 'CREATE_HOLIDAY',
+      details: `Designated Holiday "${newHoliday.title}" (${newHoliday.category}) on ${newHoliday.date}. Attendance restricted on this date.`,
+    });
+
+    res.json({ success: true, holiday: newHoliday });
+  });
+
+  app.put('/api/holidays/:id', (req: Request, res: Response) => {
+    const data = db.get();
+    if (!Array.isArray(data.holidays)) data.holidays = [];
+    const idx = data.holidays.findIndex((h) => h.id === req.params.id);
+    if (idx === -1) return res.status(404).json({ error: 'Holiday not found' });
+
+    const nextDate = req.body.date !== undefined ? String(req.body.date).trim() : data.holidays[idx].date;
+    const nextTitle = req.body.title !== undefined ? String(req.body.title).trim() : data.holidays[idx].title;
+    const nextScope = req.body.sessionId !== undefined ? (String(req.body.sessionId).trim() || 'all') : (data.holidays[idx].sessionId || 'all');
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(nextDate)) {
+      return res.status(400).json({ error: 'Valid holiday date in YYYY-MM-DD format is required.' });
+    }
+    if (!nextTitle) {
+      return res.status(400).json({ error: 'Holiday title / occasion name is required.' });
+    }
+
+    const conflict = data.holidays.find(
+      (h) =>
+        h.id !== req.params.id &&
+        h.date === nextDate &&
+        ((h.sessionId || 'all') === nextScope || h.sessionId === 'all' || nextScope === 'all')
+    );
+    if (conflict) {
+      return res.status(409).json({
+        error: `Another holiday ("${conflict.title}") already exists on ${nextDate}.`,
+      });
+    }
+
+    data.holidays[idx] = {
+      ...data.holidays[idx],
+      date: nextDate,
+      title: nextTitle,
+      category: (req.body.category || data.holidays[idx].category) as HolidayCategory,
+      sessionId: nextScope,
+      remarks: req.body.remarks !== undefined ? String(req.body.remarks).trim() : data.holidays[idx].remarks,
+      updatedAt: new Date().toISOString(),
+    };
+
+    db.save();
+    db.persistItem('holidays', data.holidays[idx].id, data.holidays[idx]);
+    db.addAuditLog({
+      userId: 'usr_admin',
+      userName: 'Principal / Admin',
+      userRole: 'admin',
+      action: 'UPDATE_HOLIDAY',
+      details: `Updated holiday "${data.holidays[idx].title}" on ${data.holidays[idx].date}.`,
+    });
+
+    res.json({ success: true, holiday: data.holidays[idx] });
+  });
+
+  app.delete('/api/holidays/:id', (req: Request, res: Response) => {
+    const data = db.get();
+    if (!Array.isArray(data.holidays)) data.holidays = [];
+    const target = data.holidays.find((h) => h.id === req.params.id);
+    if (!target) return res.status(404).json({ error: 'Holiday not found' });
+
+    data.holidays = data.holidays.filter((h) => h.id !== req.params.id);
+    db.save();
+    db.deleteItem('holidays', req.params.id);
+    db.addAuditLog({
+      userId: 'usr_admin',
+      userName: 'Principal / Admin',
+      userRole: 'admin',
+      action: 'DELETE_HOLIDAY',
+      details: `Removed holiday "${target.title}" (${target.date}). Attendance re-enabled for this date.`,
+    });
+
+    res.json({ success: true });
+  });
+
   // Trades Management
   app.get('/api/trades', (_req: Request, res: Response) => {
     res.json(db.get().trades);
@@ -1042,6 +1199,17 @@ async function startServer() {
 
     const now = new Date();
     const todayStr = now.toISOString().split('T')[0];
+
+    // Enforce Admin Holiday restriction
+    const holiday = findHolidayForDate(data, todayStr, trainee.sessionId);
+    if (holiday) {
+      return res.status(400).json({
+        error: `Attendance is disabled today (${todayStr}): Admin has marked this date as a Holiday ("${holiday.title}").`,
+        isHoliday: true,
+        holiday,
+      });
+    }
+
     const hours = now.getHours();
     const minutes = now.getMinutes();
 
@@ -1141,12 +1309,26 @@ async function startServer() {
       return res.status(400).json({ error: 'Invalid attendance records payload' });
     }
 
+    // Check if date is an admin-designated holiday for any target trainee session or institute-wide
+    const sampleTrainee = records
+      .map((r) => data.trainees.find((t) => t.id === r.traineeId))
+      .find(Boolean);
+    const holiday = findHolidayForDate(data, String(date || ''), sampleTrainee?.sessionId);
+    if (holiday) {
+      return res.status(400).json({
+        error: `Attendance submission blocked: ${date} is designated as a Holiday ("${holiday.title}"). Attendance actions are disabled on holidays.`,
+        isHoliday: true,
+        holiday,
+      });
+    }
+
     const now = new Date();
     const timestampStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
 
     records.forEach((item) => {
       const trainee = data.trainees.find((t) => t.id === item.traineeId);
       if (!trainee) return;
+      if (findHolidayForDate(data, String(date || ''), trainee.sessionId)) return;
 
       const existingIdx = data.attendance.findIndex((a) => a.traineeId === item.traineeId && a.date === date);
       if (existingIdx >= 0) {
@@ -1196,11 +1378,33 @@ async function startServer() {
     const targetDate = date || new Date().toISOString().split('T')[0];
     const data = db.get();
 
+    const globalHoliday = findHolidayForDate(data, targetDate);
     let targetTrainees = data.trainees.filter((t) => t.status === 'active');
     if (tradeId) targetTrainees = targetTrainees.filter((t) => t.tradeId === tradeId);
 
+    // If global or every active trainee's session is on holiday, block auto-absent
+    if (globalHoliday && (!globalHoliday.sessionId || globalHoliday.sessionId === 'all')) {
+      return res.status(400).json({
+        error: `Auto-absent is disabled: ${targetDate} is an Admin-designated Holiday ("${globalHoliday.title}").`,
+        isHoliday: true,
+        holiday: globalHoliday,
+        markedCount: 0,
+      });
+    }
+
+    if (targetTrainees.length > 0 && targetTrainees.every((tr) => Boolean(findHolidayForDate(data, targetDate, tr.sessionId)))) {
+      const hol = findHolidayForDate(data, targetDate, targetTrainees[0].sessionId);
+      return res.status(400).json({
+        error: `Auto-absent is disabled: ${targetDate} is an Admin-designated Holiday ("${hol?.title || 'Holiday'}").`,
+        isHoliday: true,
+        holiday: hol,
+        markedCount: 0,
+      });
+    }
+
     let newlyMarkedAbsent = 0;
     targetTrainees.forEach((tr) => {
+      if (findHolidayForDate(data, targetDate, tr.sessionId)) return;
       const exists = data.attendance.find((a) => a.traineeId === tr.id && a.date === targetDate);
       if (!exists) {
         data.attendance.push({
@@ -2030,6 +2234,8 @@ async function startServer() {
         let marked = 0;
         data.trainees.forEach((tr) => {
           if (tr.status === 'active') {
+            // Do not mark auto-absent on Admin-designated holidays
+            if (findHolidayForDate(data, todayStr, tr.sessionId)) return;
             const exists = data.attendance.find((a) => a.traineeId === tr.id && a.date === todayStr);
             if (!exists) {
               data.attendance.push({

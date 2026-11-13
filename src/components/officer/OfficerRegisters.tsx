@@ -35,6 +35,7 @@ import {
   SystemSettings,
   AcademicSession,
   AttendanceStatus,
+  HolidayRecord,
 } from '../../types.ts';
 
 export type RegisterType =
@@ -62,6 +63,7 @@ interface OfficerRegistersProps {
   inventory: InventoryItem[];
   indents: IndentRecord[];
   settings: SystemSettings;
+  holidays?: HolidayRecord[];
   initialRegister?: RegisterType;
 }
 
@@ -76,6 +78,7 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
   inventory,
   indents,
   settings,
+  holidays = [],
   initialRegister = 'monthly_attendance',
 }) => {
   const [activeRegister, setActiveRegister] = useState<RegisterType>(initialRegister);
@@ -99,7 +102,15 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
 
   const activeSessionObj = sessions.find((s) => s.id === selectedSessionId) || sessions[0];
 
-  // Helper for Month Days
+  // Helper for Month Days + Admin Designated Holidays
+  const sessionHolidays = useMemo(
+    () =>
+      holidays.filter(
+        (h) => !h.sessionId || h.sessionId === 'all' || h.sessionId === selectedSessionId
+      ),
+    [holidays, selectedSessionId]
+  );
+
   const monthDaysInfo = useMemo(() => {
     const [yearStr, monthStr] = selectedMonth.split('-');
     const year = parseInt(yearStr, 10);
@@ -111,15 +122,23 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
       const dateStr = `${yearStr}-${monthStr}-${String(d).padStart(2, '0')}`;
       const dayDate = new Date(year, month - 1, d);
       const dayOfWeek = dayDate.getDay(); // 0 is Sunday
+      const holidayObj = sessionHolidays.find((h) => h.date === dateStr);
       days.push({
         dayNumber: d,
         dateStr,
         isSunday: dayOfWeek === 0,
+        holiday: holidayObj || null,
+        isHoliday: dayOfWeek === 0 || Boolean(holidayObj),
         dayName: ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'][dayOfWeek],
       });
     }
     return { year, month, totalDays, days };
-  }, [selectedMonth]);
+  }, [selectedMonth, sessionHolidays]);
+
+  const dailyHoliday = useMemo(
+    () => sessionHolidays.find((h) => h.date === dailyDate) || null,
+    [sessionHolidays, dailyDate]
+  );
 
   // Navigate months
   const handlePrevMonth = () => {
@@ -214,8 +233,8 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
 
         const dailyStatuses: Record<number, string> = {};
 
-        monthDaysInfo.days.forEach(({ dayNumber, dateStr, isSunday }) => {
-          if (isSunday) {
+        monthDaysInfo.days.forEach(({ dayNumber, dateStr, isSunday, holiday }) => {
+          if (isSunday || holiday) {
             dailyStatuses[dayNumber] = 'H';
             return;
           }
@@ -862,6 +881,19 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
               </div>
             </div>
 
+            {dailyHoliday && (
+              <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2 text-rose-900">
+                  <span className="px-2 py-0.5 rounded bg-rose-600 text-white font-extrabold text-[10px] uppercase">
+                    Holiday
+                  </span>
+                  <span className="font-bold">{dailyHoliday.title}</span>
+                  <span className="text-rose-700">({dailyHoliday.category}) — Attendance restricted for this date</span>
+                </div>
+                <span className="font-mono text-[11px] font-semibold text-rose-800">{dailyDate}</span>
+              </div>
+            )}
+
             {/* Daily Summary Cards */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3 text-xs">
               <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
@@ -954,28 +986,36 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
                         </span>
                       </td>
                       <td className="py-2.5 px-3 text-center">
-                        <span
-                          className={`inline-block px-2 py-0.5 text-[11px] font-bold rounded ${
-                            d.status === 'Present'
-                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                              : d.status === 'Absent'
-                              ? 'bg-rose-100 text-rose-800 border border-rose-200'
-                              : d.status === 'CL'
-                              ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                              : d.status === 'Medical Leave'
-                              ? 'bg-blue-100 text-blue-800 border border-blue-200'
-                              : 'bg-slate-100 text-slate-600 border border-slate-200'
-                          }`}
-                        >
-                          {d.status === 'Medical Leave' ? 'ML' : d.status === 'Half-Day Leave' ? 'HD' : d.status === 'Present' ? 'P' : d.status === 'Absent' ? 'A' : d.status === 'CL' ? 'CL' : 'UNMARKED'}
-                        </span>
+                        {dailyHoliday ? (
+                          <span className="inline-block px-2 py-0.5 text-[11px] font-bold rounded bg-rose-100 text-rose-800 border border-rose-200">
+                            Holiday
+                          </span>
+                        ) : (
+                          <span
+                            className={`inline-block px-2 py-0.5 text-[11px] font-bold rounded ${
+                              d.status === 'Present'
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                : d.status === 'Absent'
+                                ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                                : d.status === 'CL'
+                                ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                : d.status === 'Medical Leave'
+                                ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                                : 'bg-slate-100 text-slate-600 border border-slate-200'
+                            }`}
+                          >
+                            {d.status === 'Medical Leave' ? 'ML' : d.status === 'Half-Day Leave' ? 'HD' : d.status === 'Present' ? 'P' : d.status === 'Absent' ? 'A' : d.status === 'CL' ? 'CL' : 'UNMARKED'}
+                          </span>
+                        )}
                       </td>
                       <td className="py-2.5 px-3 font-mono text-slate-800">
-                        {d.record?.timestamp || '—'}
+                        {dailyHoliday ? 'Holiday' : d.record?.timestamp || '—'}
                       </td>
                       <td className="py-2.5 px-3">
                         <span className="text-[11px] font-medium text-slate-700">
-                          {d.record?.markedBy === 'trainee_gps'
+                          {dailyHoliday
+                            ? 'Admin Holiday'
+                            : d.record?.markedBy === 'trainee_gps'
                             ? 'GPS Geofence App'
                             : d.record?.markedBy === 'officer_manual'
                             ? 'Officer Manual Override'
@@ -996,7 +1036,7 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
                         )}
                       </td>
                       <td className="py-2.5 px-3 text-right text-[11px] text-slate-500 font-mono">
-                        {d.record?.remarks || 'NCVT Roll Call Validated'}
+                        {dailyHoliday ? `Holiday: ${dailyHoliday.title}` : d.record?.remarks || 'NCVT Roll Call Validated'}
                       </td>
                     </tr>
                   ))}
@@ -1078,15 +1118,31 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
                   <span className="w-4 h-4 rounded bg-blue-100 border border-blue-300 flex items-center justify-center text-[10px]">ML</span>
                   <span>Medical Leave</span>
                 </span>
-                <span className="flex items-center gap-1 font-mono font-semibold text-slate-600">
-                  <span className="w-4 h-4 rounded bg-slate-200 border border-slate-300 flex items-center justify-center text-[10px]">H</span>
-                  <span>Sunday / Holiday</span>
+                <span className="flex items-center gap-1 font-mono font-semibold text-rose-800">
+                  <span className="w-4 h-4 rounded bg-rose-100 border border-rose-300 flex items-center justify-center text-[10px]">H</span>
+                  <span>Holiday / Sunday ({monthDaysInfo.days.filter((d) => d.holiday).length} Admin Holidays)</span>
                 </span>
               </div>
               <div className="text-[11px] text-slate-600 font-medium">
                 Mandatory NCVT Exam Eligibility: <span className="font-bold text-amber-900">80.0% Minimum</span>
               </div>
             </div>
+
+            {monthDaysInfo.days.some((d) => d.holiday) && (
+              <div className="flex flex-wrap items-center gap-2 text-[11px] bg-rose-50/70 border border-rose-200 rounded-lg px-3 py-2">
+                <span className="font-bold text-rose-900 uppercase">Holidays This Month:</span>
+                {monthDaysInfo.days
+                  .filter((d) => d.holiday)
+                  .map((d) => (
+                    <span
+                      key={d.dateStr}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white border border-rose-200 text-rose-800 font-semibold"
+                    >
+                      <span className="font-mono font-bold">{d.dayNumber}:</span> Holiday — {d.holiday?.title}
+                    </span>
+                  ))}
+              </div>
+            )}
 
             {/* Matrix Table (Wide Scrollable) */}
             <div className="overflow-x-auto border border-slate-200 rounded-lg max-w-full">
@@ -1107,12 +1163,22 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
                       <th
                         key={d.dayNumber}
                         className={`py-1.5 px-1 text-center font-mono text-[10px] w-6.5 border-l border-slate-200 ${
-                          d.isSunday ? 'bg-amber-100/60 text-amber-900 font-bold' : 'text-slate-600'
+                          d.holiday
+                            ? 'bg-rose-100 text-rose-900 font-extrabold'
+                            : d.isSunday
+                            ? 'bg-amber-100/60 text-amber-900 font-bold'
+                            : 'text-slate-600'
                         }`}
-                        title={`${d.dateStr} (${d.dayName})`}
+                        title={
+                          d.holiday
+                            ? `${d.dateStr} — Holiday: ${d.holiday.title}`
+                            : `${d.dateStr} (${d.dayName})`
+                        }
                       >
                         <div>{d.dayNumber}</div>
-                        <div className="text-[8px] text-slate-400">{d.dayName}</div>
+                        <div className={`text-[8px] ${d.holiday ? 'text-rose-700 font-bold' : 'text-slate-400'}`}>
+                          {d.holiday ? 'HOL' : d.dayName}
+                        </div>
                       </th>
                     ))}
                     <th className="py-2 px-2 text-center font-semibold bg-emerald-50 text-emerald-900 border-l border-slate-200">
@@ -1152,7 +1218,9 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
                           <td
                             key={d.dayNumber}
                             className={`py-1.5 px-0.5 text-center font-mono text-[10px] font-semibold border-l border-slate-100 ${
-                              d.isSunday
+                              d.holiday
+                                ? 'bg-rose-50 text-rose-700 font-extrabold'
+                                : d.isSunday
                                 ? 'bg-amber-50/50 text-slate-400'
                                 : val === 'P'
                                 ? 'text-emerald-700 bg-emerald-50/30'
@@ -1162,6 +1230,7 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
                                 ? 'text-amber-700 bg-amber-50/30'
                                 : 'text-slate-300'
                             }`}
+                            title={d.holiday ? `Holiday: ${d.holiday.title}` : undefined}
                           >
                             {val}
                           </td>

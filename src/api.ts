@@ -18,6 +18,7 @@ import {
   DemonstrationPlan,
   WeeklyPlan,
   TraineeAssessment,
+  HolidayRecord,
 } from './types.ts';
 import {
   getCachedData,
@@ -78,6 +79,7 @@ export async function fetchBootstrap() {
     settings: SystemSettings;
     sessions: AcademicSession[];
     trades: Trade[];
+    holidays?: HolidayRecord[];
     stats: {
       totalTrades: number;
       totalOfficers: number;
@@ -196,6 +198,45 @@ export async function deleteMonthlyWorkingDay(id: string) {
   const res = await fetch(`/api/monthly-working-days/${id}`, { method: 'DELETE' });
   if (!res.ok) throw new Error('Failed to delete monthly working day');
   return res.json();
+}
+
+export async function fetchHolidays(params?: { sessionId?: string; month?: string; date?: string }): Promise<HolidayRecord[]> {
+  const qs = params ? new URLSearchParams(Object.entries(params).filter(([, v]) => Boolean(v)) as [string, string][]).toString() : '';
+  const url = qs ? `/api/holidays?${qs}` : '/api/holidays';
+  return fetchWithOfflineCache<HolidayRecord[]>(
+    `iti_cache_holidays_${qs || 'all'}`,
+    () => fetch(url),
+    []
+  );
+}
+
+export async function createHoliday(holiday: Partial<HolidayRecord>) {
+  const res = await fetch('/api/holidays', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(holiday),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Failed to create holiday');
+  return data;
+}
+
+export async function updateHoliday(id: string, holiday: Partial<HolidayRecord>) {
+  const res = await fetch(`/api/holidays/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(holiday),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Failed to update holiday');
+  return data;
+}
+
+export async function deleteHoliday(id: string) {
+  const res = await fetch(`/api/holidays/${id}`, { method: 'DELETE' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Failed to delete holiday');
+  return data;
 }
 
 export async function fetchTrades(): Promise<Trade[]> {
@@ -426,8 +467,9 @@ export async function batchSaveAttendance(payload: {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    if (!res.ok) throw new Error('Failed to update attendance');
-    return res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Failed to update attendance');
+    return data;
   } catch (err: any) {
     if (typeof navigator !== 'undefined' && (!navigator.onLine || err.message?.includes('Failed to fetch') || err.name === 'TypeError')) {
       await enqueueOfflineAction({
@@ -453,7 +495,9 @@ export async function triggerAutoAbsent(date?: string, tradeId?: string) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ date, tradeId }),
   });
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Failed to trigger auto-absent');
+  return data;
 }
 
 export async function fetchLeaves(params?: { traineeId?: string; tradeId?: string; status?: string }): Promise<LeaveRequest[]> {
