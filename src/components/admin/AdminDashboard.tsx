@@ -705,10 +705,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
   };
 
   const handleResetData = async () => {
-    if (!confirm('Reset entire database to original Govt ITI Raigarh default seed state? This is useful for clean demonstrations.')) return;
+    if (!confirm('Reset operational records to a clean slate? All trainees, attendance, marks, and plans will be cleared while retaining institute settings, trades, and officers.')) return;
     try {
       await resetDatabase();
-      showToast('Database reset to defaults successfully');
+      showToast('Database cleared to clean institutional baseline');
       reloadData();
     } catch (err: any) {
       alert(err.message);

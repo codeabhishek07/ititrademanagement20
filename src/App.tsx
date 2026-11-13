@@ -98,9 +98,9 @@ export default function App() {
       setLoading(true);
 
       // Wipe any lingering demo cache in IndexedDB on first load of clean version
-      if (localStorage.getItem('iti_demo_cleared_v2') !== 'true') {
+      if (localStorage.getItem('iti_demo_cleared_v3') !== 'true') {
         await clearAllSystemBackupsAndDemoCache().catch(() => {});
-        localStorage.setItem('iti_demo_cleared_v2', 'true');
+        localStorage.setItem('iti_demo_cleared_v3', 'true');
       }
 
       // Bootstrap application from server
@@ -328,11 +328,11 @@ export default function App() {
                 trainee={{
                   id: currentUser.id,
                   name: currentUser.name,
-                  rollNo: currentUser.rollNo || 'ITI/RAI/2025/ELE-014',
-                  tradeId: currentUser.tradeId || trades[0]?.id || 'trade_elec',
-                  tradeName: currentUser.tradeName || 'Electrician',
+                  rollNo: currentUser.rollNo || '',
+                  tradeId: currentUser.tradeId || trades[0]?.id || '',
+                  tradeName: currentUser.tradeName || '',
                   email: currentUser.email,
-                  mobile: currentUser.mobile || '+91 88789 12345',
+                  mobile: currentUser.mobile || '',
                   sessionId: currentUser.sessionId,
                   category: currentUser.category,
                   gender: currentUser.gender,

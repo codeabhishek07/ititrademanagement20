@@ -3,6 +3,7 @@ import path from 'path';
 import {
   loadDatabaseFromFirestore,
   seedDatabaseToFirestore,
+  syncDiffToFirestore,
   persistItemToFirestore,
   deleteItemFromFirestore,
   purgeAllDemoDocumentsFromFirestore,
@@ -444,6 +445,7 @@ class Database {
 
   private isFirestoreInitialized: boolean = false;
   private syncTimer: NodeJS.Timeout | null = null;
+  private lastSyncedData: DatabaseSchema | null = null;
 
   private saveDirect(dataToSave: DatabaseSchema) {
     try {
@@ -463,11 +465,6 @@ class Database {
   public async initFirestore(): Promise<void> {
     try {
       console.log('[Firestore] Checking persistent cloud database connection...');
-      // Permanently remove any demo accounts, test trainees, or sample documents from Firestore
-      await purgeAllDemoDocumentsFromFirestore().catch((err) => {
-        console.warn('[Firestore Purge Notice]', err);
-      });
-
       const cloudData = await loadDatabaseFromFirestore();
 
       if (cloudData && cloudData.settings && Array.isArray(cloudData.trades) && cloudData.trades.length > 0) {
@@ -529,21 +526,24 @@ class Database {
           demonstrationPlans: (Array.isArray(cloudData.demonstrationPlans) ? cloudData.demonstrationPlans : []).filter((p: any) => !isDemoIdOrName(p)),
           weeklyPlans: (Array.isArray(cloudData.weeklyPlans) ? cloudData.weeklyPlans : []).filter((p: any) => !isDemoIdOrName(p)),
         };
+        this.lastSyncedData = JSON.parse(JSON.stringify(this.data));
         // Also update local cache file
         this.saveDirect(this.data);
+        // Clean up any leftover demo docs in background without blocking startup
+        purgeAllDemoDocumentsFromFirestore().catch(() => {});
       } else {
-        console.log('[Firestore] Cloud database is empty or initial boot. Seeding institutional data to Firestore...');
+        console.log('[Firestore] Cloud database is empty or unreachable. Continuing with local state...');
         await seedDatabaseToFirestore(this.data);
-        console.log('[Firestore] Initial institutional data seeded to Firestore cloud successfully.');
+        this.lastSyncedData = JSON.parse(JSON.stringify(this.data));
       }
       this.isFirestoreInitialized = true;
     } catch (err) {
-      console.error('[Firestore] Initialization error:', err);
+      console.error('[Firestore] Initialization notice:', err);
     }
   }
 
   /**
-   * Debounced synchronization of all in-memory collections to Firestore.
+   * Debounced diff synchronization of changed records to Firestore.
    */
   public scheduleFirestoreSync() {
     if (this.syncTimer) {
@@ -551,11 +551,15 @@ class Database {
     }
     this.syncTimer = setTimeout(async () => {
       try {
-        await seedDatabaseToFirestore(this.data);
+        const snapshot = JSON.parse(JSON.stringify(this.data));
+        const ok = await syncDiffToFirestore(this.lastSyncedData, snapshot);
+        if (ok) {
+          this.lastSyncedData = snapshot;
+        }
       } catch (err) {
-        console.error('[Firestore] Background sync error:', err);
+        console.error('[Firestore] Background sync notice:', err);
       }
-    }, 1200);
+    }, 1500);
   }
 
   /**
@@ -578,10 +582,14 @@ class Database {
   }
 
   /**
-   * Forces an immediate, synchronous upload of current state to Firestore.
+   * Forces an immediate, synchronous upload of changed records to Firestore.
    */
   public async forceFirestoreSync(): Promise<void> {
-    await seedDatabaseToFirestore(this.data);
+    const snapshot = JSON.parse(JSON.stringify(this.data));
+    const ok = await syncDiffToFirestore(this.lastSyncedData, snapshot);
+    if (ok) {
+      this.lastSyncedData = snapshot;
+    }
   }
 
   public save() {

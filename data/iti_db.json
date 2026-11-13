@@ -8,10 +8,10 @@
     "state": "Chhattisgarh",
     "campusLocation": {
       "lng": 83.4133,
-      "radiusMeters": 1500,
-      "lat": 21.8958,
       "address": "Chakradhar Nagar Industrial Area Boirdadar, Raigarh (C.G.) 496001",
-      "campusName": "Government ITI Raigarh Campus"
+      "radiusMeters": 1500,
+      "campusName": "Government ITI Raigarh Campus",
+      "lat": 21.8958
     },
     "attendanceWindow": {
       "startHour": 7,
@@ -29,253 +29,253 @@
     },
     "currentSessionId": "session_2026_2027",
     "adminAccount": {
-      "password": "admin123",
       "name": "Shri  PL Kunte (Principal / Admin)",
-      "email": "admin.iti.raigarh@cg.gov.in",
-      "mobile": "+91 98261 45210"
+      "password": "admin123",
+      "mobile": "+91 98261 45210",
+      "email": "admin.iti.raigarh@cg.gov.in"
     }
   },
   "sessions": [
     {
-      "id": "session_2024_2025",
-      "totalWorkingDays": 242,
       "startDate": "2024-08-01",
-      "endDate": "2025-07-31",
+      "totalWorkingDays": 242,
+      "id": "session_2024_2025",
       "status": "completed",
+      "endDate": "2025-07-31",
       "name": "Session 2024-2025"
     },
     {
-      "endDate": "2026-07-31",
-      "totalWorkingDays": 240,
       "status": "active",
+      "endDate": "2026-07-31",
+      "id": "session_2025_2026",
       "startDate": "2025-08-01",
-      "name": "Session 2025-2026",
-      "id": "session_2025_2026"
+      "totalWorkingDays": 240,
+      "name": "Session 2025-2026"
     },
     {
-      "status": "active",
       "id": "session_2026_2027",
       "totalWorkingDays": 22,
-      "name": "Session 2026-2027",
+      "status": "active",
+      "endDate": "2027-07-31",
       "startDate": "2026-08-01",
-      "endDate": "2027-07-31"
+      "name": "Session 2026-2027"
     }
   ],
   "monthlyWorkingDays": [
     {
+      "id": "mwd_1",
       "sessionId": "session_2025_2026",
       "remarks": "Independence Day, Raksha Bandhan",
-      "month": "2025-08",
       "totalDays": 31,
-      "id": "mwd_1",
       "workingDays": 23,
-      "holidays": 8
+      "holidays": 8,
+      "month": "2025-08"
     },
     {
-      "remarks": "Regular trade practical tests",
       "totalDays": 31,
       "workingDays": 25,
+      "sessionId": "session_2025_2026",
+      "remarks": "Regular trade practical tests",
       "id": "mwd_10",
       "month": "2026-05",
-      "sessionId": "session_2025_2026",
       "holidays": 6
     },
     {
+      "holidays": 6,
+      "remarks": "Vishwakarma Puja, Ganesh Chaturthi",
       "sessionId": "session_2025_2026",
       "id": "mwd_2",
-      "remarks": "Vishwakarma Puja, Ganesh Chaturthi",
       "month": "2025-09",
-      "holidays": 6,
       "workingDays": 24,
       "totalDays": 30
     },
     {
       "id": "mwd_3",
       "workingDays": 20,
-      "month": "2025-10",
-      "sessionId": "session_2025_2026",
-      "holidays": 11,
       "totalDays": 31,
-      "remarks": "Gandhi Jayanti, Dussehra, Diwali break"
+      "remarks": "Gandhi Jayanti, Dussehra, Diwali break",
+      "month": "2025-10",
+      "holidays": 11,
+      "sessionId": "session_2025_2026"
     },
     {
-      "workingDays": 23,
-      "sessionId": "session_2025_2026",
-      "month": "2025-11",
-      "remarks": "CG State Foundation Day, Guru Nanak Jayanti",
       "holidays": 7,
+      "remarks": "CG State Foundation Day, Guru Nanak Jayanti",
+      "sessionId": "session_2025_2026",
+      "workingDays": 23,
+      "id": "mwd_4",
       "totalDays": 30,
-      "id": "mwd_4"
+      "month": "2025-11"
     },
     {
-      "remarks": "Ghasidas Jayanti, Christmas",
+      "month": "2025-12",
       "sessionId": "session_2025_2026",
+      "remarks": "Ghasidas Jayanti, Christmas",
+      "totalDays": 31,
       "id": "mwd_5",
       "workingDays": 24,
-      "month": "2025-12",
-      "totalDays": 31,
       "holidays": 7
     },
     {
-      "remarks": "Cherchera, Republic Day",
-      "totalDays": 31,
       "workingDays": 23,
+      "month": "2026-01",
+      "totalDays": 31,
       "id": "mwd_6",
       "holidays": 8,
-      "sessionId": "session_2025_2026",
-      "month": "2026-01"
+      "remarks": "Cherchera, Republic Day",
+      "sessionId": "session_2025_2026"
     },
     {
+      "id": "mwd_7",
+      "month": "2026-02",
       "totalDays": 28,
+      "holidays": 6,
       "remarks": "Maha Shivratri",
       "workingDays": 22,
-      "holidays": 6,
-      "month": "2026-02",
-      "sessionId": "session_2025_2026",
-      "id": "mwd_7"
+      "sessionId": "session_2025_2026"
     },
     {
       "month": "2026-03",
-      "remarks": "Holi festival",
-      "sessionId": "session_2025_2026",
-      "holidays": 8,
       "workingDays": 23,
       "id": "mwd_8",
-      "totalDays": 31
+      "sessionId": "session_2025_2026",
+      "holidays": 8,
+      "totalDays": 31,
+      "remarks": "Holi festival"
     },
     {
-      "totalDays": 30,
-      "remarks": "Ambedkar Jayanti, Ram Navami",
-      "workingDays": 22,
       "sessionId": "session_2025_2026",
       "month": "2026-04",
+      "remarks": "Ambedkar Jayanti, Ram Navami",
       "holidays": 8,
-      "id": "mwd_9"
+      "totalDays": 30,
+      "id": "mwd_9",
+      "workingDays": 22
     },
     {
-      "totalDays": 30,
-      "remarks": "Diwali",
+      "sessionId": "session_2026_2027",
+      "id": "temp_1794308263883",
       "workingDays": 22,
       "holidays": 8,
-      "month": "2026-11",
-      "id": "temp_1794308263883",
-      "sessionId": "session_2026_2027"
+      "totalDays": 30,
+      "remarks": "Diwali",
+      "month": "2026-11"
     }
   ],
   "trades": [
     {
-      "code": "COP-03",
-      "status": "active",
-      "workshopLocation": "IT Computer Wing - Lab C-2",
-      "description": "Computer fundamentals, office automation, web authoring, Python/JS programming, and network configuration.",
-      "durationYears": 1,
       "totalIntake": 48,
-      "sanctionedUnits": 2,
+      "code": "COP-03",
       "id": "trade_copa",
-      "name": "Computer Operator and Programming Assistant (COPA)"
+      "durationYears": 1,
+      "workshopLocation": "IT Computer Wing - Lab C-2",
+      "name": "Computer Operator and Programming Assistant (COPA)",
+      "status": "active",
+      "sanctionedUnits": 2,
+      "description": "Computer fundamentals, office automation, web authoring, Python/JS programming, and network configuration."
     },
     {
-      "sanctionedUnits": 2,
-      "name": "Electrician",
-      "description": "Training in wiring, motor winding, power electronics, transformer diagnostics, and solar panel installation.",
-      "id": "trade_elec",
+      "status": "active",
       "totalIntake": 40,
-      "durationYears": 2,
-      "workshopLocation": "Workshop Block A - Bay 101",
+      "sanctionedUnits": 2,
       "code": "ELE-01",
-      "status": "active"
+      "description": "Training in wiring, motor winding, power electronics, transformer diagnostics, and solar panel installation.",
+      "workshopLocation": "Workshop Block A - Bay 101",
+      "durationYears": 2,
+      "name": "Electrician",
+      "id": "trade_elec"
     },
     {
-      "workshopLocation": "Mechanical Workshop Block B - Bay 201",
-      "sanctionedUnits": 2,
+      "status": "active",
       "description": "Precision bench work, filing, fitting, pipe fitting, lathe operation, hydraulics, and assembly.",
-      "id": "trade_fit",
+      "code": "FIT-02",
       "durationYears": 2,
       "name": "Fitter",
-      "totalIntake": 40,
-      "code": "FIT-02",
-      "status": "active"
+      "sanctionedUnits": 2,
+      "workshopLocation": "Mechanical Workshop Block B - Bay 201",
+      "id": "trade_fit",
+      "totalIntake": 40
     },
     {
-      "sanctionedUnits": 1,
-      "totalIntake": 20,
-      "description": "Operating centre lathe, capstan lathe, CNC basics, thread cutting, eccentric turning, and precision machining.",
       "code": "TUR-05",
-      "status": "active",
+      "totalIntake": 20,
       "name": "Turner",
-      "workshopLocation": "Machine Shop - Bay 203",
       "durationYears": 2,
-      "id": "trade_turn"
+      "id": "trade_turn",
+      "status": "active",
+      "description": "Operating centre lathe, capstan lathe, CNC basics, thread cutting, eccentric turning, and precision machining.",
+      "workshopLocation": "Machine Shop - Bay 203",
+      "sanctionedUnits": 1
     },
     {
       "totalIntake": 20,
-      "id": "trade_weld",
       "durationYears": 1,
-      "code": "WLD-04",
-      "status": "active",
-      "description": "SMAW, GMAW, GTAW welding, gas cutting, oxy-acetylene brazing, and metal joint inspection.",
-      "name": "Welder (Gas & Electric)",
       "workshopLocation": "Fabrication Shed - Booth 1-10",
-      "sanctionedUnits": 1
+      "status": "active",
+      "sanctionedUnits": 1,
+      "id": "trade_weld",
+      "name": "Welder (Gas & Electric)",
+      "description": "SMAW, GMAW, GTAW welding, gas cutting, oxy-acetylene brazing, and metal joint inspection.",
+      "code": "WLD-04"
     }
   ],
   "officers": [
     {
-      "status": "active",
-      "email": "abhishek.swarnkar@iti.cg.gov.in",
-      "qualification": "B.E. (CSE/IT), CITS Certified",
-      "name": "Abhishek Swarnkar",
-      "designation": "Training Officer, ITI Raigarh CG",
       "id": "off_0",
       "employeeId": "CG-ITI-TO-1001",
+      "name": "Abhishek Swarnkar",
+      "email": "abhishek.swarnkar@iti.cg.gov.in",
       "mobile": "+91 94252 55660",
+      "status": "active",
+      "password": "officer123",
       "assignedTradeIds": [
         "trade_copa"
       ],
-      "password": "officer123"
+      "designation": "Training Officer, ITI Raigarh CG",
+      "qualification": "B.E. (CSE/IT), CITS Certified"
     },
     {
-      "name": "Er. Rajesh Kumar Dewangan",
-      "status": "active",
-      "id": "off_1",
-      "password": "officer123",
-      "employeeId": "CG-ITI-TO-1042",
-      "email": "rajesh.dewangan@iti.cg.gov.in",
+      "qualification": "B.Tech (Electrical Engg), CITS Certified",
       "mobile": "+91 94252 87612",
+      "status": "active",
+      "password": "officer123",
+      "email": "rajesh.dewangan@iti.cg.gov.in",
       "assignedTradeIds": [
         "trade_elec"
       ],
-      "qualification": "B.Tech (Electrical Engg), CITS Certified",
-      "designation": "Senior Training Officer (Electrical)"
+      "name": "Er. Rajesh Kumar Dewangan",
+      "id": "off_1",
+      "designation": "Senior Training Officer (Electrical)",
+      "employeeId": "CG-ITI-TO-1042"
     },
     {
+      "password": "officer123",
+      "status": "active",
+      "mobile": "+91 98271 34910",
       "employeeId": "CG-ITI-TO-1089",
+      "id": "off_2",
+      "email": "manoj.rathore@iti.cg.gov.in",
+      "designation": "Training Officer (Mechanical & Fitter)",
+      "name": "Er. Manoj Kumar Rathore",
       "assignedTradeIds": [
         "trade_fit",
         "trade_turn"
       ],
-      "mobile": "+91 98271 34910",
-      "designation": "Training Officer (Mechanical & Fitter)",
-      "id": "off_2",
-      "qualification": "Diploma Mechanical Engg, NTC, CITS",
-      "name": "Er. Manoj Kumar Rathore",
-      "email": "manoj.rathore@iti.cg.gov.in",
-      "password": "officer123",
-      "status": "active"
+      "qualification": "Diploma Mechanical Engg, NTC, CITS"
     },
     {
-      "status": "active",
       "email": "priyanka.sharma@iti.cg.gov.in",
-      "employeeId": "CG-ITI-TO-1120",
-      "name": "Smt. Priyanka Sharma",
-      "id": "off_3",
-      "designation": "Training Officer (IT & COPA)",
       "assignedTradeIds": [
         "trade_weld"
       ],
-      "password": "officer123",
+      "employeeId": "CG-ITI-TO-1120",
+      "status": "active",
+      "id": "off_3",
+      "mobile": "+91 97531 22440",
       "qualification": "MCA, CITS (COPA)",
-      "mobile": "+91 97531 22440"
+      "designation": "Training Officer (IT & COPA)",
+      "password": "officer123",
+      "name": "Smt. Priyanka Sharma"
     }
   ],
   "trainees": [],
@@ -284,142 +284,1828 @@
   "warnings": [],
   "inventory": [
     {
-      "issuedCount": 0,
-      "damagedCount": 0,
       "totalStock": 25,
       "tradeId": "trade_elec",
-      "binLocation": "Rack A-2, Cupboard 1",
       "name": "Digital Multimeter (Auto-Ranging 600V)",
-      "lastInspected": "2026-10-20",
-      "id": "inv_elec_1",
-      "toolCode": "ELEC-MM-01",
-      "specification": "CAT III 600V with thermocouple probe, backlit LCD",
       "category": "Testing & Measuring",
-      "availableStock": 25
+      "toolCode": "ELEC-MM-01",
+      "id": "inv_elec_1",
+      "lastInspected": "2026-10-20",
+      "issuedCount": 6,
+      "availableStock": 18,
+      "damagedCount": 1,
+      "binLocation": "Rack A-2, Cupboard 1",
+      "specification": "CAT III 600V with thermocouple probe, backlit LCD"
     },
     {
-      "issuedCount": 0,
-      "totalStock": 40,
-      "lastInspected": "2026-10-18",
-      "binLocation": "Tool Board Station 1-4",
       "category": "Hand Tools",
-      "availableStock": 40,
       "toolCode": "ELEC-PL-02",
+      "damagedCount": 2,
       "name": "Insulated Combination Pliers 8 Inch (1000V)",
-      "tradeId": "trade_elec",
+      "availableStock": 26,
+      "binLocation": "Tool Board Station 1-4",
+      "lastInspected": "2026-10-18",
       "specification": "Forged chrome vanadium steel, high leverage 1000V tested",
-      "damagedCount": 0,
+      "issuedCount": 12,
+      "tradeId": "trade_elec",
+      "totalStock": 40,
       "id": "inv_elec_2"
     },
     {
-      "lastInspected": "2026-10-24",
-      "availableStock": 6,
-      "tradeId": "trade_elec",
-      "issuedCount": 0,
-      "toolCode": "ELEC-MEG-03",
       "damagedCount": 0,
-      "category": "Testing & Measuring",
+      "availableStock": 4,
       "binLocation": "Instrument Safe Room C",
-      "id": "inv_elec_3",
+      "specification": "Range up to 2000 MΩ with test leads and calibration card",
+      "issuedCount": 2,
       "name": "Digital Insulation Tester (Megger 500V/1000V)",
-      "totalStock": 6,
-      "specification": "Range up to 2000 MΩ with test leads and calibration card"
+      "category": "Testing & Measuring",
+      "tradeId": "trade_elec",
+      "lastInspected": "2026-10-24",
+      "toolCode": "ELEC-MEG-03",
+      "id": "inv_elec_3",
+      "totalStock": 6
     },
     {
-      "category": "Power Machinery",
-      "lastInspected": "2026-10-15",
       "totalStock": 15,
+      "category": "Power Machinery",
       "toolCode": "ELEC-SOL-04",
-      "id": "inv_elec_4",
-      "name": "Temperature Controlled Soldering Station 60W",
-      "availableStock": 15,
+      "issuedCount": 4,
       "binLocation": "PCB Workstation Bay A",
-      "tradeId": "trade_elec",
+      "availableStock": 11,
+      "name": "Temperature Controlled Soldering Station 60W",
+      "id": "inv_elec_4",
       "damagedCount": 0,
       "specification": "200-480°C ESD safe with brass sponge cleaner",
-      "issuedCount": 0
+      "lastInspected": "2026-10-15",
+      "tradeId": "trade_elec"
     },
     {
-      "id": "inv_elec_5",
-      "damagedCount": 0,
-      "totalStock": 18,
       "specification": "Grade 2 dual coated super enamelled copper wire spool",
-      "name": "Copper Enamelled Winding Wire (22 SWG)",
-      "toolCode": "ELEC-RAW-05",
-      "category": "Consumables & Raw Materials",
-      "tradeId": "trade_elec",
-      "availableStock": 18,
-      "binLocation": "Consumables Locker 4",
+      "totalStock": 18,
       "lastInspected": "2026-10-26",
-      "issuedCount": 0
+      "damagedCount": 0,
+      "issuedCount": 5,
+      "id": "inv_elec_5",
+      "availableStock": 13,
+      "binLocation": "Consumables Locker 4",
+      "name": "Copper Enamelled Winding Wire (22 SWG)",
+      "category": "Consumables & Raw Materials",
+      "toolCode": "ELEC-RAW-05",
+      "tradeId": "trade_elec"
     },
     {
+      "tradeId": "trade_fit",
+      "availableStock": 21,
       "specification": "Stainless steel hardened jaws, metric and imperial dual scale",
-      "availableStock": 30,
-      "issuedCount": 0,
-      "totalStock": 30,
-      "binLocation": "Cabinet Fit-01",
-      "damagedCount": 0,
-      "tradeId": "trade_fit",
-      "toolCode": "FIT-CAL-01",
-      "name": "Vernier Caliper 0-150mm (0.02mm LC)",
-      "category": "Testing & Measuring",
       "lastInspected": "2026-10-19",
-      "id": "inv_fit_1"
+      "name": "Vernier Caliper 0-150mm (0.02mm LC)",
+      "id": "inv_fit_1",
+      "binLocation": "Cabinet Fit-01",
+      "toolCode": "FIT-CAL-01",
+      "category": "Testing & Measuring",
+      "issuedCount": 8,
+      "damagedCount": 1,
+      "totalStock": 30
     },
     {
-      "tradeId": "trade_fit",
-      "totalStock": 20,
       "specification": "Heavy cast iron body, hardened serrated steel jaws",
-      "lastInspected": "2026-10-12",
-      "category": "Power Machinery",
-      "issuedCount": 0,
-      "availableStock": 20,
-      "toolCode": "FIT-VIC-02",
-      "damagedCount": 0,
       "binLocation": "Workbench Rows 1-5",
+      "issuedCount": 0,
+      "lastInspected": "2026-10-12",
       "name": "Swivel Base Bench Vice 6 Inch",
-      "id": "inv_fit_2"
+      "totalStock": 20,
+      "damagedCount": 0,
+      "toolCode": "FIT-VIC-02",
+      "id": "inv_fit_2",
+      "category": "Power Machinery",
+      "tradeId": "trade_fit",
+      "availableStock": 20
     }
   ],
   "indents": [],
   "auditLogs": [
     {
-      "id": "log_1794498432227_qmz5",
-      "timestamp": "12/11/2026, 9:17:12 pm",
-      "userId": "usr_admin",
-      "userName": "Training Officer",
+      "id": "log_1794555960814_jorm",
+      "timestamp": "13/11/2026, 1:16:00 pm",
+      "userId": "off_1",
+      "userName": "Er. Rajesh Kumar Dewangan",
       "userRole": "officer",
-      "action": "DELETE_TRAINEE",
-      "details": "Deleted trainee record: Aakash Verma (ITI/RAI/2026/ELEC-101)."
+      "action": "OFFICER_LOGIN",
+      "details": "Training Officer logged in for trade(s): trade_elec.",
+      "ipAddress": "127.0.0.1"
     },
     {
-      "details": "Training Officer logged in for trade(s): trade_elec.",
+      "id": "log_1",
+      "timestamp": "2026-10-25 09:30:15",
+      "userRole": "admin",
+      "action": "ACADEMIC_SESSION_CONFIG",
+      "details": "Configured Academic Session 2025-2026 with 240 working days.",
+      "userId": "usr_admin",
+      "userName": "Principal / Admin (Govt ITI Raigarh)"
+    },
+    {
+      "userRole": "admin",
+      "action": "ADMIN_LOGIN",
+      "userId": "usr_admin",
+      "details": "Admin logged into administration portal.",
+      "id": "log_1793371435788_fh3g",
+      "userName": "Principal / Admin",
+      "timestamp": "30/10/2026, 8:13:55 pm",
+      "ipAddress": "127.0.0.1"
+    },
+    {
+      "timestamp": "30/10/2026, 8:15:11 pm",
+      "userName": "Principal / Admin",
+      "id": "log_1793371511199_let7",
+      "details": "Updated campus geofence, attendance window, or leave rules.",
+      "userId": "usr_admin",
+      "action": "UPDATE_SETTINGS",
+      "userRole": "admin"
+    },
+    {
+      "id": "log_1793371618420_4zmb",
       "userName": "Er. Rajesh Kumar Dewangan",
-      "ipAddress": "127.0.0.1",
       "action": "OFFICER_LOGIN",
-      "timestamp": "12/11/2026, 9:14:56 pm",
-      "id": "log_1794498296503_zfpj",
+      "details": "Training Officer logged in for trade(s): trade_elec.",
+      "ipAddress": "127.0.0.1",
+      "timestamp": "30/10/2026, 8:16:58 pm",
+      "userRole": "officer",
+      "userId": "off_1"
+    },
+    {
+      "userRole": "officer",
+      "action": "OFFICER_LOGIN",
+      "ipAddress": "127.0.0.1",
+      "id": "log_1793372539771_lo6n",
+      "timestamp": "30/10/2026, 8:32:19 pm",
+      "details": "Training Officer logged in for trade(s): trade_elec.",
       "userId": "off_1",
+      "userName": "Er. Rajesh Kumar Dewangan"
+    },
+    {
+      "action": "OFFICER_LOGIN",
+      "timestamp": "30/10/2026, 8:48:40 pm",
+      "userRole": "officer",
+      "ipAddress": "127.0.0.1",
+      "userId": "off_1",
+      "id": "log_1793373520170_bxgg",
+      "userName": "Er. Rajesh Kumar Dewangan",
+      "details": "Training Officer logged in for trade(s): trade_elec."
+    },
+    {
+      "userRole": "officer",
+      "userId": "off_1",
+      "details": "Training Officer logged in for trade(s): trade_elec.",
+      "action": "OFFICER_LOGIN",
+      "userName": "Er. Rajesh Kumar Dewangan",
+      "timestamp": "30/10/2026, 8:49:17 pm",
+      "id": "log_1793373557429_oono",
+      "ipAddress": "127.0.0.1"
+    },
+    {
+      "userRole": "admin",
+      "timestamp": "31/10/2026, 8:27:00 pm",
+      "action": "ADMIN_LOGIN",
+      "userId": "usr_admin",
+      "details": "Admin logged into administration portal.",
+      "userName": "Principal / Admin",
+      "id": "log_1793458620076_9112",
+      "ipAddress": "127.0.0.1"
+    },
+    {
+      "ipAddress": "127.0.0.1",
+      "details": "Administrator authenticated successfully.",
+      "userRole": "admin",
+      "timestamp": "31/10/2026, 8:32:05 pm",
+      "id": "log_1793458925278_v67b",
+      "action": "ADMIN_LOGIN",
+      "userName": "Shri S. K. Patel (Principal / Admin)",
+      "userId": "usr_admin"
+    },
+    {
+      "id": "log_1793458925352_3vxq",
+      "userId": "off_0",
+      "action": "OFFICER_LOGIN",
+      "details": "Training Officer logged in for trade(s): trade_elec, trade_copa.",
+      "userName": "Abhishek Swarnkar",
+      "ipAddress": "127.0.0.1",
+      "timestamp": "31/10/2026, 8:32:05 pm",
       "userRole": "officer"
     },
     {
-      "details": "Added new trainee: Aakash Verma (Roll: ITI/RAI/2026/ELEC-101).",
-      "timestamp": "12/11/2026, 9:15:05 pm",
+      "userName": "Principal / Admin",
+      "details": "Cleared default active academic session.",
+      "id": "log_1793460669214_k71d",
+      "timestamp": "31/10/2026, 9:01:09 pm",
+      "action": "CLEAR_DEFAULT_SESSION",
       "userId": "usr_admin",
-      "userName": "Training Officer",
-      "id": "log_1794498305273_kpe0",
+      "userRole": "admin"
+    },
+    {
+      "action": "SET_DEFAULT_SESSION",
+      "userId": "usr_admin",
+      "userName": "Principal / Admin",
+      "id": "log_1793460674750_qcjg",
+      "userRole": "admin",
+      "timestamp": "31/10/2026, 9:01:14 pm",
+      "details": "Set default active academic session to: session_2025_2026"
+    },
+    {
+      "userName": "Principal / Admin",
+      "details": "Saved 1 monthly working days records for session session_2026_2027 (Total 23 working days).",
+      "timestamp": "31/10/2026, 9:01:20 pm",
+      "userId": "usr_admin",
+      "id": "log_1793460680709_x1ky",
+      "userRole": "admin",
+      "action": "BULK_CONFIG_WORKING_DAYS"
+    },
+    {
+      "userRole": "admin",
+      "action": "PASSWORD_RESET_TOKEN_ISSUED",
+      "timestamp": "1/11/2026, 5:12:02 pm",
+      "id": "log_1793533322218_7qju",
+      "details": "Password recovery token dispatched for admin.iti.raigarh@cg.gov.in (Token valid for 15 minutes).",
+      "userName": "Shri S. K. Patel (Principal / Admin)",
+      "userId": "usr_admin",
+      "ipAddress": "127.0.0.1"
+    },
+    {
+      "userName": "Principal / Admin",
+      "details": "Updated Training Officer details and trade assignments for: Er. Rajesh Kumar Dewangan (2 trades).",
+      "id": "log_1793536101351_ewsv",
+      "userId": "usr_admin",
+      "timestamp": "1/11/2026, 5:58:21 pm",
+      "action": "ALTER_OFFICER",
+      "userRole": "admin"
+    },
+    {
       "userRole": "officer",
-      "action": "ADD_TRAINEE"
+      "userId": "off_1",
+      "id": "log_1793536107609_ig6s",
+      "timestamp": "1/11/2026, 5:58:27 pm",
+      "details": "Training Officer logged in for trade(s): trade_elec, trade_copa.",
+      "ipAddress": "127.0.0.1",
+      "action": "OFFICER_LOGIN",
+      "userName": "Er. Rajesh Kumar Dewangan"
+    },
+    {
+      "userName": "Principal / Admin",
+      "details": "Updated campus geofence, attendance window, or leave rules.",
+      "id": "log_1794306906243_cydu",
+      "userId": "usr_admin",
+      "timestamp": "10/11/2026, 4:05:06 pm",
+      "action": "UPDATE_SETTINGS",
+      "userRole": "admin"
+    },
+    {
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userRole": "admin",
+      "timestamp": "10/11/2026, 4:20:48 pm",
+      "details": "Database restored: 7 Trainees, 2 Assessment records, 143 Attendance entries, 5 Trades.",
+      "userId": "system_backup",
+      "userName": "Institutional Backup Engine",
+      "id": "log_1794307848273_olcn"
+    },
+    {
+      "details": "Database restored: 7 Trainees, 2 Assessment records, 143 Attendance entries, 5 Trades.",
+      "userName": "Institutional Backup Engine",
+      "id": "log_1794307862572_ty8y",
+      "userRole": "admin",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userId": "system_backup",
+      "timestamp": "10/11/2026, 4:21:02 pm"
+    },
+    {
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userName": "Institutional Backup Engine",
+      "details": "Database restored: 7 Trainees, 2 Assessment records, 143 Attendance entries, 5 Trades.",
+      "userId": "system_backup",
+      "userRole": "admin",
+      "timestamp": "10/11/2026, 4:21:13 pm",
+      "id": "log_1794307873170_x77n"
+    },
+    {
+      "timestamp": "10/11/2026, 4:27:18 pm",
+      "id": "log_1794308238811_vydo",
+      "userName": "Principal / Admin",
+      "details": "Cleared default active academic session.",
+      "userId": "usr_admin",
+      "userRole": "admin",
+      "action": "CLEAR_DEFAULT_SESSION"
+    },
+    {
+      "action": "SET_DEFAULT_SESSION",
+      "timestamp": "10/11/2026, 4:27:22 pm",
+      "userId": "usr_admin",
+      "userName": "Principal / Admin",
+      "userRole": "admin",
+      "id": "log_1794308242770_kh2x",
+      "details": "Set default active academic session to: session_2026_2027"
+    },
+    {
+      "userRole": "admin",
+      "id": "log_1794308249767_w19l",
+      "details": "Set default active academic session to: session_2026_2027",
+      "userId": "usr_admin",
+      "timestamp": "10/11/2026, 4:27:29 pm",
+      "action": "SET_DEFAULT_SESSION",
+      "userName": "Principal / Admin"
+    },
+    {
+      "timestamp": "10/11/2026, 4:27:49 pm",
+      "userName": "Principal / Admin",
+      "details": "Saved 1 monthly working days records for session session_2026_2027 (Total 22 working days).",
+      "action": "BULK_CONFIG_WORKING_DAYS",
+      "id": "log_1794308269441_v30f",
+      "userId": "usr_admin",
+      "userRole": "admin"
+    },
+    {
+      "userId": "usr_admin",
+      "id": "log_1794308283413_fzgf",
+      "userName": "Principal / Admin",
+      "action": "ALTER_OFFICER",
+      "timestamp": "10/11/2026, 4:28:03 pm",
+      "details": "Updated Training Officer details and trade assignments for: Abhishek Swarnkar (1 trades).",
+      "userRole": "admin"
+    },
+    {
+      "action": "ALTER_OFFICER",
+      "userRole": "admin",
+      "userId": "usr_admin",
+      "timestamp": "10/11/2026, 4:28:09 pm",
+      "id": "log_1794308289355_11wl",
+      "userName": "Principal / Admin",
+      "details": "Updated Training Officer details and trade assignments for: Er. Rajesh Kumar Dewangan (1 trades)."
+    },
+    {
+      "timestamp": "10/11/2026, 4:28:18 pm",
+      "userRole": "admin",
+      "id": "log_1794308298282_w3u7",
+      "details": "Updated Training Officer details and trade assignments for: Smt. Priyanka Sharma (1 trades).",
+      "action": "ALTER_OFFICER",
+      "userId": "usr_admin",
+      "userName": "Principal / Admin"
+    },
+    {
+      "details": "Updated campus geofence, attendance window, or leave rules.",
+      "id": "log_1794308346952_nzfv",
+      "userRole": "admin",
+      "timestamp": "10/11/2026, 4:29:06 pm",
+      "userId": "usr_admin",
+      "action": "UPDATE_SETTINGS",
+      "userName": "Principal / Admin"
+    },
+    {
+      "timestamp": "10/11/2026, 4:29:52 pm",
+      "userName": "Institutional Backup Engine",
+      "details": "Database restored: 7 Trainees, 2 Assessment records, 143 Attendance entries, 5 Trades.",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userId": "system_backup",
+      "id": "log_1794308392107_1n9u",
+      "userRole": "admin"
+    },
+    {
+      "id": "log_1794308404678_gjg1",
+      "userRole": "admin",
+      "timestamp": "10/11/2026, 4:30:04 pm",
+      "details": "Administrator authenticated successfully.",
+      "userId": "usr_admin",
+      "action": "ADMIN_LOGIN",
+      "ipAddress": "127.0.0.1",
+      "userName": "Shri  PL Kunte (Principal / Admin)"
+    },
+    {
+      "id": "log_1794308406048_4m8k",
+      "userId": "system_backup",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userRole": "admin",
+      "details": "Database restored: 7 Trainees, 2 Assessment records, 143 Attendance entries, 5 Trades.",
+      "userName": "Institutional Backup Engine",
+      "timestamp": "10/11/2026, 4:30:06 pm"
+    },
+    {
+      "details": "Database restored: 7 Trainees, 2 Assessment records, 143 Attendance entries, 5 Trades.",
+      "timestamp": "10/11/2026, 4:30:28 pm",
+      "userRole": "admin",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userId": "system_backup",
+      "userName": "Institutional Backup Engine",
+      "id": "log_1794308428907_hwrv"
+    },
+    {
+      "userName": "Institutional Backup Engine",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userId": "system_backup",
+      "id": "log_1794308439924_v3gt",
+      "details": "Database restored: 7 Trainees, 2 Assessment records, 143 Attendance entries, 5 Trades.",
+      "userRole": "admin",
+      "timestamp": "10/11/2026, 4:30:39 pm"
+    },
+    {
+      "userName": "Abhishek Swarnkar",
+      "userId": "off_0",
+      "timestamp": "10/11/2026, 4:31:24 pm",
+      "details": "Bulk imported 22 trainees via Excel/CSV for trade trade_copa.",
+      "id": "log_1794308484907_d4bu",
+      "userRole": "officer",
+      "action": "BULK_IMPORT_TRAINEES"
+    },
+    {
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userName": "Institutional Backup Engine",
+      "userId": "system_backup",
+      "timestamp": "10/11/2026, 4:32:41 pm",
+      "id": "log_1794308561384_r40p",
+      "details": "Database restored: 29 Trainees, 2 Assessment records, 143 Attendance entries, 5 Trades.",
+      "userRole": "admin"
+    },
+    {
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userName": "Institutional Backup Engine",
+      "id": "log_1794308581113_qqbv",
+      "userId": "system_backup",
+      "userRole": "admin",
+      "timestamp": "10/11/2026, 4:33:01 pm",
+      "details": "Database restored: 29 Trainees, 2 Assessment records, 143 Attendance entries, 5 Trades."
+    },
+    {
+      "action": "GPS_ATTENDANCE_MARKED",
+      "userRole": "trainee",
+      "userId": "tr_bulk_1794308484905_8_627",
+      "timestamp": "10/11/2026, 4:33:38 pm",
+      "id": "log_1794308618427_zlnz",
+      "userName": "BABITA SIDAR",
+      "details": "Marked Present via GPS. Distance: 42m, Accuracy: 8m."
+    },
+    {
+      "userId": "system_backup",
+      "userName": "Institutional Backup Engine",
+      "details": "Database restored: 29 Trainees, 2 Assessment records, 144 Attendance entries, 5 Trades.",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "id": "log_1794308624116_wost",
+      "timestamp": "10/11/2026, 4:33:44 pm",
+      "userRole": "admin"
+    },
+    {
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userRole": "admin",
+      "userId": "system_backup",
+      "userName": "Institutional Backup Engine",
+      "details": "Database restored: 29 Trainees, 2 Assessment records, 144 Attendance entries, 5 Trades.",
+      "timestamp": "10/11/2026, 4:33:49 pm",
+      "id": "log_1794308629824_f7l4"
+    },
+    {
+      "details": "Database restored: 29 Trainees, 2 Assessment records, 144 Attendance entries, 5 Trades.",
+      "timestamp": "10/11/2026, 4:38:05 pm",
+      "userRole": "admin",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "id": "log_1794308885622_p55f",
+      "userId": "system_backup",
+      "userName": "Institutional Backup Engine"
+    },
+    {
+      "details": "Database restored: 29 Trainees, 2 Assessment records, 144 Attendance entries, 5 Trades.",
+      "userRole": "admin",
+      "id": "log_1794308890334_0v5o",
+      "timestamp": "10/11/2026, 4:38:10 pm",
+      "userId": "system_backup",
+      "userName": "Institutional Backup Engine",
+      "action": "DATABASE_BACKUP_RESTORED"
+    },
+    {
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userId": "system_backup",
+      "userRole": "admin",
+      "timestamp": "10/11/2026, 4:38:54 pm",
+      "id": "log_1794308934291_x139",
+      "userName": "Institutional Backup Engine",
+      "details": "Database restored: 29 Trainees, 2 Assessment records, 144 Attendance entries, 5 Trades."
+    },
+    {
+      "details": "Database restored: 29 Trainees, 2 Assessment records, 144 Attendance entries, 5 Trades.",
+      "userRole": "admin",
+      "userId": "system_backup",
+      "timestamp": "10/11/2026, 4:39:02 pm",
+      "userName": "Institutional Backup Engine",
+      "id": "log_1794308942103_ppp3",
+      "action": "DATABASE_BACKUP_RESTORED"
+    },
+    {
+      "userRole": "admin",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userId": "system_backup",
+      "details": "Database restored: 29 Trainees, 2 Assessment records, 144 Attendance entries, 5 Trades.",
+      "userName": "Institutional Backup Engine",
+      "timestamp": "10/11/2026, 4:50:42 pm",
+      "id": "log_1794309642122_1wxm"
+    },
+    {
+      "userName": "Shri  PL Kunte (Principal / Admin)",
+      "timestamp": "10/11/2026, 5:52:05 pm",
+      "action": "ADMIN_LOGIN",
+      "id": "log_1794313325808_bju8",
+      "userId": "usr_admin",
+      "ipAddress": "127.0.0.1",
+      "details": "Administrator authenticated successfully.",
+      "userRole": "admin"
+    },
+    {
+      "ipAddress": "127.0.0.1",
+      "userName": "Abhishek Swarnkar",
+      "timestamp": "10/11/2026, 5:52:39 pm",
+      "action": "OFFICER_LOGIN",
+      "details": "Training Officer logged in for trade(s): trade_copa.",
+      "id": "log_1794313359277_18lh",
+      "userRole": "officer",
+      "userId": "off_0"
+    },
+    {
+      "details": "Database restored: 29 Trainees, 2 Assessment records, 144 Attendance entries, 5 Trades.",
+      "userName": "Institutional Backup Engine",
+      "id": "log_1794313487124_b7t9",
+      "timestamp": "10/11/2026, 5:54:47 pm",
+      "userId": "system_backup",
+      "userRole": "admin",
+      "action": "DATABASE_BACKUP_RESTORED"
+    },
+    {
+      "userName": "Institutional Backup Engine",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userId": "system_backup",
+      "id": "log_1794313515794_k89z",
+      "timestamp": "10/11/2026, 5:55:15 pm",
+      "details": "Database restored: 29 Trainees, 2 Assessment records, 144 Attendance entries, 5 Trades.",
+      "userRole": "admin"
+    },
+    {
+      "userName": "Institutional Backup Engine",
+      "id": "log_1794313543582_hpyd",
+      "details": "Database restored: 29 Trainees, 2 Assessment records, 144 Attendance entries, 5 Trades.",
+      "userRole": "admin",
+      "userId": "system_backup",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "timestamp": "10/11/2026, 5:55:43 pm"
+    },
+    {
+      "userName": "Institutional Backup Engine",
+      "id": "log_1794331426713_62en",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userId": "system_backup",
+      "details": "Database restored: 29 Trainees, 2 Assessment records, 144 Attendance entries, 5 Trades.",
+      "timestamp": "10/11/2026, 10:53:46 pm",
+      "userRole": "admin"
+    },
+    {
+      "id": "log_1794331566607_8nne",
+      "userRole": "admin",
+      "timestamp": "10/11/2026, 10:56:06 pm",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userName": "Institutional Backup Engine",
+      "details": "Database restored: 29 Trainees, 2 Assessment records, 144 Attendance entries, 5 Trades.",
+      "userId": "system_backup"
+    },
+    {
+      "id": "log_1794331577218_4wgm",
+      "userName": "Institutional Backup Engine",
+      "details": "Database restored: 29 Trainees, 2 Assessment records, 144 Attendance entries, 5 Trades.",
+      "userId": "system_backup",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "timestamp": "10/11/2026, 10:56:17 pm",
+      "userRole": "admin"
+    },
+    {
+      "userRole": "admin",
+      "timestamp": "10/11/2026, 10:59:35 pm",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userId": "system_backup",
+      "id": "log_1794331775631_69xy",
+      "details": "Database restored: 29 Trainees, 2 Assessment records, 144 Attendance entries, 5 Trades.",
+      "userName": "Institutional Backup Engine"
+    },
+    {
+      "timestamp": "10/11/2026, 11:00:31 pm",
+      "details": "Database restored: 29 Trainees, 2 Assessment records, 144 Attendance entries, 5 Trades.",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userId": "system_backup",
+      "userName": "Institutional Backup Engine",
+      "id": "log_1794331831172_25z5",
+      "userRole": "admin"
+    },
+    {
+      "id": "log_1794331963113_gr8q",
+      "action": "ALTER_OFFICER",
+      "userName": "Principal / Admin",
+      "userId": "usr_admin",
+      "timestamp": "10/11/2026, 11:02:43 pm",
+      "userRole": "admin",
+      "details": "Updated Training Officer details and trade assignments for: Abhishek Swarnkar (1 trades)."
+    },
+    {
+      "id": "log_1794331993733_2e2l",
+      "userId": "usr_admin",
+      "userName": "Principal / Admin",
+      "action": "UPDATE_SETTINGS",
+      "details": "Updated campus geofence, attendance window, or leave rules.",
+      "userRole": "admin",
+      "timestamp": "10/11/2026, 11:03:13 pm"
+    },
+    {
+      "userId": "system_backup",
+      "timestamp": "10/11/2026, 11:03:17 pm",
+      "userRole": "admin",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userName": "Institutional Backup Engine",
+      "details": "Database restored: 29 Trainees, 2 Assessment records, 144 Attendance entries, 5 Trades.",
+      "id": "log_1794331997488_ydon"
+    },
+    {
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userName": "Institutional Backup Engine",
+      "userId": "system_backup",
+      "timestamp": "10/11/2026, 11:03:42 pm",
+      "userRole": "admin",
+      "details": "Database restored: 29 Trainees, 2 Assessment records, 144 Attendance entries, 5 Trades.",
+      "id": "log_1794332022065_0yo7"
+    },
+    {
+      "userName": "Institutional Backup Engine",
+      "details": "Database restored: 29 Trainees, 2 Assessment records, 144 Attendance entries, 5 Trades.",
+      "timestamp": "10/11/2026, 11:08:50 pm",
+      "userRole": "admin",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "id": "log_1794332330410_h81w",
+      "userId": "system_backup"
+    },
+    {
+      "userName": "Training Officer",
+      "timestamp": "10/11/2026, 11:14:15 pm",
+      "action": "BULK_IMPORT_TRAINEES",
+      "details": "Bulk imported 500 trainees via Excel/CSV for trade trade_elec.",
+      "id": "log_1794332655580_fs9q",
+      "userRole": "officer",
+      "userId": "usr_officer"
+    },
+    {
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userRole": "admin",
+      "userId": "system_backup",
+      "id": "log_1794332889922_6o05",
+      "timestamp": "10/11/2026, 11:18:09 pm",
+      "userName": "Institutional Backup Engine",
+      "details": "Database restored: 529 Trainees, 2 Assessment records, 144 Attendance entries, 5 Trades."
+    },
+    {
+      "timestamp": "10/11/2026, 11:30:06 pm",
+      "userRole": "admin",
+      "id": "log_1794333606271_neu0",
+      "userId": "system_backup",
+      "details": "Database restored: 29 Trainees, 2 Assessment records, 144 Attendance entries, 5 Trades.",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userName": "Institutional Backup Engine"
+    },
+    {
+      "id": "log_1794333617612_yv6e",
+      "timestamp": "10/11/2026, 11:30:17 pm",
+      "details": "Database restored: 29 Trainees, 2 Assessment records, 144 Attendance entries, 5 Trades.",
+      "userName": "Institutional Backup Engine",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userRole": "admin",
+      "userId": "system_backup"
+    },
+    {
+      "timestamp": "10/11/2026, 11:30:33 pm",
+      "details": "Deleted trainee record: KAJAL YADAW (R260822009278).",
+      "userId": "off_0",
+      "action": "DELETE_TRAINEE",
+      "id": "log_1794333633243_as3y",
+      "userName": "Abhishek Swarnkar",
+      "userRole": "officer"
+    },
+    {
+      "userRole": "officer",
+      "timestamp": "10/11/2026, 11:30:33 pm",
+      "details": "Deleted trainee record: RAJI SINGH (R260822009149).",
+      "userName": "Abhishek Swarnkar",
+      "id": "log_1794333633818_4vys",
+      "action": "DELETE_TRAINEE",
+      "userId": "off_0"
+    },
+    {
+      "details": "Deleted trainee record: tr_bulk_1794308484905_1_664 (undefined).",
+      "userRole": "officer",
+      "timestamp": "10/11/2026, 11:30:34 pm",
+      "action": "DELETE_TRAINEE",
+      "userName": "Abhishek Swarnkar",
+      "id": "log_1794333634110_sewa",
+      "userId": "off_0"
+    },
+    {
+      "timestamp": "10/11/2026, 11:30:34 pm",
+      "id": "log_1794333634304_vjzt",
+      "userRole": "officer",
+      "action": "DELETE_TRAINEE",
+      "userId": "off_0",
+      "details": "Deleted trainee record: Chamatkriti sidar (R260822009285).",
+      "userName": "Abhishek Swarnkar"
+    },
+    {
+      "userId": "off_0",
+      "timestamp": "10/11/2026, 11:30:34 pm",
+      "userRole": "officer",
+      "action": "DELETE_TRAINEE",
+      "id": "log_1794333634526_5cw0",
+      "userName": "Abhishek Swarnkar",
+      "details": "Deleted trainee record: tr_bulk_1794308484905_2_835 (undefined)."
+    },
+    {
+      "details": "Deleted trainee record: tr_bulk_1794308484905_2_835 (undefined).",
+      "userName": "Abhishek Swarnkar",
+      "id": "log_1794333634732_brsz",
+      "userId": "off_0",
+      "timestamp": "10/11/2026, 11:30:34 pm",
+      "userRole": "officer",
+      "action": "DELETE_TRAINEE"
+    },
+    {
+      "details": "Deleted trainee record: REVTI URAON (R260822009210).",
+      "userId": "off_0",
+      "timestamp": "10/11/2026, 11:30:34 pm",
+      "action": "DELETE_TRAINEE",
+      "userName": "Abhishek Swarnkar",
+      "id": "log_1794333634881_bmwp",
+      "userRole": "officer"
+    },
+    {
+      "userRole": "officer",
+      "details": "Deleted trainee record: tr_bulk_1794308484905_3_566 (undefined).",
+      "userName": "Abhishek Swarnkar",
+      "userId": "off_0",
+      "timestamp": "10/11/2026, 11:30:35 pm",
+      "action": "DELETE_TRAINEE",
+      "id": "log_1794333635036_y1dr"
+    },
+    {
+      "timestamp": "10/11/2026, 11:30:35 pm",
+      "userId": "off_0",
+      "id": "log_1794333635303_rlg0",
+      "action": "DELETE_TRAINEE",
+      "userRole": "officer",
+      "userName": "Abhishek Swarnkar",
+      "details": "Deleted trainee record: Anchal panda (R260822009185)."
+    },
+    {
+      "userRole": "officer",
+      "userId": "off_0",
+      "action": "DELETE_TRAINEE",
+      "details": "Deleted trainee record: tr_bulk_1794308484905_4_688 (undefined).",
+      "timestamp": "10/11/2026, 11:30:35 pm",
+      "id": "log_1794333635454_lm9s",
+      "userName": "Abhishek Swarnkar"
+    },
+    {
+      "details": "Deleted trainee record: tr_bulk_1794308484905_4_688 (undefined).",
+      "userName": "Abhishek Swarnkar",
+      "userRole": "officer",
+      "action": "DELETE_TRAINEE",
+      "userId": "off_0",
+      "timestamp": "10/11/2026, 11:30:35 pm",
+      "id": "log_1794333635703_t2im"
+    },
+    {
+      "userName": "Abhishek Swarnkar",
+      "userId": "off_0",
+      "id": "log_1794333635811_eg1x",
+      "details": "Deleted trainee record: MUSKAN (R260822009178).",
+      "action": "DELETE_TRAINEE",
+      "userRole": "officer",
+      "timestamp": "10/11/2026, 11:30:35 pm"
+    },
+    {
+      "userId": "off_0",
+      "userName": "Abhishek Swarnkar",
+      "details": "Deleted trainee record: tr_bulk_1794308484905_5_886 (undefined).",
+      "id": "log_1794333636013_f7ft",
+      "action": "DELETE_TRAINEE",
+      "userRole": "officer",
+      "timestamp": "10/11/2026, 11:30:36 pm"
+    },
+    {
+      "details": "Deleted trainee record: Kiran Mahant (R260822009172).",
+      "userRole": "officer",
+      "userId": "off_0",
+      "id": "log_1794333636275_ufu2",
+      "timestamp": "10/11/2026, 11:30:36 pm",
+      "userName": "Abhishek Swarnkar",
+      "action": "DELETE_TRAINEE"
+    },
+    {
+      "id": "log_1794333636460_sb49",
+      "details": "Deleted trainee record: tr_bulk_1794308484905_6_772 (undefined).",
+      "userName": "Abhishek Swarnkar",
+      "timestamp": "10/11/2026, 11:30:36 pm",
+      "userId": "off_0",
+      "userRole": "officer",
+      "action": "DELETE_TRAINEE"
+    },
+    {
+      "id": "log_1794333636621_yaro",
+      "userRole": "officer",
+      "action": "DELETE_TRAINEE",
+      "timestamp": "10/11/2026, 11:30:36 pm",
+      "userId": "off_0",
+      "details": "Deleted trainee record: tr_bulk_1794308484905_6_772 (undefined).",
+      "userName": "Abhishek Swarnkar"
+    },
+    {
+      "userName": "Abhishek Swarnkar",
+      "action": "DELETE_TRAINEE",
+      "details": "Deleted trainee record: REENA (R260822009169).",
+      "timestamp": "10/11/2026, 11:30:36 pm",
+      "id": "log_1794333636831_xfuw",
+      "userRole": "officer",
+      "userId": "off_0"
+    },
+    {
+      "details": "Deleted trainee record: tr_bulk_1794308484905_7_384 (undefined).",
+      "id": "log_1794333636999_g89y",
+      "userRole": "officer",
+      "userId": "off_0",
+      "userName": "Abhishek Swarnkar",
+      "action": "DELETE_TRAINEE",
+      "timestamp": "10/11/2026, 11:30:36 pm"
+    },
+    {
+      "userId": "off_0",
+      "userName": "Abhishek Swarnkar",
+      "action": "DELETE_TRAINEE",
+      "details": "Deleted trainee record: BABITA SIDAR (R260822009276).",
+      "id": "log_1794333637431_pyta",
+      "userRole": "officer",
+      "timestamp": "10/11/2026, 11:30:37 pm"
+    },
+    {
+      "userRole": "officer",
+      "action": "DELETE_TRAINEE",
+      "timestamp": "10/11/2026, 11:30:37 pm",
+      "userId": "off_0",
+      "id": "log_1794333637642_9ll8",
+      "details": "Deleted trainee record: tr_bulk_1794308484905_8_627 (undefined).",
+      "userName": "Abhishek Swarnkar"
+    },
+    {
+      "userRole": "officer",
+      "timestamp": "10/11/2026, 11:30:38 pm",
+      "details": "Deleted trainee record: SHIVAM PARJA (R260822009142).",
+      "userId": "off_0",
+      "action": "DELETE_TRAINEE",
+      "id": "log_1794333638053_aw2c",
+      "userName": "Abhishek Swarnkar"
+    },
+    {
+      "userId": "off_0",
+      "userName": "Abhishek Swarnkar",
+      "details": "Deleted trainee record: tr_bulk_1794308484905_9_290 (undefined).",
+      "id": "log_1794333638358_0duh",
+      "action": "DELETE_TRAINEE",
+      "userRole": "officer",
+      "timestamp": "10/11/2026, 11:30:38 pm"
+    },
+    {
+      "action": "DELETE_TRAINEE",
+      "userName": "Abhishek Swarnkar",
+      "timestamp": "10/11/2026, 11:30:38 pm",
+      "userId": "off_0",
+      "userRole": "officer",
+      "id": "log_1794333638686_ko3q",
+      "details": "Deleted trainee record: KAMINI SIDAR (R260822009202)."
+    },
+    {
+      "userRole": "officer",
+      "action": "DELETE_TRAINEE",
+      "userId": "off_0",
+      "timestamp": "10/11/2026, 11:30:38 pm",
+      "id": "log_1794333638848_lian",
+      "details": "Deleted trainee record: tr_bulk_1794308484905_10_234 (undefined).",
+      "userName": "Abhishek Swarnkar"
+    },
+    {
+      "details": "Deleted trainee record: SUDHA SIDAR (R260822009196).",
+      "userName": "Abhishek Swarnkar",
+      "userId": "off_0",
+      "userRole": "officer",
+      "id": "log_1794333639070_2zeq",
+      "timestamp": "10/11/2026, 11:30:39 pm",
+      "action": "DELETE_TRAINEE"
+    },
+    {
+      "timestamp": "10/11/2026, 11:30:39 pm",
+      "userRole": "officer",
+      "action": "DELETE_TRAINEE",
+      "id": "log_1794333639271_8hhr",
+      "details": "Deleted trainee record: tr_bulk_1794308484906_11_606 (undefined).",
+      "userName": "Abhishek Swarnkar",
+      "userId": "off_0"
+    },
+    {
+      "userRole": "officer",
+      "id": "log_1794333639657_8nah",
+      "details": "Deleted trainee record: SURYA DAS MAHANT (R260822009218).",
+      "action": "DELETE_TRAINEE",
+      "userName": "Abhishek Swarnkar",
+      "timestamp": "10/11/2026, 11:30:39 pm",
+      "userId": "off_0"
+    },
+    {
+      "userName": "Abhishek Swarnkar",
+      "id": "log_1794333639835_inxo",
+      "action": "DELETE_TRAINEE",
+      "userRole": "officer",
+      "timestamp": "10/11/2026, 11:30:39 pm",
+      "details": "Deleted trainee record: tr_bulk_1794308484906_12_2 (undefined).",
+      "userId": "off_0"
+    },
+    {
+      "userName": "Abhishek Swarnkar",
+      "action": "DELETE_TRAINEE",
+      "timestamp": "10/11/2026, 11:30:40 pm",
+      "details": "Deleted trainee record: ISHA SIDAR (R260822009205).",
+      "userRole": "officer",
+      "id": "log_1794333640239_r6o5",
+      "userId": "off_0"
+    },
+    {
+      "userName": "Abhishek Swarnkar",
+      "action": "DELETE_TRAINEE",
+      "userId": "off_0",
+      "id": "log_1794333640453_sh05",
+      "userRole": "officer",
+      "timestamp": "10/11/2026, 11:30:40 pm",
+      "details": "Deleted trainee record: tr_bulk_1794308484906_13_739 (undefined)."
+    },
+    {
+      "timestamp": "10/11/2026, 11:30:40 pm",
+      "action": "DELETE_TRAINEE",
+      "id": "log_1794333640653_w4cr",
+      "userId": "off_0",
+      "userRole": "officer",
+      "userName": "Abhishek Swarnkar",
+      "details": "Deleted trainee record: tr_bulk_1794308484906_13_739 (undefined)."
+    },
+    {
+      "userId": "off_0",
+      "userRole": "officer",
+      "action": "DELETE_TRAINEE",
+      "id": "log_1794333640850_itkz",
+      "timestamp": "10/11/2026, 11:30:40 pm",
+      "userName": "Abhishek Swarnkar",
+      "details": "Deleted trainee record: MANISHA PATEL (R260822009162)."
+    },
+    {
+      "timestamp": "10/11/2026, 11:30:41 pm",
+      "action": "DELETE_TRAINEE",
+      "userId": "off_0",
+      "userRole": "officer",
+      "userName": "Abhishek Swarnkar",
+      "id": "log_1794333641064_dsol",
+      "details": "Deleted trainee record: tr_bulk_1794308484906_14_135 (undefined)."
+    },
+    {
+      "userName": "Abhishek Swarnkar",
+      "timestamp": "10/11/2026, 11:30:41 pm",
+      "id": "log_1794333641299_s78u",
+      "userId": "off_0",
+      "action": "DELETE_TRAINEE",
+      "userRole": "officer",
+      "details": "Deleted trainee record: DOLLY KEWAT (R260822010656)."
+    },
+    {
+      "timestamp": "10/11/2026, 11:30:41 pm",
+      "userName": "Abhishek Swarnkar",
+      "details": "Deleted trainee record: tr_bulk_1794308484906_15_626 (undefined).",
+      "userId": "off_0",
+      "id": "log_1794333641481_sbkq",
+      "action": "DELETE_TRAINEE",
+      "userRole": "officer"
+    },
+    {
+      "userRole": "officer",
+      "userId": "off_0",
+      "action": "DELETE_TRAINEE",
+      "details": "Deleted trainee record: tr_bulk_1794308484906_15_626 (undefined).",
+      "timestamp": "10/11/2026, 11:30:41 pm",
+      "userName": "Abhishek Swarnkar",
+      "id": "log_1794333641690_ht21"
     },
     {
       "action": "DELETE_TRAINEE",
       "userRole": "officer",
-      "details": "Deleted trainee record: Aakash Verma (ITI/RAI/2026/ELEC-101).",
+      "userId": "off_0",
+      "id": "log_1794333641910_2trj",
+      "details": "Deleted trainee record: NEHA  SIDAR (R260822009288).",
+      "userName": "Abhishek Swarnkar",
+      "timestamp": "10/11/2026, 11:30:41 pm"
+    },
+    {
+      "details": "Deleted trainee record: tr_bulk_1794308484906_16_597 (undefined).",
+      "userName": "Abhishek Swarnkar",
+      "timestamp": "10/11/2026, 11:30:42 pm",
+      "action": "DELETE_TRAINEE",
+      "userRole": "officer",
+      "userId": "off_0",
+      "id": "log_1794333642123_yt45"
+    },
+    {
+      "userRole": "officer",
+      "userId": "off_0",
+      "details": "Deleted trainee record: tr_bulk_1794308484906_16_597 (undefined).",
+      "action": "DELETE_TRAINEE",
+      "userName": "Abhishek Swarnkar",
+      "timestamp": "10/11/2026, 11:30:42 pm",
+      "id": "log_1794333642313_xllh"
+    },
+    {
+      "timestamp": "10/11/2026, 11:30:42 pm",
+      "userName": "Abhishek Swarnkar",
+      "details": "Deleted trainee record: CHANDNI SIDAR (R260822009214).",
+      "userId": "off_0",
+      "userRole": "officer",
+      "id": "log_1794333642518_l6b7",
+      "action": "DELETE_TRAINEE"
+    },
+    {
+      "details": "Deleted trainee record: tr_bulk_1794308484906_17_94 (undefined).",
+      "id": "log_1794333642757_ny43",
+      "userName": "Abhishek Swarnkar",
+      "timestamp": "10/11/2026, 11:30:42 pm",
+      "userId": "off_0",
+      "userRole": "officer",
+      "action": "DELETE_TRAINEE"
+    },
+    {
+      "userId": "off_0",
+      "action": "DELETE_TRAINEE",
+      "userName": "Abhishek Swarnkar",
+      "userRole": "officer",
+      "timestamp": "10/11/2026, 11:30:43 pm",
+      "details": "Deleted trainee record: MUNNA KUSHWAHA (R260822009327).",
+      "id": "log_1794333643015_az51"
+    },
+    {
+      "action": "DELETE_TRAINEE",
+      "userName": "Abhishek Swarnkar",
+      "userId": "off_0",
+      "id": "log_1794333643250_fkro",
+      "userRole": "officer",
+      "details": "Deleted trainee record: tr_bulk_1794308484906_18_211 (undefined).",
+      "timestamp": "10/11/2026, 11:30:43 pm"
+    },
+    {
+      "userRole": "officer",
+      "userId": "off_0",
+      "id": "log_1794333643460_g5ie",
+      "action": "DELETE_TRAINEE",
+      "details": "Deleted trainee record: SUMAN CHOUHAN (R260822009193).",
+      "userName": "Abhishek Swarnkar",
+      "timestamp": "10/11/2026, 11:30:43 pm"
+    },
+    {
+      "userId": "off_0",
+      "id": "log_1794333643703_9a2l",
+      "userName": "Abhishek Swarnkar",
+      "details": "Deleted trainee record: tr_bulk_1794308484906_19_151 (undefined).",
+      "action": "DELETE_TRAINEE",
+      "userRole": "officer",
+      "timestamp": "10/11/2026, 11:30:43 pm"
+    },
+    {
+      "userName": "Abhishek Swarnkar",
+      "id": "log_1794333645145_gl4r",
+      "details": "Deleted trainee record: SUNITA RATHIYA (R260822009612).",
+      "timestamp": "10/11/2026, 11:30:45 pm",
+      "userId": "off_0",
+      "userRole": "officer",
+      "action": "DELETE_TRAINEE"
+    },
+    {
+      "timestamp": "10/11/2026, 11:30:46 pm",
+      "userRole": "officer",
+      "details": "Deleted trainee record: JYOTIKA RATHIA (R260822009294).",
+      "userId": "off_0",
+      "action": "DELETE_TRAINEE",
+      "id": "log_1794333646258_9jbw",
+      "userName": "Abhishek Swarnkar"
+    },
+    {
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userRole": "admin",
+      "details": "Database restored: 7 Trainees, 2 Assessment records, 144 Attendance entries, 5 Trades.",
+      "userId": "system_backup",
+      "userName": "Institutional Backup Engine",
+      "id": "log_1794333656258_gedp",
+      "timestamp": "10/11/2026, 11:30:56 pm"
+    },
+    {
+      "timestamp": "10/11/2026, 11:31:03 pm",
+      "userRole": "admin",
+      "details": "Database restored: 7 Trainees, 2 Assessment records, 144 Attendance entries, 5 Trades.",
+      "userId": "system_backup",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "id": "log_1794333663778_z1xp",
+      "userName": "Institutional Backup Engine"
+    },
+    {
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userRole": "admin",
+      "userId": "system_backup",
+      "id": "log_1794333682080_32vk",
+      "userName": "Institutional Backup Engine",
+      "details": "Database restored: 7 Trainees, 2 Assessment records, 144 Attendance entries, 5 Trades.",
+      "timestamp": "10/11/2026, 11:31:22 pm"
+    },
+    {
+      "userName": "Institutional Backup Engine",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "timestamp": "10/11/2026, 11:31:27 pm",
+      "id": "log_1794333687501_tgo3",
+      "details": "Database restored: 7 Trainees, 2 Assessment records, 144 Attendance entries, 5 Trades.",
+      "userId": "system_backup",
+      "userRole": "admin"
+    },
+    {
+      "userName": "Abhishek Swarnkar",
+      "action": "BULK_IMPORT_TRAINEES",
+      "userId": "off_0",
+      "details": "Bulk imported 22 trainees via Excel/CSV for trade trade_copa.",
+      "userRole": "officer",
+      "id": "log_1794333705400_bozr",
+      "timestamp": "10/11/2026, 11:31:45 pm"
+    },
+    {
+      "id": "log_1794333910865_qy6c",
+      "details": "Updated/marked attendance for 22 trainees on date 2026-11-10.",
+      "userRole": "officer",
+      "timestamp": "10/11/2026, 11:35:10 pm",
+      "userId": "off_0",
+      "action": "OFFICER_ATTENDANCE_UPDATE",
+      "userName": "Abhishek Swarnkar"
+    },
+    {
+      "id": "log_1794333950459_ius7",
+      "userName": "Institutional Backup Engine",
+      "details": "Database restored: 29 Trainees, 2 Assessment records, 166 Attendance entries, 5 Trades.",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userId": "system_backup",
+      "userRole": "admin",
+      "timestamp": "10/11/2026, 11:35:50 pm"
+    },
+    {
+      "action": "DATABASE_BACKUP_RESTORED",
+      "id": "log_1794367254318_jszd",
+      "userRole": "admin",
+      "userId": "system_backup",
+      "timestamp": "11/11/2026, 8:50:54 am",
+      "details": "Database restored: 29 Trainees, 2 Assessment records, 166 Attendance entries, 5 Trades.",
+      "userName": "Institutional Backup Engine"
+    },
+    {
+      "userRole": "admin",
+      "timestamp": "11/11/2026, 8:51:00 am",
+      "userId": "system_backup",
+      "details": "Database restored: 29 Trainees, 2 Assessment records, 166 Attendance entries, 5 Trades.",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "id": "log_1794367260399_f32d",
+      "userName": "Institutional Backup Engine"
+    },
+    {
+      "details": "Database restored: 29 Trainees, 2 Assessment records, 166 Attendance entries, 5 Trades.",
+      "userName": "Institutional Backup Engine",
+      "id": "log_1794367280029_w6mv",
+      "timestamp": "11/11/2026, 8:51:20 am",
+      "userId": "system_backup",
+      "userRole": "admin",
+      "action": "DATABASE_BACKUP_RESTORED"
+    },
+    {
+      "details": "Database restored: 29 Trainees, 2 Assessment records, 166 Attendance entries, 5 Trades.",
+      "userRole": "admin",
+      "id": "log_1794367302602_sqtx",
+      "timestamp": "11/11/2026, 8:51:42 am",
+      "userName": "Institutional Backup Engine",
+      "userId": "system_backup",
+      "action": "DATABASE_BACKUP_RESTORED"
+    },
+    {
+      "userName": "KAJAL YADAW",
+      "timestamp": "11/11/2026, 8:53:09 am",
+      "details": "Marked Present via GPS. Distance: 42m, Accuracy: 8m.",
+      "userId": "tr_bulk_1794333705398_0_866",
+      "userRole": "trainee",
+      "id": "log_1794367389117_z6td",
+      "action": "GPS_ATTENDANCE_MARKED"
+    },
+    {
+      "userName": "Institutional Backup Engine",
+      "userId": "system_backup",
+      "details": "Database restored: 29 Trainees, 2 Assessment records, 167 Attendance entries, 5 Trades.",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "id": "log_1794367398363_erh8",
+      "timestamp": "11/11/2026, 8:53:18 am",
+      "userRole": "admin"
+    },
+    {
+      "userRole": "officer",
+      "details": "Training Officer logged in for trade(s): trade_copa.",
+      "id": "log_1794367404013_5ps1",
+      "userId": "off_0",
+      "userName": "Abhishek Swarnkar",
+      "timestamp": "11/11/2026, 8:53:24 am",
+      "ipAddress": "127.0.0.1",
+      "action": "OFFICER_LOGIN"
+    },
+    {
+      "userId": "system_backup",
+      "timestamp": "11/11/2026, 8:53:26 am",
+      "userName": "Institutional Backup Engine",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "id": "log_1794367406312_r3gu",
+      "userRole": "admin",
+      "details": "Database restored: 29 Trainees, 2 Assessment records, 167 Attendance entries, 5 Trades."
+    },
+    {
+      "userRole": "admin",
+      "timestamp": "11/11/2026, 8:54:03 am",
+      "details": "Database restored: 29 Trainees, 2 Assessment records, 167 Attendance entries, 5 Trades.",
+      "id": "log_1794367443519_r1h6",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userId": "system_backup",
+      "userName": "Institutional Backup Engine"
+    },
+    {
+      "userRole": "admin",
+      "userId": "system_backup",
+      "timestamp": "11/11/2026, 9:12:54 am",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "details": "Database restored: 29 Trainees, 2 Assessment records, 167 Attendance entries, 5 Trades.",
+      "userName": "Institutional Backup Engine",
+      "id": "log_1794368574388_11r0"
+    },
+    {
+      "userId": "system_backup",
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 167 Attendance entries, 5 Trades.",
+      "userName": "Institutional Backup Engine",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "id": "log_1794384166255_9y2o",
+      "timestamp": "11/11/2026, 1:32:46 pm",
+      "userRole": "admin"
+    },
+    {
+      "userId": "system_backup",
+      "userName": "Institutional Backup Engine",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "timestamp": "11/11/2026, 1:32:53 pm",
+      "id": "log_1794384173508_8c6p",
+      "userRole": "admin",
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 167 Attendance entries, 5 Trades."
+    },
+    {
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userName": "Institutional Backup Engine",
+      "id": "log_1794384223735_m750",
+      "userId": "system_backup",
+      "timestamp": "11/11/2026, 1:33:43 pm",
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 167 Attendance entries, 5 Trades.",
+      "userRole": "admin"
+    },
+    {
+      "userName": "Institutional Backup Engine",
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 167 Attendance entries, 5 Trades.",
+      "id": "log_1794384232659_3juj",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userRole": "admin",
+      "userId": "system_backup",
+      "timestamp": "11/11/2026, 1:33:52 pm"
+    },
+    {
+      "timestamp": "11/11/2026, 1:35:31 pm",
+      "userId": "system_backup",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userRole": "admin",
+      "userName": "Institutional Backup Engine",
+      "id": "log_1794384331245_v6hj",
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 167 Attendance entries, 5 Trades."
+    },
+    {
+      "id": "log_1794384361510_1sri",
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 167 Attendance entries, 5 Trades.",
+      "userId": "system_backup",
+      "timestamp": "11/11/2026, 1:36:01 pm",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userRole": "admin",
+      "userName": "Institutional Backup Engine"
+    },
+    {
+      "timestamp": "11/11/2026, 1:36:15 pm",
+      "userRole": "admin",
+      "id": "log_1794384375559_htdu",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 167 Attendance entries, 5 Trades.",
+      "userName": "Institutional Backup Engine",
+      "userId": "system_backup"
+    },
+    {
+      "id": "log_1794459824590_fg7y",
+      "userRole": "admin",
+      "userId": "system_backup",
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 167 Attendance entries, 5 Trades.",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "timestamp": "12/11/2026, 10:33:44 am",
+      "userName": "Institutional Backup Engine"
+    },
+    {
+      "timestamp": "12/11/2026, 10:35:02 am",
+      "userRole": "admin",
+      "userId": "system_backup",
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 167 Attendance entries, 5 Trades.",
+      "id": "log_1794459902075_evfu",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userName": "Institutional Backup Engine"
+    },
+    {
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 167 Attendance entries, 5 Trades.",
+      "userRole": "admin",
+      "id": "log_1794460079904_eki3",
+      "userId": "system_backup",
+      "userName": "Institutional Backup Engine",
+      "timestamp": "12/11/2026, 10:37:59 am",
+      "action": "DATABASE_BACKUP_RESTORED"
+    },
+    {
+      "action": "DATABASE_BACKUP_RESTORED",
+      "timestamp": "12/11/2026, 10:39:46 am",
+      "userName": "Institutional Backup Engine",
+      "userId": "system_backup",
+      "id": "log_1794460186299_dpp5",
+      "userRole": "admin",
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 167 Attendance entries, 5 Trades."
+    },
+    {
+      "action": "DATABASE_BACKUP_RESTORED",
+      "timestamp": "12/11/2026, 10:40:37 am",
+      "userRole": "admin",
+      "userId": "system_backup",
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 167 Attendance entries, 5 Trades.",
+      "id": "log_1794460237745_kgl7",
+      "userName": "Institutional Backup Engine"
+    },
+    {
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 167 Attendance entries, 5 Trades.",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userRole": "admin",
+      "id": "log_1794460257239_joc0",
+      "userId": "system_backup",
+      "timestamp": "12/11/2026, 10:40:57 am",
+      "userName": "Institutional Backup Engine"
+    },
+    {
+      "userName": "Institutional Backup Engine",
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 167 Attendance entries, 5 Trades.",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userRole": "admin",
+      "id": "log_1794460261784_vwgr",
+      "timestamp": "12/11/2026, 10:41:01 am",
+      "userId": "system_backup"
+    },
+    {
+      "timestamp": "12/11/2026, 10:41:20 am",
+      "userRole": "trainee",
+      "details": "Trainee authenticated: Roll No R260822009142.",
+      "ipAddress": "169.254.169.126",
+      "id": "log_1794460280745_epio",
+      "action": "TRAINEE_LOGIN",
+      "userName": "SHIVAM PARJA",
+      "userId": "tr_bulk_1794308484905_9_290"
+    },
+    {
+      "userRole": "admin",
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 167 Attendance entries, 5 Trades.",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "timestamp": "12/11/2026, 10:41:42 am",
+      "userName": "Institutional Backup Engine",
+      "userId": "system_backup",
+      "id": "log_1794460302521_c5qn"
+    },
+    {
+      "id": "log_1794460339926_f3p1",
+      "userRole": "admin",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 167 Attendance entries, 5 Trades.",
+      "timestamp": "12/11/2026, 10:42:19 am",
+      "userId": "system_backup",
+      "userName": "Institutional Backup Engine"
+    },
+    {
+      "userRole": "admin",
+      "id": "log_1794460390878_84nt",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userId": "system_backup",
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 167 Attendance entries, 5 Trades.",
+      "userName": "Institutional Backup Engine",
+      "timestamp": "12/11/2026, 10:43:10 am"
+    },
+    {
+      "id": "log_1794460885698_x2xq",
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 167 Attendance entries, 5 Trades.",
+      "userName": "Institutional Backup Engine",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userRole": "admin",
+      "timestamp": "12/11/2026, 10:51:25 am",
+      "userId": "system_backup"
+    },
+    {
+      "userRole": "admin",
+      "id": "log_1794460906579_jfuh",
+      "userName": "Principal / Admin",
       "userId": "usr_admin",
+      "timestamp": "12/11/2026, 10:51:46 am",
+      "details": "Updated campus geofence, attendance window, or leave rules.",
+      "action": "UPDATE_SETTINGS"
+    },
+    {
+      "userId": "usr_admin",
+      "id": "log_1794460928335_buop",
+      "userName": "Principal / Admin",
+      "action": "UPDATE_SETTINGS",
+      "details": "Updated campus geofence, attendance window, or leave rules.",
+      "timestamp": "12/11/2026, 10:52:08 am",
+      "userRole": "admin"
+    },
+    {
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 167 Attendance entries, 5 Trades.",
+      "timestamp": "12/11/2026, 10:52:13 am",
+      "userRole": "admin",
+      "id": "log_1794460933270_so08",
+      "userId": "system_backup",
+      "userName": "Institutional Backup Engine",
+      "action": "DATABASE_BACKUP_RESTORED"
+    },
+    {
+      "id": "log_1794460941512_cg0p",
+      "userId": "system_backup",
+      "userName": "Institutional Backup Engine",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 167 Attendance entries, 5 Trades.",
+      "timestamp": "12/11/2026, 10:52:21 am",
+      "userRole": "admin"
+    },
+    {
+      "timestamp": "12/11/2026, 10:52:22 am",
+      "userName": "Institutional Backup Engine",
+      "id": "log_1794460942831_h9fj",
+      "userId": "system_backup",
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 167 Attendance entries, 5 Trades.",
+      "userRole": "admin",
+      "action": "DATABASE_BACKUP_RESTORED"
+    },
+    {
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 167 Attendance entries, 5 Trades.",
+      "userRole": "admin",
+      "id": "log_1794460978674_uivq",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userName": "Institutional Backup Engine",
+      "timestamp": "12/11/2026, 10:52:58 am",
+      "userId": "system_backup"
+    },
+    {
+      "userRole": "trainee",
+      "userId": "tr_bulk_1794308484905_1_664",
+      "action": "GPS_ATTENDANCE_MARKED",
+      "details": "Marked Present via GPS. Distance: 42m, Accuracy: 8m.",
+      "userName": "RAJI SINGH",
+      "id": "log_1794461035038_33lr",
+      "timestamp": "12/11/2026, 10:53:55 am"
+    },
+    {
+      "action": "GPS_ATTENDANCE_MARKED",
+      "id": "log_1794461035738_jayj",
+      "userRole": "trainee",
+      "userId": "tr_bulk_1794308484905_0_914",
+      "timestamp": "12/11/2026, 10:53:55 am",
+      "details": "Marked Present via GPS. Distance: 42m, Accuracy: 8m.",
+      "userName": "KAJAL YADAW"
+    },
+    {
+      "details": "Marked Present via GPS. Distance: 42m, Accuracy: 8m.",
+      "userName": "Anchal panda",
+      "timestamp": "12/11/2026, 10:53:56 am",
+      "userId": "tr_bulk_1794308484905_4_688",
+      "userRole": "trainee",
+      "action": "GPS_ATTENDANCE_MARKED",
+      "id": "log_1794461036901_9ejt"
+    },
+    {
+      "userRole": "trainee",
+      "timestamp": "12/11/2026, 10:54:01 am",
+      "id": "log_1794461041742_wtqg",
+      "action": "GPS_ATTENDANCE_MARKED",
+      "userName": "SUDHA SIDAR",
+      "details": "Marked Present via GPS. Distance: 42m, Accuracy: 8m.",
+      "userId": "tr_bulk_1794308484906_11_606"
+    },
+    {
+      "userId": "tr_bulk_1794308484906_14_135",
+      "timestamp": "12/11/2026, 10:54:24 am",
+      "id": "log_1794461064856_athm",
+      "userRole": "trainee",
+      "action": "GPS_ATTENDANCE_MARKED",
+      "details": "Marked Present via GPS. Distance: 42m, Accuracy: 8m.",
+      "userName": "MANISHA PATEL"
+    },
+    {
+      "id": "log_1794461075536_t5r2",
+      "userRole": "admin",
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 172 Attendance entries, 5 Trades.",
+      "timestamp": "12/11/2026, 10:54:35 am",
+      "userId": "system_backup",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userName": "Institutional Backup Engine"
+    },
+    {
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 172 Attendance entries, 5 Trades.",
+      "userRole": "admin",
+      "id": "log_1794461082984_e9iq",
+      "timestamp": "12/11/2026, 10:54:42 am",
+      "userId": "system_backup",
+      "userName": "Institutional Backup Engine",
+      "action": "DATABASE_BACKUP_RESTORED"
+    },
+    {
+      "id": "log_1794461146257_cyar",
+      "userName": "Institutional Backup Engine",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "timestamp": "12/11/2026, 10:55:46 am",
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 172 Attendance entries, 5 Trades.",
+      "userId": "system_backup",
+      "userRole": "admin"
+    },
+    {
+      "userRole": "admin",
+      "userName": "Institutional Backup Engine",
+      "userId": "system_backup",
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 172 Attendance entries, 5 Trades.",
+      "id": "log_1794461151725_i8wb",
+      "timestamp": "12/11/2026, 10:55:51 am",
+      "action": "DATABASE_BACKUP_RESTORED"
+    },
+    {
+      "userName": "Institutional Backup Engine",
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 234 Attendance entries, 5 Trades.",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userRole": "admin",
+      "id": "log_1794468049492_c4ga",
+      "timestamp": "12/11/2026, 12:50:49 pm",
+      "userId": "system_backup"
+    },
+    {
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 234 Attendance entries, 5 Trades.",
+      "timestamp": "12/11/2026, 12:51:24 pm",
+      "userRole": "admin",
+      "id": "log_1794468084184_cclh",
+      "userId": "system_backup",
+      "userName": "Institutional Backup Engine",
+      "action": "DATABASE_BACKUP_RESTORED"
+    },
+    {
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 234 Attendance entries, 5 Trades.",
+      "timestamp": "12/11/2026, 12:51:29 pm",
+      "id": "log_1794468089753_3e1j",
+      "userRole": "admin",
+      "userId": "system_backup",
+      "userName": "Institutional Backup Engine",
+      "action": "DATABASE_BACKUP_RESTORED"
+    },
+    {
+      "userId": "system_backup",
+      "userName": "Institutional Backup Engine",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "id": "log_1794468104995_0qmd",
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 234 Attendance entries, 5 Trades.",
+      "timestamp": "12/11/2026, 12:51:44 pm",
+      "userRole": "admin"
+    },
+    {
+      "userName": "Institutional Backup Engine",
+      "timestamp": "12/11/2026, 12:51:55 pm",
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 234 Attendance entries, 5 Trades.",
+      "userId": "system_backup",
+      "id": "log_1794468115394_b4xr",
+      "userRole": "admin",
+      "action": "DATABASE_BACKUP_RESTORED"
+    },
+    {
+      "userName": "Institutional Backup Engine",
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 234 Attendance entries, 5 Trades.",
+      "id": "log_1794468124045_hent",
+      "timestamp": "12/11/2026, 12:52:04 pm",
+      "userRole": "admin",
+      "userId": "system_backup",
+      "action": "DATABASE_BACKUP_RESTORED"
+    },
+    {
+      "timestamp": "12/11/2026, 12:52:46 pm",
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 234 Attendance entries, 5 Trades.",
+      "userRole": "admin",
+      "id": "log_1794468166180_5yaf",
+      "userName": "Institutional Backup Engine",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userId": "system_backup"
+    },
+    {
+      "userId": "system_backup",
+      "userRole": "admin",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "timestamp": "12/11/2026, 8:39:57 pm",
+      "userName": "Institutional Backup Engine",
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 234 Attendance entries, 5 Trades.",
+      "id": "log_1794496197970_na1d"
+    },
+    {
+      "userName": "Institutional Backup Engine",
+      "id": "log_1794496204457_fa3u",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userId": "system_backup",
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 234 Attendance entries, 5 Trades.",
+      "timestamp": "12/11/2026, 8:40:04 pm",
+      "userRole": "admin"
+    },
+    {
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 234 Attendance entries, 5 Trades.",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userRole": "admin",
+      "userId": "system_backup",
+      "userName": "Institutional Backup Engine",
+      "timestamp": "12/11/2026, 8:40:11 pm",
+      "id": "log_1794496211132_jls8"
+    },
+    {
+      "timestamp": "12/11/2026, 8:40:21 pm",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userId": "system_backup",
+      "userRole": "admin",
+      "id": "log_1794496221457_gojx",
+      "userName": "Institutional Backup Engine",
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 234 Attendance entries, 5 Trades."
+    },
+    {
+      "action": "OFFICER_LOGIN",
+      "userRole": "officer",
+      "timestamp": "12/11/2026, 9:14:56 pm",
+      "ipAddress": "127.0.0.1",
+      "userId": "off_1",
+      "details": "Training Officer logged in for trade(s): trade_elec.",
+      "userName": "Er. Rajesh Kumar Dewangan",
+      "id": "log_1794498296503_zfpj"
+    },
+    {
+      "id": "log_1794498305273_kpe0",
+      "userName": "Training Officer",
+      "action": "ADD_TRAINEE",
+      "details": "Added new trainee: Aakash Verma (Roll: ITI/RAI/2026/ELEC-101).",
+      "timestamp": "12/11/2026, 9:15:05 pm",
+      "userRole": "officer",
+      "userId": "usr_admin"
+    },
+    {
+      "userId": "usr_admin",
+      "userName": "Training Officer",
+      "details": "Deleted trainee record: Aakash Verma (ITI/RAI/2026/ELEC-101).",
+      "action": "DELETE_TRAINEE",
       "timestamp": "12/11/2026, 9:15:09 pm",
       "id": "log_1794498309437_ohai",
-      "userName": "Training Officer"
+      "userRole": "officer"
+    },
+    {
+      "details": "Deleted trainee record: Aakash Verma (ITI/RAI/2026/ELEC-101).",
+      "userName": "Training Officer",
+      "action": "DELETE_TRAINEE",
+      "userRole": "officer",
+      "id": "log_1794498432227_qmz5",
+      "userId": "usr_admin",
+      "timestamp": "12/11/2026, 9:17:12 pm"
+    },
+    {
+      "id": "log_1794498716274_12dh",
+      "details": "Administrator authenticated successfully.",
+      "userRole": "admin",
+      "timestamp": "12/11/2026, 9:21:56 pm",
+      "action": "ADMIN_LOGIN",
+      "userName": "Shri  PL Kunte (Principal / Admin)",
+      "ipAddress": "127.0.0.1",
+      "userId": "usr_admin"
+    },
+    {
+      "userRole": "admin",
+      "action": "ADMIN_LOGIN",
+      "details": "Administrator authenticated successfully.",
+      "ipAddress": "127.0.0.1",
+      "userName": "Shri  PL Kunte (Principal / Admin)",
+      "timestamp": "12/11/2026, 9:23:11 pm",
+      "id": "log_1794498791148_oyk2",
+      "userId": "usr_admin"
+    },
+    {
+      "id": "log_1794500597309_8ha5",
+      "details": "Training Officer logged in for trade(s): trade_copa.",
+      "userRole": "officer",
+      "userId": "off_0",
+      "ipAddress": "127.0.0.1",
+      "userName": "Abhishek Swarnkar",
+      "action": "OFFICER_LOGIN",
+      "timestamp": "12/11/2026, 9:53:17 pm"
+    },
+    {
+      "action": "ADMIN_LOGIN",
+      "ipAddress": "127.0.0.1",
+      "userName": "Shri  PL Kunte (Principal / Admin)",
+      "timestamp": "12/11/2026, 9:54:02 pm",
+      "userId": "usr_admin",
+      "id": "log_1794500642950_cugr",
+      "userRole": "admin",
+      "details": "Administrator authenticated successfully."
+    },
+    {
+      "userName": "Principal / Admin",
+      "action": "UPDATE_SETTINGS",
+      "details": "Updated campus geofence, attendance window, or leave rules.",
+      "id": "log_1794500698453_3wpd",
+      "userId": "usr_admin",
+      "userRole": "admin",
+      "timestamp": "12/11/2026, 9:54:58 pm"
+    },
+    {
+      "timestamp": "13/11/2026, 7:38:45 am",
+      "userName": "Institutional Backup Engine",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 167 Attendance entries, 5 Trades.",
+      "id": "log_1794535725366_pfga",
+      "userId": "system_backup",
+      "userRole": "admin"
+    },
+    {
+      "userRole": "admin",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "userId": "system_backup",
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 172 Attendance entries, 5 Trades.",
+      "id": "log_1794535760294_k15l",
+      "userName": "Institutional Backup Engine",
+      "timestamp": "13/11/2026, 7:39:20 am"
+    },
+    {
+      "timestamp": "13/11/2026, 7:40:03 am",
+      "userRole": "admin",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "id": "log_1794535803786_jcmu",
+      "userId": "system_backup",
+      "userName": "Institutional Backup Engine",
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 172 Attendance entries, 5 Trades."
+    },
+    {
+      "action": "DATABASE_BACKUP_RESTORED",
+      "id": "log_1794539578847_9c2i",
+      "timestamp": "13/11/2026, 8:42:58 am",
+      "userRole": "admin",
+      "userId": "system_backup",
+      "userName": "Institutional Backup Engine",
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 234 Attendance entries, 5 Trades."
+    },
+    {
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 234 Attendance entries, 5 Trades.",
+      "userRole": "admin",
+      "userName": "Institutional Backup Engine",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "timestamp": "13/11/2026, 8:43:04 am",
+      "userId": "system_backup",
+      "id": "log_1794539584969_yl0w"
+    },
+    {
+      "details": "Training Officer logged in for trade(s): trade_copa.",
+      "userName": "Abhishek Swarnkar",
+      "ipAddress": "169.254.169.126",
+      "userId": "off_0",
+      "id": "log_1794539592167_nyae",
+      "userRole": "officer",
+      "action": "OFFICER_LOGIN",
+      "timestamp": "13/11/2026, 8:43:12 am"
+    },
+    {
+      "userId": "system_backup",
+      "timestamp": "13/11/2026, 8:43:13 am",
+      "userRole": "admin",
+      "action": "DATABASE_BACKUP_RESTORED",
+      "id": "log_1794539593486_x6ju",
+      "userName": "Institutional Backup Engine",
+      "details": "Database restored: 551 Trainees, 2 Assessment records, 234 Attendance entries, 5 Trades."
     }
   ],
   "lessonPlans": [],

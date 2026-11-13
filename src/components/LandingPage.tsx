@@ -219,7 +219,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       case 'officer':
         return 'name@iti.cg.gov.in or CG-ITI-TO-1001';
       case 'trainee':
-        return 'ITI/RAI/2025/ELE-014 or student email';
+        return 'Enter Roll Number or Student Email';
     }
   };
 
@@ -608,7 +608,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                           ? 'admin.iti.raigarh@cg.gov.in'
                           : recoveryRole === 'officer'
                           ? 'officer email or CG-ITI-TO-1001'
-                          : 'ITI/RAI/2025/ELE-014 or student email'
+                          : 'Enter Roll Number or Student Email'
                       }
                       className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 text-xs bg-slate-50/50"
                       required

@@ -3,6 +3,7 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
 import { db } from './src/server/db.ts';
+import { isFirestoreWriteQuotaExceeded } from './src/server/firestoreAdapter.ts';
 import type { AttendanceRecord, LeaveRequest, WarningNotice, InventoryItem, IndentRecord, Trainee, TrainingOfficer, Trade, AcademicSession, MonthlyWorkingDay, AppNotification, LessonPlan, DemonstrationPlan, WeeklyPlan, TraineeAssessment } from './src/types.ts';
 
 function calculateDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -37,8 +38,11 @@ async function startServer() {
     next(err);
   });
 
-  // Initialize and synchronize with persistent Google Cloud Firestore
-  await db.initFirestore();
+  // Initialize and synchronize with persistent Google Cloud Firestore (non-blocking fallback after 4s)
+  await Promise.race([
+    db.initFirestore(),
+    new Promise<void>((resolve) => setTimeout(resolve, 4000)),
+  ]);
 
   // -------------------------------------------------------------
   // API Endpoints
@@ -136,6 +140,11 @@ async function startServer() {
   app.post('/api/system/sync-cloud', async (_req: Request, res: Response) => {
     try {
       await db.forceFirestoreSync();
+      if (isFirestoreWriteQuotaExceeded()) {
+        return res.status(429).json({
+          error: 'Quota exceeded. Free daily write units per project for Firestore have been reached. Changes remain saved locally and will sync once quota resets.',
+        });
+      }
       res.json({ success: true, message: 'All institutional data, marks, and settings successfully synchronized to Firestore.' });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to sync to Firestore' });
