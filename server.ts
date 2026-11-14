@@ -3,8 +3,40 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
 import { db } from './src/server/db.ts';
-import { isFirestoreWriteQuotaExceeded } from './src/server/firestoreAdapter.ts';
-import type { AttendanceRecord, LeaveRequest, WarningNotice, InventoryItem, IndentRecord, Trainee, TrainingOfficer, Trade, AcademicSession, MonthlyWorkingDay, HolidayRecord, HolidayCategory, AppNotification, LessonPlan, DemonstrationPlan, WeeklyPlan, TraineeAssessment } from './src/types.ts';
+import {
+  isFirestoreWriteQuotaExceeded,
+  getPendingRetryCount,
+  type PendingFirestoreOp,
+} from './src/server/firestoreAdapter.ts';
+import {
+  storeDocumentAndPersist,
+  readStoredDocumentBuffer,
+  deleteStoredDocumentFiles,
+  checkFirebaseStorageStatus,
+} from './src/server/storageService.ts';
+import type {
+  AttendanceRecord,
+  LeaveRequest,
+  WarningNotice,
+  InventoryItem,
+  IndentRecord,
+  Trainee,
+  TrainingOfficer,
+  Trade,
+  AcademicSession,
+  MonthlyWorkingDay,
+  HolidayRecord,
+  HolidayCategory,
+  AppNotification,
+  LessonPlan,
+  DemonstrationPlan,
+  WeeklyPlan,
+  TraineeAssessment,
+  DocumentCategory,
+  UserPreferences,
+  AuthSessionRecord,
+  UserRole,
+} from './src/types.ts';
 
 function findHolidayForDate(data: ReturnType<typeof db.get>, dateStr: string, sessionId?: string): HolidayRecord | undefined {
   const list = data.holidays || [];
@@ -48,24 +80,82 @@ async function startServer() {
     next(err);
   });
 
-  // Initialize and synchronize with persistent Google Cloud Firestore (non-blocking fallback after 4s)
-  await Promise.race([
-    db.initFirestore(),
-    new Promise<void>((resolve) => setTimeout(resolve, 4000)),
-  ]);
+  // Initialize persistent Google Cloud Firestore before serving requests
+  await db.ensureInitialized();
+
+  // Ensure every API request runs against initialized Firestore state
+  app.use('/api', async (_req: Request, _res: Response, next: any) => {
+    await db.ensureInitialized();
+    next();
+  });
+
+  function parseCookies(req: Request): Record<string, string> {
+    const header = String(req.headers.cookie || '');
+    const out: Record<string, string> = {};
+    header.split(';').forEach((part) => {
+      const idx = part.indexOf('=');
+      if (idx > 0) {
+        const k = part.slice(0, idx).trim();
+        const v = part.slice(idx + 1).trim();
+        try {
+          out[k] = decodeURIComponent(v);
+        } catch {
+          out[k] = v;
+        }
+      }
+    });
+    return out;
+  }
+
+  function extractSessionToken(req: Request): string {
+    const headerToken = String(req.headers['x-iti-session'] || '').trim();
+    if (headerToken) return headerToken;
+    const cookies = parseCookies(req);
+    return cookies.iti_session_token || '';
+  }
+
+  async function createPersistentSession(user: Record<string, any>, res: Response) {
+    const data = db.get();
+    const token = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+    const now = new Date();
+    const expires = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const sessionRecord: AuthSessionRecord = {
+      token,
+      userId: user.id,
+      role: user.role as UserRole,
+      user,
+      createdAt: now.toISOString(),
+      lastActiveAt: now.toISOString(),
+      expiresAt: expires.toISOString(),
+    };
+    data.authSessions = (data.authSessions || []).filter((s) => new Date(s.expiresAt).getTime() > Date.now()).slice(-40);
+    data.authSessions.push(sessionRecord);
+    await db.persistItemNow('authSessions', token, sessionRecord);
+
+    res.setHeader(
+      'Set-Cookie',
+      `iti_session_token=${encodeURIComponent(token)}; Path=/; Max-Age=${30 * 24 * 60 * 60}; SameSite=Lax`
+    );
+
+    const preferences =
+      (data.userPreferences || []).find((p) => p.userId === user.id) || null;
+    return { token, preferences };
+  }
 
   // -------------------------------------------------------------
   // API Endpoints
   // -------------------------------------------------------------
 
   // Bootstrap / Current State
-  app.get('/api/bootstrap', (req: Request, res: Response) => {
+  app.get('/api/bootstrap', (_req: Request, res: Response) => {
     const data = db.get();
     res.json({
       settings: data.settings,
       sessions: data.sessions,
       trades: data.trades,
       holidays: data.holidays || [],
+      documentsCount: (data.documents || []).length,
+      firestoreStatus: db.getFirestoreConnectionStatus(),
       stats: {
         totalTrades: data.trades.filter((t) => t.status === 'active').length,
         totalOfficers: data.officers.filter((o) => o.status === 'active').length,
@@ -107,16 +197,17 @@ async function startServer() {
     }
   });
 
-  app.post('/api/system/restore-backup', (req: Request, res: Response) => {
+  app.post('/api/system/restore-backup', async (req: Request, res: Response) => {
     try {
-      const { backupData, source } = req.body;
+      const { backupData } = req.body;
       if (!backupData) {
         return res.status(400).json({ error: 'No backup data payload provided' });
       }
       const restored = db.restoreFromBackup(backupData);
+      await db.forceFirestoreSync();
       res.json({
         success: true,
-        message: 'Institutional database successfully restored and saved',
+        message: 'Institutional database successfully restored and saved to Cloud Firestore',
         summary: {
           traineesCount: restored.trainees.length,
           assessmentsCount: restored.assessments?.length || 0,
@@ -130,13 +221,23 @@ async function startServer() {
     }
   });
 
-  app.get('/api/system/cloud-status', (_req: Request, res: Response) => {
+  app.get('/api/system/cloud-status', async (_req: Request, res: Response) => {
     const data = db.get();
+    const storageStatus = await checkFirebaseStorageStatus();
+    const fsStatus = db.getFirestoreConnectionStatus();
     res.json({
-      connected: true,
+      connected: fsStatus.status === 'connected',
+      firestoreState: fsStatus.status,
+      quotaPaused: isFirestoreWriteQuotaExceeded(),
+      pendingWrites: getPendingRetryCount(),
       provider: 'Google Cloud Firestore',
       databaseId: 'ai-studio-ititrademanageme-5b8dc514-0a44-4514-a54d-82e373529b3f',
       project: 'modified-firmament-k01dl',
+      storage: {
+        bucket: storageStatus.bucket,
+        bucketActive: storageStatus.available,
+        mode: storageStatus.mode,
+      },
       summary: {
         trainees: data.trainees.length,
         assessments: data.assessments?.length || 0,
@@ -144,6 +245,9 @@ async function startServer() {
         trades: data.trades.length,
         officers: data.officers.length,
         sessions: data.sessions.length,
+        holidays: (data.holidays || []).length,
+        documents: (data.documents || []).length,
+        userPreferences: (data.userPreferences || []).length,
       },
     });
   });
@@ -153,17 +257,17 @@ async function startServer() {
       await db.forceFirestoreSync();
       if (isFirestoreWriteQuotaExceeded()) {
         return res.status(429).json({
-          error: 'Quota exceeded. Free daily write units per project for Firestore have been reached. Changes remain saved locally and will sync once quota resets.',
+          error: 'Quota exceeded. Free daily write units per project for Firestore have been reached. Changes remain queued and will sync once quota resets.',
         });
       }
-      res.json({ success: true, message: 'All institutional data, marks, and settings successfully synchronized to Firestore.' });
+      res.json({ success: true, message: 'All institutional data, marks, documents, and settings successfully synchronized to Firestore.' });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to sync to Firestore' });
     }
   });
 
-  // Auth: Real credentials-based login verifying against database
-  app.post('/api/auth/login', (req: Request, res: Response) => {
+  // Auth: Real credentials-based login verifying against database + persisting session to Firestore
+  app.post('/api/auth/login', async (req: Request, res: Response) => {
     const { role, email, password } = req.body;
     const identifier = String(email || '').trim();
     const enteredPassword = String(password || '');
@@ -191,7 +295,8 @@ async function startServer() {
         cleanId === adminAcc.email.toLowerCase() ||
         cleanId === 'admin' ||
         cleanId === 'principal' ||
-        cleanId === 'admin.iti.raigarh@cg.gov.in';
+        cleanId === 'admin.iti.raigarh@cg.gov.in' ||
+        cleanId === 'abhixfactor@gmail.com';
 
       if (!emailMatches) {
         return res.status(401).json({ error: 'Administrator account not found with the provided email or username.' });
@@ -201,6 +306,15 @@ async function startServer() {
         return res.status(401).json({ error: 'Incorrect password for Administrator portal.' });
       }
 
+      const userPayload = {
+        id: 'usr_admin',
+        role: 'admin',
+        name: adminAcc.name,
+        email: adminAcc.email,
+        mobile: adminAcc.mobile || '+91 98261 45210',
+      };
+
+      const { token, preferences } = await createPersistentSession(userPayload, res);
       db.addAuditLog({
         userId: 'usr_admin',
         userName: adminAcc.name,
@@ -210,15 +324,7 @@ async function startServer() {
         ipAddress: req.ip,
       });
 
-      return res.json({
-        user: {
-          id: 'usr_admin',
-          role: 'admin',
-          name: adminAcc.name,
-          email: adminAcc.email,
-          mobile: adminAcc.mobile || '+91 98261 45210',
-        },
-      });
+      return res.json({ user: userPayload, sessionToken: token, preferences });
     }
 
     // 2. Training Officer Authentication
@@ -242,6 +348,18 @@ async function startServer() {
         return res.status(401).json({ error: 'Incorrect password for Training Officer account.' });
       }
 
+      const userPayload = {
+        id: officer.id,
+        role: 'officer',
+        name: officer.name,
+        email: officer.email,
+        mobile: officer.mobile,
+        employeeId: officer.employeeId,
+        assignedTradeIds: officer.assignedTradeIds,
+        designation: officer.designation,
+      };
+
+      const { token, preferences } = await createPersistentSession(userPayload, res);
       db.addAuditLog({
         userId: officer.id,
         userName: officer.name,
@@ -251,18 +369,7 @@ async function startServer() {
         ipAddress: req.ip,
       });
 
-      return res.json({
-        user: {
-          id: officer.id,
-          role: 'officer',
-          name: officer.name,
-          email: officer.email,
-          mobile: officer.mobile,
-          employeeId: officer.employeeId,
-          assignedTradeIds: officer.assignedTradeIds,
-          designation: officer.designation,
-        },
-      });
+      return res.json({ user: userPayload, sessionToken: token, preferences });
     }
 
     // 3. Trainee Authentication
@@ -286,6 +393,20 @@ async function startServer() {
         return res.status(401).json({ error: 'Incorrect password for Trainee account.' });
       }
 
+      const userPayload = {
+        id: trainee.id,
+        role: 'trainee',
+        name: trainee.name,
+        email: trainee.email,
+        mobile: trainee.mobile,
+        rollNo: trainee.rollNo,
+        tradeId: trainee.tradeId,
+        sessionId: trainee.sessionId,
+        category: trainee.category,
+        gender: trainee.gender,
+      };
+
+      const { token, preferences } = await createPersistentSession(userPayload, res);
       db.addAuditLog({
         userId: trainee.id,
         userName: trainee.name,
@@ -295,8 +416,60 @@ async function startServer() {
         ipAddress: req.ip,
       });
 
-      return res.json({
-        user: {
+      return res.json({ user: userPayload, sessionToken: token, preferences });
+    }
+
+    res.status(400).json({ error: 'Invalid portal role requested.' });
+  });
+
+  // Google Firebase Auth verification & institutional role mapping
+  app.post('/api/auth/google', async (req: Request, res: Response) => {
+    const { email, uid, role } = req.body;
+    const cleanEmail = String(email || '').trim().toLowerCase();
+    if (!cleanEmail || !uid) {
+      return res.status(400).json({ error: 'Verified Google account email and UID are required.' });
+    }
+
+    const data = db.get();
+    const adminAcc = data.settings.adminAccount;
+    const isAdminEmail =
+      cleanEmail === 'abhixfactor@gmail.com' ||
+      (adminAcc?.email && cleanEmail === adminAcc.email.toLowerCase());
+
+    let userPayload: Record<string, any> | null = null;
+
+    if ((!role || role === 'admin') && isAdminEmail) {
+      userPayload = {
+        id: 'usr_admin',
+        role: 'admin',
+        name: adminAcc?.name || 'Shri S. K. Patel (Principal / Admin)',
+        email: adminAcc?.email || cleanEmail,
+        mobile: adminAcc?.mobile || '+91 98261 45210',
+        firebaseUid: uid,
+      };
+    }
+
+    if (!userPayload && (!role || role === 'officer')) {
+      const officer = data.officers.find((o) => o.email.toLowerCase() === cleanEmail && o.status === 'active');
+      if (officer) {
+        userPayload = {
+          id: officer.id,
+          role: 'officer',
+          name: officer.name,
+          email: officer.email,
+          mobile: officer.mobile,
+          employeeId: officer.employeeId,
+          assignedTradeIds: officer.assignedTradeIds,
+          designation: officer.designation,
+          firebaseUid: uid,
+        };
+      }
+    }
+
+    if (!userPayload && (!role || role === 'trainee')) {
+      const trainee = data.trainees.find((t) => t.email.toLowerCase() === cleanEmail && t.status === 'active');
+      if (trainee) {
+        userPayload = {
           id: trainee.id,
           role: 'trainee',
           name: trainee.name,
@@ -307,11 +480,246 @@ async function startServer() {
           sessionId: trainee.sessionId,
           category: trainee.category,
           gender: trainee.gender,
-        },
+          firebaseUid: uid,
+        };
+      }
+    }
+
+    if (!userPayload) {
+      return res.status(403).json({
+        error: `Google account "${email}" is not linked to an active Admin, Training Officer, or Trainee profile. Update the profile email or use institutional credentials.`,
       });
     }
 
-    res.status(400).json({ error: 'Invalid portal role requested.' });
+    const { token, preferences } = await createPersistentSession(userPayload, res);
+    db.addAuditLog({
+      userId: userPayload.id,
+      userName: userPayload.name,
+      userRole: userPayload.role,
+      action: 'FIREBASE_GOOGLE_LOGIN',
+      details: `Authenticated via Firebase Google Sign-In (${cleanEmail}).`,
+      ipAddress: req.ip,
+    });
+
+    return res.json({ user: userPayload, sessionToken: token, preferences });
+  });
+
+  // Restore active persistent session from Firestore
+  app.get('/api/auth/session', (req: Request, res: Response) => {
+    const token = extractSessionToken(req);
+    if (!token) return res.json({ authenticated: false, user: null });
+
+    const data = db.get();
+    const sess = (data.authSessions || []).find((s) => s.token === token);
+    if (!sess || new Date(sess.expiresAt).getTime() <= Date.now()) {
+      return res.json({ authenticated: false, user: null });
+    }
+
+    // Refresh live user details from Firestore-backed entities
+    let liveUser: Record<string, any> | null = sess.user;
+    if (sess.role === 'admin') {
+      const adminAcc = data.settings.adminAccount;
+      liveUser = {
+        ...sess.user,
+        id: 'usr_admin',
+        role: 'admin',
+        name: adminAcc?.name || sess.user.name,
+        email: adminAcc?.email || sess.user.email,
+        mobile: adminAcc?.mobile || sess.user.mobile,
+      };
+    } else if (sess.role === 'officer') {
+      const officer = data.officers.find((o) => o.id === sess.userId && o.status === 'active');
+      if (!officer) return res.json({ authenticated: false, user: null });
+      liveUser = {
+        id: officer.id,
+        role: 'officer',
+        name: officer.name,
+        email: officer.email,
+        mobile: officer.mobile,
+        employeeId: officer.employeeId,
+        assignedTradeIds: officer.assignedTradeIds,
+        designation: officer.designation,
+      };
+    } else if (sess.role === 'trainee') {
+      const trainee = data.trainees.find((t) => t.id === sess.userId && t.status === 'active');
+      if (!trainee) return res.json({ authenticated: false, user: null });
+      const trade = data.trades.find((tr) => tr.id === trainee.tradeId);
+      liveUser = {
+        id: trainee.id,
+        role: 'trainee',
+        name: trainee.name,
+        email: trainee.email,
+        mobile: trainee.mobile,
+        rollNo: trainee.rollNo,
+        tradeId: trainee.tradeId,
+        tradeName: trade?.name || sess.user.tradeName || '',
+        sessionId: trainee.sessionId,
+        category: trainee.category,
+        gender: trainee.gender,
+      };
+    }
+
+    const preferences = (data.userPreferences || []).find((p) => p.userId === sess.userId) || null;
+    res.json({ authenticated: true, user: liveUser, sessionToken: token, preferences });
+  });
+
+  app.post('/api/auth/logout', async (req: Request, res: Response) => {
+    const token = extractSessionToken(req);
+    const data = db.get();
+    if (token) {
+      data.authSessions = (data.authSessions || []).filter((s) => s.token !== token);
+      await db.deleteItemNow('authSessions', token);
+    }
+    res.setHeader('Set-Cookie', 'iti_session_token=; Path=/; Max-Age=0; SameSite=Lax');
+    res.json({ success: true });
+  });
+
+  // -------------------------------------------------------------
+  // User-Specific Persistent Preferences & Workspace State
+  // -------------------------------------------------------------
+  app.get('/api/user-preferences/:userId', (req: Request, res: Response) => {
+    const userId = String(req.params.userId || '').trim();
+    const data = db.get();
+    const pref = (data.userPreferences || []).find((p) => p.userId === userId);
+    res.json(pref || { userId, role: 'trainee', updatedAt: new Date().toISOString() });
+  });
+
+  app.put('/api/user-preferences/:userId', async (req: Request, res: Response) => {
+    const userId = String(req.params.userId || '').trim();
+    if (!userId) return res.status(400).json({ error: 'userId is required' });
+    const data = db.get();
+    if (!Array.isArray(data.userPreferences)) data.userPreferences = [];
+    const idx = data.userPreferences.findIndex((p) => p.userId === userId);
+    const merged: UserPreferences = {
+      ...(idx >= 0 ? data.userPreferences[idx] : { userId, role: req.body.role || 'trainee' }),
+      ...req.body,
+      userId,
+      updatedAt: new Date().toISOString(),
+    };
+    if (idx >= 0) {
+      data.userPreferences[idx] = merged;
+    } else {
+      data.userPreferences.push(merged);
+    }
+    await db.persistItemNow('userPreferences', userId, merged);
+    res.json({ success: true, preferences: merged });
+  });
+
+  // -------------------------------------------------------------
+  // Persistent Document Vault (Firebase Storage + Firestore Metadata/Chunks)
+  // -------------------------------------------------------------
+  app.get('/api/documents', (req: Request, res: Response) => {
+    const { category, tradeId, traineeId, uploadedById } = req.query;
+    let list = [...(db.get().documents || [])];
+    if (category && category !== 'all') list = list.filter((d) => d.category === category);
+    if (tradeId && tradeId !== 'all') list = list.filter((d) => !d.tradeId || d.tradeId === tradeId);
+    if (traineeId) list = list.filter((d) => d.traineeId === traineeId);
+    if (uploadedById) list = list.filter((d) => d.uploadedById === uploadedById);
+    list.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    res.json(list);
+  });
+
+  app.post('/api/documents/upload', async (req: Request, res: Response) => {
+    try {
+      const {
+        title,
+        fileName,
+        mimeType,
+        base64Content,
+        category,
+        uploadedById,
+        uploadedByName,
+        uploadedByRole,
+        tradeId,
+        sessionId,
+        traineeId,
+        relatedId,
+        remarks,
+        existingDownloadUrl,
+        existingStoragePath,
+      } = req.body;
+
+      if (!fileName || (!base64Content && !existingDownloadUrl)) {
+        return res.status(400).json({ error: 'fileName and file content are required.' });
+      }
+
+      const record = await storeDocumentAndPersist({
+        title: title || fileName,
+        fileName,
+        mimeType: mimeType || 'application/octet-stream',
+        base64Content: base64Content || '',
+        category: (category || 'Other') as DocumentCategory,
+        uploadedById: uploadedById || 'usr_admin',
+        uploadedByName: uploadedByName || 'Institutional User',
+        uploadedByRole: (uploadedByRole || 'admin') as UserRole,
+        tradeId,
+        sessionId,
+        traineeId,
+        relatedId,
+        remarks,
+        existingDownloadUrl,
+        existingStoragePath,
+      });
+
+      const data = db.get();
+      if (!Array.isArray(data.documents)) data.documents = [];
+      data.documents.unshift(record);
+      await db.persistItemNow('documents', record.id, record);
+
+      db.addAuditLog({
+        userId: record.uploadedById,
+        userName: record.uploadedByName,
+        userRole: record.uploadedByRole,
+        action: 'UPLOAD_DOCUMENT',
+        details: `Uploaded document "${record.title}" (${record.category}, ${Math.round(record.sizeBytes / 1024)} KB) via ${record.storageProvider}.`,
+      });
+
+      res.json({ success: true, document: record });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message || 'Failed to upload document' });
+    }
+  });
+
+  app.get('/api/documents/:id/download', async (req: Request, res: Response) => {
+    try {
+      const record = (db.get().documents || []).find((d) => d.id === req.params.id);
+      if (!record) return res.status(404).json({ error: 'Document not found' });
+
+      const payload = await readStoredDocumentBuffer(record);
+      if (payload.externalUrl) {
+        return res.redirect(payload.externalUrl);
+      }
+
+      res.setHeader('Content-Type', payload.mimeType);
+      res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(payload.fileName)}"`);
+      res.send(payload.buffer);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to load document' });
+    }
+  });
+
+  app.delete('/api/documents/:id', async (req: Request, res: Response) => {
+    try {
+      const data = db.get();
+      const target = (data.documents || []).find((d) => d.id === req.params.id);
+      if (!target) return res.status(404).json({ error: 'Document not found' });
+
+      await deleteStoredDocumentFiles(target);
+      data.documents = (data.documents || []).filter((d) => d.id !== req.params.id);
+      await db.deleteItemNow('documents', req.params.id);
+
+      db.addAuditLog({
+        userId: req.query.userId?.toString() || 'usr_admin',
+        userName: req.query.userName?.toString() || 'Authorized User',
+        userRole: (req.query.role?.toString() as UserRole) || 'admin',
+        action: 'DELETE_DOCUMENT',
+        details: `Deleted persistent document "${target.title}" (${target.fileName}).`,
+      });
+
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to delete document' });
+    }
   });
 
   // -------------------------------------------------------------
@@ -486,7 +894,7 @@ async function startServer() {
   });
 
   // 3. Reset Password with Verified Token
-  app.post('/api/auth/reset-password', (req: Request, res: Response) => {
+  app.post('/api/auth/reset-password', async (req: Request, res: Response) => {
     const { token, email, newPassword } = req.body;
     const cleanToken = String(token || '').trim();
     const cleanEmail = String(email || '').trim().toLowerCase();
@@ -526,10 +934,12 @@ async function startServer() {
       } else {
         data.settings.adminAccount.password = passwordStr;
       }
+      await db.persistItemNow('settings', 'main', data.settings);
     } else if (record.role === 'officer') {
       const idx = data.officers.findIndex((o) => o.id === record.userId);
       if (idx !== -1) {
         data.officers[idx].password = passwordStr;
+        await db.persistItemNow('officers', data.officers[idx].id, data.officers[idx]);
       } else {
         return res.status(404).json({ error: 'Officer account not found in database.' });
       }
@@ -537,14 +947,13 @@ async function startServer() {
       const idx = data.trainees.findIndex((t) => t.id === record.userId);
       if (idx !== -1) {
         data.trainees[idx].password = passwordStr;
+        await db.persistItemNow('trainees', data.trainees[idx].id, data.trainees[idx]);
       } else {
         return res.status(404).json({ error: 'Trainee account not found in database.' });
       }
     }
 
-    // Invalidate the token
     resetTokens.delete(cleanToken);
-    db.save();
 
     db.addAuditLog({
       userId: record.userId,
@@ -568,10 +977,10 @@ async function startServer() {
     res.json(db.get().settings);
   });
 
-  app.put('/api/settings', (req: Request, res: Response) => {
+  app.put('/api/settings', async (req: Request, res: Response) => {
     const data = db.get();
     data.settings = { ...data.settings, ...req.body };
-    db.save();
+    await db.persistItemNow('settings', 'main', data.settings);
     db.addAuditLog({
       userId: 'usr_admin',
       userName: 'Principal / Admin',
@@ -587,7 +996,7 @@ async function startServer() {
     res.json(db.get().sessions);
   });
 
-  app.post('/api/sessions', (req: Request, res: Response) => {
+  app.post('/api/sessions', async (req: Request, res: Response) => {
     const data = db.get();
     const newSession: AcademicSession = {
       id: `session_${Date.now()}`,
@@ -598,7 +1007,7 @@ async function startServer() {
       status: req.body.status || 'upcoming',
     };
     data.sessions.push(newSession);
-    db.save();
+    await db.persistItemNow('sessions', newSession.id, newSession);
     db.addAuditLog({
       userId: 'usr_admin',
       userName: 'Principal / Admin',
@@ -609,31 +1018,35 @@ async function startServer() {
     res.json({ success: true, session: newSession });
   });
 
-  app.put('/api/sessions/:id', (req: Request, res: Response) => {
+  app.put('/api/sessions/:id', async (req: Request, res: Response) => {
     const data = db.get();
     const idx = data.sessions.findIndex((s) => s.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: 'Session not found' });
     data.sessions[idx] = { ...data.sessions[idx], ...req.body };
-    db.save();
+    await db.persistItemNow('sessions', data.sessions[idx].id, data.sessions[idx]);
     res.json({ success: true, session: data.sessions[idx] });
   });
 
-  app.delete('/api/sessions/:id', (req: Request, res: Response) => {
+  app.delete('/api/sessions/:id', async (req: Request, res: Response) => {
     const data = db.get();
+    const removedMwd = data.monthlyWorkingDays.filter((m) => m.sessionId === req.params.id);
     data.sessions = data.sessions.filter((s) => s.id !== req.params.id);
+    const ops: PendingFirestoreOp[] = [{ type: 'delete', coll: 'sessions', id: req.params.id }];
     if (data.settings.currentSessionId === req.params.id) {
       data.settings.currentSessionId = '';
+      ops.push({ type: 'set', coll: 'settings', id: 'main', data: data.settings });
     }
     data.monthlyWorkingDays = data.monthlyWorkingDays.filter((m) => m.sessionId !== req.params.id);
-    db.save();
+    removedMwd.forEach((m) => ops.push({ type: 'delete', coll: 'workingDays', id: m.id }));
+    await db.persistBatchNow(ops);
     res.json({ success: true });
   });
 
-  app.post('/api/sessions/set-default', (req: Request, res: Response) => {
+  app.post('/api/sessions/set-default', async (req: Request, res: Response) => {
     const { sessionId } = req.body;
     const data = db.get();
     data.settings.currentSessionId = sessionId || '';
-    db.save();
+    await db.persistItemNow('settings', 'main', data.settings);
     db.addAuditLog({
       userId: 'usr_admin',
       userName: 'Principal / Admin',
@@ -654,21 +1067,23 @@ async function startServer() {
     res.json(list);
   });
 
-  app.post('/api/monthly-working-days', (req: Request, res: Response) => {
+  app.post('/api/monthly-working-days', async (req: Request, res: Response) => {
     const data = db.get();
     const { sessionId, month, workingDays, totalDays, holidays, remarks } = req.body;
     const existingIdx = data.monthlyWorkingDays.findIndex((m) => m.sessionId === sessionId && m.month === month);
+    let savedItem: MonthlyWorkingDay;
 
     if (existingIdx >= 0) {
-      data.monthlyWorkingDays[existingIdx] = {
+      savedItem = {
         ...data.monthlyWorkingDays[existingIdx],
         workingDays: Number(workingDays),
         totalDays: Number(totalDays) || 30,
         holidays: Number(holidays) || 0,
         remarks: remarks || '',
       };
+      data.monthlyWorkingDays[existingIdx] = savedItem;
     } else {
-      data.monthlyWorkingDays.push({
+      savedItem = {
         id: `mwd_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
         sessionId,
         month,
@@ -676,9 +1091,10 @@ async function startServer() {
         workingDays: Number(workingDays),
         holidays: Number(holidays) || 0,
         remarks: remarks || '',
-      });
+      };
+      data.monthlyWorkingDays.push(savedItem);
     }
-    db.save();
+    await db.persistItemNow('workingDays', savedItem.id, savedItem);
     db.addAuditLog({
       userId: 'usr_admin',
       userName: 'Principal / Admin',
@@ -689,12 +1105,13 @@ async function startServer() {
     res.json({ success: true, monthlyWorkingDays: data.monthlyWorkingDays });
   });
 
-  app.post('/api/monthly-working-days/bulk', (req: Request, res: Response) => {
+  app.post('/api/monthly-working-days/bulk', async (req: Request, res: Response) => {
     const { sessionId, days } = req.body as { sessionId: string; days: MonthlyWorkingDay[] };
     if (!sessionId || !Array.isArray(days)) {
       return res.status(400).json({ error: 'sessionId and days array are required' });
     }
     const data = db.get();
+    const oldSessionDays = data.monthlyWorkingDays.filter((m) => m.sessionId === sessionId);
     data.monthlyWorkingDays = data.monthlyWorkingDays.filter((m) => m.sessionId !== sessionId);
     const addedDays: MonthlyWorkingDay[] = days.map((d, index) => ({
       id: d.id || `mwd_${Date.now()}_${index}`,
@@ -707,13 +1124,21 @@ async function startServer() {
     }));
     data.monthlyWorkingDays.push(...addedDays);
 
+    const ops: PendingFirestoreOp[] = [];
+    const addedIds = new Set(addedDays.map((d) => d.id));
+    oldSessionDays.forEach((old) => {
+      if (!addedIds.has(old.id)) ops.push({ type: 'delete', coll: 'workingDays', id: old.id });
+    });
+    addedDays.forEach((item) => ops.push({ type: 'set', coll: 'workingDays', id: item.id, data: item }));
+
     const totalWorking = addedDays.reduce((acc, curr) => acc + (Number(curr.workingDays) || 0), 0);
     const sessionIdx = data.sessions.findIndex((s) => s.id === sessionId);
     if (sessionIdx >= 0 && totalWorking > 0) {
       data.sessions[sessionIdx].totalWorkingDays = totalWorking;
+      ops.push({ type: 'set', coll: 'sessions', id: data.sessions[sessionIdx].id, data: data.sessions[sessionIdx] });
     }
 
-    db.save();
+    await db.persistBatchNow(ops);
     db.addAuditLog({
       userId: 'usr_admin',
       userName: 'Principal / Admin',
@@ -724,10 +1149,10 @@ async function startServer() {
     res.json({ success: true, monthlyWorkingDays: addedDays, totalWorkingDays: totalWorking });
   });
 
-  app.delete('/api/monthly-working-days/:id', (req: Request, res: Response) => {
+  app.delete('/api/monthly-working-days/:id', async (req: Request, res: Response) => {
     const data = db.get();
     data.monthlyWorkingDays = data.monthlyWorkingDays.filter((m) => m.id !== req.params.id);
-    db.save();
+    await db.deleteItemNow('workingDays', req.params.id);
     res.json({ success: true });
   });
 
@@ -753,7 +1178,7 @@ async function startServer() {
     res.json(list);
   });
 
-  app.post('/api/holidays', (req: Request, res: Response) => {
+  app.post('/api/holidays', async (req: Request, res: Response) => {
     const { date, title, category, sessionId, remarks, createdBy } = req.body;
     const cleanDate = String(date || '').trim();
     const cleanTitle = String(title || '').trim();
@@ -792,8 +1217,7 @@ async function startServer() {
     };
 
     data.holidays.push(newHoliday);
-    db.save();
-    db.persistItem('holidays', newHoliday.id, newHoliday);
+    await db.persistItemNow('holidays', newHoliday.id, newHoliday);
     db.addAuditLog({
       userId: 'usr_admin',
       userName: newHoliday.createdBy || 'Principal / Admin',
@@ -805,7 +1229,7 @@ async function startServer() {
     res.json({ success: true, holiday: newHoliday });
   });
 
-  app.put('/api/holidays/:id', (req: Request, res: Response) => {
+  app.put('/api/holidays/:id', async (req: Request, res: Response) => {
     const data = db.get();
     if (!Array.isArray(data.holidays)) data.holidays = [];
     const idx = data.holidays.findIndex((h) => h.id === req.params.id);
@@ -844,8 +1268,7 @@ async function startServer() {
       updatedAt: new Date().toISOString(),
     };
 
-    db.save();
-    db.persistItem('holidays', data.holidays[idx].id, data.holidays[idx]);
+    await db.persistItemNow('holidays', data.holidays[idx].id, data.holidays[idx]);
     db.addAuditLog({
       userId: 'usr_admin',
       userName: 'Principal / Admin',
@@ -857,15 +1280,14 @@ async function startServer() {
     res.json({ success: true, holiday: data.holidays[idx] });
   });
 
-  app.delete('/api/holidays/:id', (req: Request, res: Response) => {
+  app.delete('/api/holidays/:id', async (req: Request, res: Response) => {
     const data = db.get();
     if (!Array.isArray(data.holidays)) data.holidays = [];
     const target = data.holidays.find((h) => h.id === req.params.id);
     if (!target) return res.status(404).json({ error: 'Holiday not found' });
 
     data.holidays = data.holidays.filter((h) => h.id !== req.params.id);
-    db.save();
-    db.deleteItem('holidays', req.params.id);
+    await db.deleteItemNow('holidays', req.params.id);
     db.addAuditLog({
       userId: 'usr_admin',
       userName: 'Principal / Admin',
@@ -882,7 +1304,7 @@ async function startServer() {
     res.json(db.get().trades);
   });
 
-  app.post('/api/trades', (req: Request, res: Response) => {
+  app.post('/api/trades', async (req: Request, res: Response) => {
     const data = db.get();
     const newTrade: Trade = {
       id: `trade_${Date.now()}`,
@@ -896,7 +1318,7 @@ async function startServer() {
       status: req.body.status || 'active',
     };
     data.trades.push(newTrade);
-    db.save();
+    await db.persistItemNow('trades', newTrade.id, newTrade);
     db.addAuditLog({
       userId: 'usr_admin',
       userName: 'Principal / Admin',
@@ -907,12 +1329,12 @@ async function startServer() {
     res.json({ success: true, trade: newTrade });
   });
 
-  app.put('/api/trades/:id', (req: Request, res: Response) => {
+  app.put('/api/trades/:id', async (req: Request, res: Response) => {
     const data = db.get();
     const idx = data.trades.findIndex((t) => t.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: 'Trade not found' });
     data.trades[idx] = { ...data.trades[idx], ...req.body };
-    db.save();
+    await db.persistItemNow('trades', data.trades[idx].id, data.trades[idx]);
     db.addAuditLog({
       userId: 'usr_admin',
       userName: 'Principal / Admin',
@@ -923,11 +1345,11 @@ async function startServer() {
     res.json({ success: true, trade: data.trades[idx] });
   });
 
-  app.delete('/api/trades/:id', (req: Request, res: Response) => {
+  app.delete('/api/trades/:id', async (req: Request, res: Response) => {
     const data = db.get();
     const trade = data.trades.find((t) => t.id === req.params.id);
     data.trades = data.trades.filter((t) => t.id !== req.params.id);
-    db.save();
+    await db.deleteItemNow('trades', req.params.id);
     db.addAuditLog({
       userId: 'usr_admin',
       userName: 'Principal / Admin',
@@ -950,7 +1372,7 @@ async function startServer() {
     res.json(officer);
   });
 
-  app.post('/api/officers', (req: Request, res: Response) => {
+  app.post('/api/officers', async (req: Request, res: Response) => {
     const data = db.get();
     const assigned = Array.isArray(req.body.assignedTradeIds)
       ? req.body.assignedTradeIds
@@ -970,7 +1392,7 @@ async function startServer() {
       password: req.body.password || 'officer123',
     };
     data.officers.push(newOfficer);
-    db.save();
+    await db.persistItemNow('officers', newOfficer.id, newOfficer);
     db.addAuditLog({
       userId: 'usr_admin',
       userName: 'Principal / Admin',
@@ -981,7 +1403,7 @@ async function startServer() {
     res.json({ success: true, officer: newOfficer });
   });
 
-  app.put('/api/officers/:id', (req: Request, res: Response) => {
+  app.put('/api/officers/:id', async (req: Request, res: Response) => {
     const data = db.get();
     const idx = data.officers.findIndex((o) => o.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: 'Officer not found' });
@@ -995,7 +1417,7 @@ async function startServer() {
     if (req.body.email) {
       data.officers[idx].email = String(req.body.email).trim();
     }
-    db.save();
+    await db.persistItemNow('officers', data.officers[idx].id, data.officers[idx]);
     db.addAuditLog({
       userId: req.body.editorId || 'usr_admin',
       userName: req.body.editorName || 'Principal / Admin',
@@ -1008,12 +1430,12 @@ async function startServer() {
     res.json({ success: true, officer: data.officers[idx] });
   });
 
-  app.post('/api/officers/:id/reset-password', (req: Request, res: Response) => {
+  app.post('/api/officers/:id/reset-password', async (req: Request, res: Response) => {
     const data = db.get();
     const officer = data.officers.find((o) => o.id === req.params.id);
     if (!officer) return res.status(404).json({ error: 'Officer not found' });
     officer.password = req.body.newPassword || 'officer123';
-    db.save();
+    await db.persistItemNow('officers', officer.id, officer);
     db.addAuditLog({
       userId: 'usr_admin',
       userName: 'Principal / Admin',
@@ -1024,11 +1446,11 @@ async function startServer() {
     res.json({ success: true, message: `Password successfully reset for ${officer.name}.` });
   });
 
-  app.delete('/api/officers/:id', (req: Request, res: Response) => {
+  app.delete('/api/officers/:id', async (req: Request, res: Response) => {
     const data = db.get();
     const officer = data.officers.find((o) => o.id === req.params.id);
     data.officers = data.officers.filter((o) => o.id !== req.params.id);
-    db.save();
+    await db.deleteItemNow('officers', req.params.id);
     db.addAuditLog({
       userId: 'usr_admin',
       userName: 'Principal / Admin',
@@ -1049,15 +1471,15 @@ async function startServer() {
     res.json(list);
   });
 
-  app.post('/api/trainees', (req: Request, res: Response) => {
+  app.post('/api/trainees', async (req: Request, res: Response) => {
     const data = db.get();
     const newTrainee: Trainee = {
-      id: `tr_${Date.now()}`,
+      id: `tr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       rollNo: req.body.rollNo,
       registrationNo: req.body.registrationNo || `NCVT${Date.now().toString().slice(-8)}`,
       name: req.body.name,
       fatherName: req.body.fatherName || '',
-      email: req.body.email || `${req.body.name.toLowerCase().replace(/\s+/g, '.')}@student.iti.cg.in`,
+      email: req.body.email || `${String(req.body.name || 'trainee').toLowerCase().replace(/\s+/g, '.')}@student.iti.cg.in`,
       mobile: req.body.mobile,
       tradeId: req.body.tradeId,
       sessionId: req.body.sessionId || data.settings.currentSessionId,
@@ -1067,9 +1489,11 @@ async function startServer() {
       status: req.body.status || 'active',
       admissionDate: req.body.admissionDate || new Date().toISOString().split('T')[0],
       password: req.body.password || 'trainee123',
+      photoDocId: req.body.photoDocId,
+      photoUrl: req.body.photoUrl,
     };
     data.trainees.push(newTrainee);
-    db.save();
+    await db.persistItemNow('trainees', newTrainee.id, newTrainee);
     db.addAuditLog({
       userId: req.body.officerId || 'usr_admin',
       userName: req.body.officerName || 'Training Officer',
@@ -1080,7 +1504,7 @@ async function startServer() {
     res.json({ success: true, trainee: newTrainee });
   });
 
-  app.post('/api/trainees/bulk', (req: Request, res: Response) => {
+  app.post('/api/trainees/bulk', async (req: Request, res: Response) => {
     const { trainees, tradeId, sessionId, officerId, officerName } = req.body;
     if (!Array.isArray(trainees) || trainees.length === 0) {
       return res.status(400).json({ error: 'No trainee records provided for bulk import.' });
@@ -1089,6 +1513,7 @@ async function startServer() {
     const targetTradeId = tradeId || data.trades[0]?.id;
     const targetSessionId = sessionId || data.settings.currentSessionId;
     const addedTrainees: Trainee[] = [];
+    const ops: PendingFirestoreOp[] = [];
 
     trainees.forEach((item, index) => {
       const name = String(item.name || '').trim();
@@ -1103,7 +1528,7 @@ async function startServer() {
       const dob = String(item.dob || '2005-01-01').trim();
 
       const newTrainee: Trainee = {
-        id: `tr_bulk_${Date.now()}_${index}_${Math.floor(Math.random() * 1000)}`,
+        id: `tr_${Date.now()}_${index}_${Math.random().toString(36).substring(2, 6)}`,
         rollNo,
         registrationNo,
         name,
@@ -1122,9 +1547,10 @@ async function startServer() {
 
       data.trainees.push(newTrainee);
       addedTrainees.push(newTrainee);
+      ops.push({ type: 'set', coll: 'trainees', id: newTrainee.id, data: newTrainee });
     });
 
-    db.save();
+    await db.persistBatchNow(ops);
     db.addAuditLog({
       userId: officerId || 'usr_officer',
       userName: officerName || 'Training Officer',
@@ -1136,7 +1562,7 @@ async function startServer() {
     res.json({ success: true, count: addedTrainees.length, trainees: addedTrainees });
   });
 
-  app.put('/api/trainees/:id', (req: Request, res: Response) => {
+  app.put('/api/trainees/:id', async (req: Request, res: Response) => {
     const data = db.get();
     const idx = data.trainees.findIndex((t) => t.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: 'Trainee not found' });
@@ -1145,7 +1571,7 @@ async function startServer() {
     if (req.body.email) {
       data.trainees[idx].email = String(req.body.email).trim();
     }
-    db.save();
+    await db.persistItemNow('trainees', data.trainees[idx].id, data.trainees[idx]);
     db.addAuditLog({
       userId: req.body.editorId || req.params.id,
       userName: req.body.editorName || data.trainees[idx].name,
@@ -1158,19 +1584,32 @@ async function startServer() {
     res.json({ success: true, trainee: data.trainees[idx] });
   });
 
-  app.delete('/api/trainees/:id', (req: Request, res: Response) => {
+  app.delete('/api/trainees/:id', async (req: Request, res: Response) => {
     const data = db.get();
-    const trainee = data.trainees.find((t) => t.id === req.params.id);
-    data.trainees = data.trainees.filter((t) => t.id !== req.params.id);
-    // Also remove associated attendance or mark inactive
-    db.save();
-    db.deleteItem('trainees', req.params.id);
+    const targetId = req.params.id;
+    const trainee = data.trainees.find((t) => t.id === targetId);
+    const ops: PendingFirestoreOp[] = [{ type: 'delete', coll: 'trainees', id: targetId }];
+
+    data.attendance.filter((a) => a.traineeId === targetId).forEach((a) => ops.push({ type: 'delete', coll: 'attendance', id: a.id }));
+    data.assessments.filter((asm) => asm.traineeId === targetId).forEach((asm) => ops.push({ type: 'delete', coll: 'assessments', id: asm.id }));
+    data.leaves.filter((l) => l.traineeId === targetId).forEach((l) => ops.push({ type: 'delete', coll: 'leaves', id: l.id }));
+    data.warnings.filter((w) => w.traineeId === targetId).forEach((w) => ops.push({ type: 'delete', coll: 'warnings', id: w.id }));
+    data.indents.filter((i) => i.traineeId === targetId).forEach((i) => ops.push({ type: 'delete', coll: 'indents', id: i.id }));
+
+    data.trainees = data.trainees.filter((t) => t.id !== targetId);
+    data.attendance = data.attendance.filter((a) => a.traineeId !== targetId);
+    data.assessments = data.assessments.filter((asm) => asm.traineeId !== targetId);
+    data.leaves = data.leaves.filter((l) => l.traineeId !== targetId);
+    data.warnings = data.warnings.filter((w) => w.traineeId !== targetId);
+    data.indents = data.indents.filter((i) => i.traineeId !== targetId);
+
+    await db.persistBatchNow(ops);
     db.addAuditLog({
       userId: req.query.officerId?.toString() || 'usr_admin',
       userName: req.query.officerName?.toString() || 'Training Officer',
       userRole: 'officer',
       action: 'DELETE_TRAINEE',
-      details: `Deleted trainee record: ${trainee?.name || req.params.id} (${trainee?.rollNo}).`,
+      details: `Deleted trainee record: ${trainee?.name || targetId} (${trainee?.rollNo}).`,
     });
     res.json({ success: true });
   });
@@ -1191,7 +1630,7 @@ async function startServer() {
   });
 
   // Trainee mark attendance with GPS Geofencing verification
-  app.post('/api/attendance/mark-trainee', (req: Request, res: Response) => {
+  app.post('/api/attendance/mark-trainee', async (req: Request, res: Response) => {
     const { traineeId, userLat, userLng, accuracy, forceSimulation } = req.body;
     const data = db.get();
     const trainee = data.trainees.find((t) => t.id === traineeId);
@@ -1200,7 +1639,6 @@ async function startServer() {
     const now = new Date();
     const todayStr = now.toISOString().split('T')[0];
 
-    // Enforce Admin Holiday restriction
     const holiday = findHolidayForDate(data, todayStr, trainee.sessionId);
     if (holiday) {
       return res.status(400).json({
@@ -1218,7 +1656,6 @@ async function startServer() {
       (hours > win.startHour || (hours === win.startHour && minutes >= win.startMinute)) &&
       (hours < win.endHour || (hours === win.endHour && minutes <= win.endMinute));
 
-    // Check if already marked today
     const existing = data.attendance.find((a) => a.traineeId === traineeId && a.date === todayStr);
     if (existing) {
       return res.status(400).json({
@@ -1227,14 +1664,12 @@ async function startServer() {
       });
     }
 
-    // Geofencing verification
     const campus = data.settings.campusLocation;
     let distance = calculateDistanceMeters(userLat, userLng, campus.lat, campus.lng);
     const accuracyBuffer = Math.min(Number(accuracy) || 0, 150);
     const effectiveDistance = Math.max(0, distance - accuracyBuffer);
     let isWithinCampus = distance <= campus.radiusMeters || effectiveDistance <= campus.radiusMeters;
 
-    // Optional test simulator for demo if tester is outside campus
     if (forceSimulation) {
       distance = 42;
       isWithinCampus = true;
@@ -1248,7 +1683,6 @@ async function startServer() {
       });
     }
 
-    // Check window cutoff unless admin bypass or simulator
     if (!isWithinTimeWindow && !forceSimulation) {
       const formatTime = (h: number, m: number = 0) => {
         const ampm = h >= 12 ? 'PM' : 'AM';
@@ -1263,7 +1697,7 @@ async function startServer() {
 
     const timestampStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
     const newRecord: AttendanceRecord = {
-      id: `att_${Date.now()}`,
+      id: `att_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       traineeId: trainee.id,
       traineeName: trainee.name,
       rollNo: trainee.rollNo,
@@ -1285,7 +1719,7 @@ async function startServer() {
     };
 
     data.attendance.push(newRecord);
-    db.save();
+    await db.persistItemNow('attendance', newRecord.id, newRecord);
 
     db.addAuditLog({
       userId: trainee.id,
@@ -1299,9 +1733,8 @@ async function startServer() {
   });
 
   // Training Officer: Batch attendance save or override
-  app.post('/api/attendance/batch-officer', (req: Request, res: Response) => {
+  app.post('/api/attendance/batch-officer', async (req: Request, res: Response) => {
     const { date, officerId, officerName, records } = req.body;
-    // records: Array<{ traineeId: string, status: AttendanceStatus, remarks?: string }>
     const data = db.get();
     const officer = data.officers.find((o) => o.id === officerId);
 
@@ -1309,7 +1742,6 @@ async function startServer() {
       return res.status(400).json({ error: 'Invalid attendance records payload' });
     }
 
-    // Check if date is an admin-designated holiday for any target trainee session or institute-wide
     const sampleTrainee = records
       .map((r) => data.trainees.find((t) => t.id === r.traineeId))
       .find(Boolean);
@@ -1324,6 +1756,7 @@ async function startServer() {
 
     const now = new Date();
     const timestampStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+    const ops: PendingFirestoreOp[] = [];
 
     records.forEach((item) => {
       const trainee = data.trainees.find((t) => t.id === item.traineeId);
@@ -1332,7 +1765,6 @@ async function startServer() {
 
       const existingIdx = data.attendance.findIndex((a) => a.traineeId === item.traineeId && a.date === date);
       if (existingIdx >= 0) {
-        // override with officer correction
         data.attendance[existingIdx] = {
           ...data.attendance[existingIdx],
           status: item.status,
@@ -1340,10 +1772,10 @@ async function startServer() {
           authorizedCorrection: true,
           correctedBy: officerName || officer?.name || 'Training Officer',
         };
+        ops.push({ type: 'set', coll: 'attendance', id: data.attendance[existingIdx].id, data: data.attendance[existingIdx] });
       } else {
-        // new record entered by officer
-        data.attendance.push({
-          id: `att_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`,
+        const created: AttendanceRecord = {
+          id: `att_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
           traineeId: trainee.id,
           traineeName: trainee.name,
           rollNo: trainee.rollNo,
@@ -1356,11 +1788,13 @@ async function startServer() {
           remarks: item.remarks || 'Recorded by Training Officer',
           authorizedCorrection: false,
           correctedBy: officerName,
-        });
+        };
+        data.attendance.push(created);
+        ops.push({ type: 'set', coll: 'attendance', id: created.id, data: created });
       }
     });
 
-    db.save();
+    await db.persistBatchNow(ops);
     db.addAuditLog({
       userId: officerId || 'usr_officer',
       userName: officerName || 'Training Officer',
@@ -1373,7 +1807,7 @@ async function startServer() {
   });
 
   // Auto-mark Absent for trainees who haven't marked attendance past cutoff time
-  app.post('/api/attendance/auto-absent', (req: Request, res: Response) => {
+  app.post('/api/attendance/auto-absent', async (req: Request, res: Response) => {
     const { date, tradeId } = req.body;
     const targetDate = date || new Date().toISOString().split('T')[0];
     const data = db.get();
@@ -1382,7 +1816,6 @@ async function startServer() {
     let targetTrainees = data.trainees.filter((t) => t.status === 'active');
     if (tradeId) targetTrainees = targetTrainees.filter((t) => t.tradeId === tradeId);
 
-    // If global or every active trainee's session is on holiday, block auto-absent
     if (globalHoliday && (!globalHoliday.sessionId || globalHoliday.sessionId === 'all')) {
       return res.status(400).json({
         error: `Auto-absent is disabled: ${targetDate} is an Admin-designated Holiday ("${globalHoliday.title}").`,
@@ -1403,12 +1836,13 @@ async function startServer() {
     }
 
     let newlyMarkedAbsent = 0;
+    const ops: PendingFirestoreOp[] = [];
     targetTrainees.forEach((tr) => {
       if (findHolidayForDate(data, targetDate, tr.sessionId)) return;
       const exists = data.attendance.find((a) => a.traineeId === tr.id && a.date === targetDate);
       if (!exists) {
-        data.attendance.push({
-          id: `att_auto_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`,
+        const rec: AttendanceRecord = {
+          id: `att_auto_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
           traineeId: tr.id,
           traineeName: tr.name,
           rollNo: tr.rollNo,
@@ -1419,12 +1853,14 @@ async function startServer() {
           timestamp: '05:00 PM (17:00 Cutoff)',
           markedBy: 'system_auto_absent',
           remarks: 'Automatic absent recorded past 17:00 (05:00 PM) cutoff time - Subject to authorized correction by Training Officer.',
-        });
+        };
+        data.attendance.push(rec);
+        ops.push({ type: 'set', coll: 'attendance', id: rec.id, data: rec });
         newlyMarkedAbsent++;
       }
     });
 
-    db.save();
+    await db.persistBatchNow(ops);
     res.json({ success: true, markedCount: newlyMarkedAbsent, date: targetDate });
   });
 
@@ -1441,8 +1877,18 @@ async function startServer() {
     res.json(list);
   });
 
-  app.post('/api/leaves/apply', (req: Request, res: Response) => {
-    const { traineeId, leaveType, fromDate, toDate, days, reason } = req.body;
+  app.post('/api/leaves/apply', async (req: Request, res: Response) => {
+    const {
+      traineeId,
+      leaveType,
+      fromDate,
+      toDate,
+      days,
+      reason,
+      attachmentDocId,
+      attachmentName,
+      attachmentUrl,
+    } = req.body;
     const data = db.get();
     const trainee = data.trainees.find((t) => t.id === traineeId);
     if (!trainee) return res.status(404).json({ error: 'Trainee not found' });
@@ -1458,12 +1904,15 @@ async function startServer() {
       toDate,
       days: Number(days) || 1,
       reason,
+      attachmentDocId: attachmentDocId || undefined,
+      attachmentName: attachmentName || undefined,
+      attachmentUrl: attachmentUrl || undefined,
       status: 'pending',
       appliedAt: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
     };
 
     data.leaves.unshift(newLeave);
-    db.save();
+    await db.persistItemNow('leaves', newLeave.id, newLeave);
     db.addAuditLog({
       userId: trainee.id,
       userName: trainee.name,
@@ -1475,7 +1924,7 @@ async function startServer() {
     res.json({ success: true, leave: newLeave });
   });
 
-  app.put('/api/leaves/:id/review', (req: Request, res: Response) => {
+  app.put('/api/leaves/:id/review', async (req: Request, res: Response) => {
     const { status, officerName, reviewerRemarks } = req.body;
     const data = db.get();
     const idx = data.leaves.findIndex((l) => l.id === req.params.id);
@@ -1487,10 +1936,13 @@ async function startServer() {
     leave.reviewerRemarks = reviewerRemarks;
     leave.reviewedAt = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
 
+    const ops: PendingFirestoreOp[] = [
+      { type: 'set', coll: 'leaves', id: leave.id, data: leave },
+    ];
+
     // If approved, update or insert attendance as 'CL' or 'Medical Leave' or 'Half-Day Leave'
     if (status === 'approved') {
       const attStatus = leave.leaveType === 'Casual Leave (CL)' ? 'CL' : leave.leaveType === 'Medical Leave (ML)' ? 'Medical Leave' : 'Half-Day Leave';
-      
       const trainee = data.trainees.find((t) => t.id === leave.traineeId);
       const start = new Date(leave.fromDate);
       const end = new Date(leave.toDate);
@@ -1507,8 +1959,9 @@ async function startServer() {
             data.attendance[attIdx].remarks = `Approved leave (${leave.leaveType}): ${reviewerRemarks || 'Sanctioned by Training Officer'}`;
             data.attendance[attIdx].authorizedCorrection = true;
             data.attendance[attIdx].correctedBy = officerName || 'Training Officer';
+            ops.push({ type: 'set', coll: 'attendance', id: data.attendance[attIdx].id, data: data.attendance[attIdx] });
           } else if (trainee) {
-            data.attendance.push({
+            const newAtt: AttendanceRecord = {
               id: `att_lv_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
               traineeId: trainee.id,
               traineeName: trainee.name,
@@ -1522,14 +1975,16 @@ async function startServer() {
               remarks: `Approved leave (${leave.leaveType}): ${reviewerRemarks || leave.reason}`,
               authorizedCorrection: true,
               correctedBy: officerName || 'Training Officer',
-            });
+            };
+            data.attendance.push(newAtt);
+            ops.push({ type: 'set', coll: 'attendance', id: newAtt.id, data: newAtt });
           }
         }
         curr.setDate(curr.getDate() + 1);
       }
     }
 
-    db.save();
+    await db.persistBatchNow(ops);
     db.addAuditLog({
       userId: 'officer',
       userName: officerName || 'Training Officer',
@@ -1553,7 +2008,7 @@ async function startServer() {
     res.json(list);
   });
 
-  app.post('/api/warnings', (req: Request, res: Response) => {
+  app.post('/api/warnings', async (req: Request, res: Response) => {
     const { traineeId, officerId, officerName, subject, subjectHindi, message, messageHindi, attendancePercent } = req.body;
     const data = db.get();
     const trainee = data.trainees.find((t) => t.id === traineeId);
@@ -1589,7 +2044,7 @@ async function startServer() {
     };
 
     data.warnings.unshift(newWarning);
-    db.save();
+    await db.persistItemNow('warnings', newWarning.id, newWarning);
     db.addAuditLog({
       userId: officerId,
       userName: officerName,
@@ -1601,13 +2056,13 @@ async function startServer() {
     res.json({ success: true, warning: newWarning });
   });
 
-  app.put('/api/warnings/:id/acknowledge', (req: Request, res: Response) => {
+  app.put('/api/warnings/:id/acknowledge', async (req: Request, res: Response) => {
     const data = db.get();
     const warning = data.warnings.find((w) => w.id === req.params.id);
     if (!warning) return res.status(404).json({ error: 'Warning notice not found' });
     warning.status = 'acknowledged';
     warning.acknowledgedAt = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
-    db.save();
+    await db.persistItemNow('warnings', warning.id, warning);
     res.json({ success: true, warning });
   });
 
@@ -1623,7 +2078,7 @@ async function startServer() {
     res.json(list);
   });
 
-  app.post('/api/inventory', (req: Request, res: Response) => {
+  app.post('/api/inventory', async (req: Request, res: Response) => {
     const data = db.get();
     const total = Number(req.body.totalStock) || 0;
     const issued = Number(req.body.issuedCount) || 0;
@@ -1646,7 +2101,7 @@ async function startServer() {
     };
 
     data.inventory.push(newItem);
-    db.save();
+    await db.persistItemNow('inventory', newItem.id, newItem);
     db.addAuditLog({
       userId: req.body.officerId || 'usr_officer',
       userName: req.body.officerName || 'Training Officer',
@@ -1657,7 +2112,7 @@ async function startServer() {
     res.json({ success: true, item: newItem });
   });
 
-  app.put('/api/inventory/:id', (req: Request, res: Response) => {
+  app.put('/api/inventory/:id', async (req: Request, res: Response) => {
     const data = db.get();
     const idx = data.inventory.findIndex((i) => i.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: 'Item not found' });
@@ -1677,15 +2132,15 @@ async function startServer() {
       lastInspected: req.body.lastInspected || new Date().toISOString().split('T')[0],
     };
 
-    db.save();
+    await db.persistItemNow('inventory', data.inventory[idx].id, data.inventory[idx]);
     res.json({ success: true, item: data.inventory[idx] });
   });
 
-  app.delete('/api/inventory/:id', (req: Request, res: Response) => {
+  app.delete('/api/inventory/:id', async (req: Request, res: Response) => {
     const data = db.get();
     const item = data.inventory.find((i) => i.id === req.params.id);
     data.inventory = data.inventory.filter((i) => i.id !== req.params.id);
-    db.save();
+    await db.deleteItemNow('inventory', req.params.id);
     db.addAuditLog({
       userId: 'usr_officer',
       userName: 'Training Officer',
@@ -1709,7 +2164,7 @@ async function startServer() {
     res.json(list);
   });
 
-  app.post('/api/indent/issue', (req: Request, res: Response) => {
+  app.post('/api/indent/issue', async (req: Request, res: Response) => {
     const { tradeId, officerId, officerName, traineeId, itemId, quantity, expectedReturnDate, remarks } = req.body;
     const data = db.get();
     const trainee = data.trainees.find((t) => t.id === traineeId);
@@ -1745,7 +2200,10 @@ async function startServer() {
     };
 
     data.indents.unshift(newIndent);
-    db.save();
+    await db.persistBatchNow([
+      { type: 'set', coll: 'indents', id: newIndent.id, data: newIndent },
+      { type: 'set', coll: 'inventory', id: item.id, data: item },
+    ]);
 
     db.addAuditLog({
       userId: officerId,
@@ -1758,7 +2216,7 @@ async function startServer() {
     res.json({ success: true, indent: newIndent, updatedItem: item });
   });
 
-  app.put('/api/indent/:id/return', (req: Request, res: Response) => {
+  app.put('/api/indent/:id/return', async (req: Request, res: Response) => {
     const { returnCondition, remarks, officerName } = req.body;
     const data = db.get();
     const indent = data.indents.find((i) => i.id === req.params.id);
@@ -1771,6 +2229,10 @@ async function startServer() {
     indent.returnCondition = returnCondition || 'Good';
     if (remarks) indent.remarks = (indent.remarks ? indent.remarks + ' | ' : '') + remarks;
 
+    const ops: PendingFirestoreOp[] = [
+      { type: 'set', coll: 'indents', id: indent.id, data: indent },
+    ];
+
     if (item) {
       item.issuedCount = Math.max(0, item.issuedCount - indent.quantity);
       if (returnCondition === 'Damaged') {
@@ -1778,9 +2240,10 @@ async function startServer() {
       } else {
         item.availableStock += indent.quantity;
       }
+      ops.push({ type: 'set', coll: 'inventory', id: item.id, data: item });
     }
 
-    db.save();
+    await db.persistBatchNow(ops);
     db.addAuditLog({
       userId: 'usr_officer',
       userName: officerName || 'Training Officer',
@@ -1925,7 +2388,7 @@ async function startServer() {
     res.json(list);
   });
 
-  app.post('/api/lesson-plans', (req: Request, res: Response) => {
+  app.post('/api/lesson-plans', async (req: Request, res: Response) => {
     const body = req.body;
     const newPlan: LessonPlan = {
       id: `lp_${Date.now()}`,
@@ -1943,26 +2406,26 @@ async function startServer() {
       officerName: body.officerName || 'Training Officer',
     };
     db.get().lessonPlans.unshift(newPlan);
-    db.save();
+    await db.persistItemNow('plans', newPlan.id, newPlan, 'lesson');
     res.json({ success: true, lessonPlan: newPlan });
   });
 
-  app.put('/api/lesson-plans/:id', (req: Request, res: Response) => {
+  app.put('/api/lesson-plans/:id', async (req: Request, res: Response) => {
     const id = req.params.id;
     const body = req.body;
     const list = db.get().lessonPlans;
     const index = list.findIndex((lp) => lp.id === id);
     if (index === -1) return res.status(404).json({ error: 'Lesson plan not found' });
     list[index] = { ...list[index], ...body };
-    db.save();
+    await db.persistItemNow('plans', id, list[index], 'lesson');
     res.json({ success: true, lessonPlan: list[index] });
   });
 
-  app.delete('/api/lesson-plans/:id', (req: Request, res: Response) => {
+  app.delete('/api/lesson-plans/:id', async (req: Request, res: Response) => {
     const id = req.params.id;
     const data = db.get();
     data.lessonPlans = data.lessonPlans.filter((lp) => lp.id !== id);
-    db.save();
+    await db.deleteItemNow('plans', id);
     res.json({ success: true });
   });
 
@@ -1976,7 +2439,7 @@ async function startServer() {
     res.json(list);
   });
 
-  app.post('/api/demonstration-plans', (req: Request, res: Response) => {
+  app.post('/api/demonstration-plans', async (req: Request, res: Response) => {
     const body = req.body;
     const newDemo: DemonstrationPlan = {
       id: `dp_${Date.now()}`,
@@ -1992,26 +2455,26 @@ async function startServer() {
       officerName: body.officerName || 'Training Officer',
     };
     db.get().demonstrationPlans.unshift(newDemo);
-    db.save();
+    await db.persistItemNow('plans', newDemo.id, newDemo, 'demo');
     res.json({ success: true, demonstrationPlan: newDemo });
   });
 
-  app.put('/api/demonstration-plans/:id', (req: Request, res: Response) => {
+  app.put('/api/demonstration-plans/:id', async (req: Request, res: Response) => {
     const id = req.params.id;
     const body = req.body;
     const list = db.get().demonstrationPlans;
     const index = list.findIndex((dp) => dp.id === id);
     if (index === -1) return res.status(404).json({ error: 'Demonstration plan not found' });
     list[index] = { ...list[index], ...body };
-    db.save();
+    await db.persistItemNow('plans', id, list[index], 'demo');
     res.json({ success: true, demonstrationPlan: list[index] });
   });
 
-  app.delete('/api/demonstration-plans/:id', (req: Request, res: Response) => {
+  app.delete('/api/demonstration-plans/:id', async (req: Request, res: Response) => {
     const id = req.params.id;
     const data = db.get();
     data.demonstrationPlans = data.demonstrationPlans.filter((dp) => dp.id !== id);
-    db.save();
+    await db.deleteItemNow('plans', id);
     res.json({ success: true });
   });
 
@@ -2025,7 +2488,7 @@ async function startServer() {
     res.json(list);
   });
 
-  app.post('/api/weekly-plans', (req: Request, res: Response) => {
+  app.post('/api/weekly-plans', async (req: Request, res: Response) => {
     const body = req.body;
     const newWeekly: WeeklyPlan = {
       id: `wp_${Date.now()}`,
@@ -2040,26 +2503,26 @@ async function startServer() {
       officerName: body.officerName || 'Training Officer',
     };
     db.get().weeklyPlans.unshift(newWeekly);
-    db.save();
+    await db.persistItemNow('plans', newWeekly.id, newWeekly, 'weekly');
     res.json({ success: true, weeklyPlan: newWeekly });
   });
 
-  app.put('/api/weekly-plans/:id', (req: Request, res: Response) => {
+  app.put('/api/weekly-plans/:id', async (req: Request, res: Response) => {
     const id = req.params.id;
     const body = req.body;
     const list = db.get().weeklyPlans;
     const index = list.findIndex((wp) => wp.id === id);
     if (index === -1) return res.status(404).json({ error: 'Weekly plan not found' });
     list[index] = { ...list[index], ...body };
-    db.save();
+    await db.persistItemNow('plans', id, list[index], 'weekly');
     res.json({ success: true, weeklyPlan: list[index] });
   });
 
-  app.delete('/api/weekly-plans/:id', (req: Request, res: Response) => {
+  app.delete('/api/weekly-plans/:id', async (req: Request, res: Response) => {
     const id = req.params.id;
     const data = db.get();
     data.weeklyPlans = data.weeklyPlans.filter((wp) => wp.id !== id);
-    db.save();
+    await db.deleteItemNow('plans', id);
     res.json({ success: true });
   });
 
@@ -2073,7 +2536,7 @@ async function startServer() {
     res.json(list);
   });
 
-  const handleAssessmentUpsert = (body: any, targetId?: string) => {
+  const handleAssessmentUpsert = async (body: any, targetId?: string) => {
     const list = db.get().assessments;
     const idToLookFor = targetId || body.id;
     let existingIndex = -1;
@@ -2093,7 +2556,7 @@ async function startServer() {
         ...body,
         id: list[existingIndex].id,
       };
-      db.save();
+      await db.persistItemNow('assessments', list[existingIndex].id, list[existingIndex]);
       return list[existingIndex];
     }
 
@@ -2120,35 +2583,35 @@ async function startServer() {
     };
 
     list.unshift(newAsm);
-    db.save();
+    await db.persistItemNow('assessments', newAsm.id, newAsm);
     return newAsm;
   };
 
-  app.post('/api/assessments', (req: Request, res: Response) => {
+  app.post('/api/assessments', async (req: Request, res: Response) => {
     try {
-      const saved = handleAssessmentUpsert(req.body);
+      const saved = await handleAssessmentUpsert(req.body);
       res.json({ success: true, assessment: saved });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to save assessment' });
     }
   });
 
-  app.put('/api/assessments/:id', (req: Request, res: Response) => {
+  app.put('/api/assessments/:id', async (req: Request, res: Response) => {
     try {
-      const saved = handleAssessmentUpsert(req.body, req.params.id);
+      const saved = await handleAssessmentUpsert(req.body, req.params.id);
       res.json({ success: true, assessment: saved });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to update assessment' });
     }
   });
 
-  app.delete('/api/assessments/:id', (req: Request, res: Response) => {
+  app.delete('/api/assessments/:id', async (req: Request, res: Response) => {
     const id = req.params.id;
     const list = db.get().assessments || [];
     const index = list.findIndex((asm) => asm.id === id);
     if (index === -1) return res.status(404).json({ error: 'Assessment not found' });
     list.splice(index, 1);
-    db.save();
+    await db.deleteItemNow('assessments', id);
     res.json({ success: true, message: 'Assessment deleted' });
   });
 
@@ -2157,10 +2620,11 @@ async function startServer() {
     res.json(db.get().auditLogs);
   });
 
-  // Reset demo data
-  app.post('/api/reset-data', (_req: Request, res: Response) => {
-    const reset = db.resetToDefault();
-    res.json({ success: true, message: 'Database reset to original Govt ITI Raigarh default data.' });
+  // Reset to baseline config (preserving empty trainee slate)
+  app.post('/api/reset-data', async (_req: Request, res: Response) => {
+    db.resetToDefault();
+    await db.forceFirestoreSync();
+    res.json({ success: true, message: 'Database reset to baseline Govt ITI Raigarh configuration.' });
   });
 
   // -------------------------------------------------------------
@@ -2214,7 +2678,7 @@ async function startServer() {
   // Scheduled Background Task: Auto-Mark Absent at 17:00 Cutoff
   // -------------------------------------------------------------
   let lastAutoAbsentDate = '';
-  setInterval(() => {
+  setInterval(async () => {
     try {
       const now = new Date();
       const hour = now.getHours();
@@ -2231,14 +2695,14 @@ async function startServer() {
       ) {
         lastAutoAbsentDate = todayStr;
         const data = db.get();
-        let marked = 0;
+        const ops: PendingFirestoreOp[] = [];
         data.trainees.forEach((tr) => {
           if (tr.status === 'active') {
             // Do not mark auto-absent on Admin-designated holidays
             if (findHolidayForDate(data, todayStr, tr.sessionId)) return;
             const exists = data.attendance.find((a) => a.traineeId === tr.id && a.date === todayStr);
             if (!exists) {
-              data.attendance.push({
+              const rec: AttendanceRecord = {
                 id: `att_auto_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`,
                 traineeId: tr.id,
                 traineeName: tr.name,
@@ -2250,14 +2714,15 @@ async function startServer() {
                 timestamp: '05:00 PM (17:00 Cutoff)',
                 markedBy: 'system_auto_absent',
                 remarks: 'Automatic absent recorded at 17:00 (05:00 PM) cutoff time - Subject to authorized correction by Training Officer.',
-              });
-              marked++;
+              };
+              data.attendance.push(rec);
+              ops.push({ type: 'set', coll: 'attendance', id: rec.id, data: rec });
             }
           }
         });
-        if (marked > 0) {
-          db.save();
-          console.log(`[Auto-Absent Scheduler] Flagged ${marked} unmarked active trainees as Absent for date ${todayStr} at 17:00 cutoff.`);
+        if (ops.length > 0) {
+          await db.persistBatchNow(ops);
+          console.log(`[Auto-Absent Scheduler] Flagged ${ops.length} unmarked active trainees as Absent for date ${todayStr} at 17:00 cutoff.`);
         }
       }
     } catch (e) {

@@ -36,6 +36,7 @@ import {
   Cloud,
   CloudUpload,
   ArrowUpCircle,
+  FolderOpen,
 } from 'lucide-react';
 import {
   triggerAutoBackup,
@@ -52,7 +53,9 @@ import {
   TrainingOfficer,
   SystemSettings,
   AuditLog,
+  UserPreferences,
 } from '../../types.ts';
+import { DocumentVaultPanel } from '../DocumentVaultPanel.tsx';
 import {
   fetchSessions,
   createSession,
@@ -79,21 +82,37 @@ import {
   updateSettings,
   fetchAuditLogs,
   resetDatabase,
+  fetchCloudStatus,
 } from '../../api.ts';
 
 interface AdminDashboardProps {
   settings: SystemSettings;
+  currentUserId?: string;
+  currentUserName?: string;
+  userPreferences?: UserPreferences | null;
+  onUpdatePreferences?: (partial: Partial<UserPreferences>) => void;
   onSettingsUpdate: (newSettings: SystemSettings) => void;
 }
 
-type AdminTab = 'overview' | 'sessions' | 'working_days' | 'trades' | 'officers' | 'rules' | 'audit';
+type AdminTab = 'overview' | 'sessions' | 'working_days' | 'trades' | 'officers' | 'documents' | 'rules' | 'audit';
 
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSettingsUpdate }) => {
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({
+  settings,
+  currentUserId,
+  currentUserName,
+  userPreferences,
+  onUpdatePreferences,
+  onSettingsUpdate,
+}) => {
   // Persistent active tab across page refreshes
   const [activeTab, setActiveTab] = useState<AdminTab>(() => {
+    const validTabs: AdminTab[] = ['overview', 'sessions', 'working_days', 'trades', 'officers', 'documents', 'rules', 'audit'];
+    if (userPreferences?.activeTab && validTabs.includes(userPreferences.activeTab as AdminTab)) {
+      return userPreferences.activeTab as AdminTab;
+    }
     try {
       const saved = localStorage.getItem('iti_admin_active_tab');
-      if (saved && ['overview', 'sessions', 'working_days', 'trades', 'officers', 'rules', 'audit'].includes(saved)) {
+      if (saved && validTabs.includes(saved as AdminTab)) {
         return saved as AdminTab;
       }
     } catch (e) {}
@@ -108,9 +127,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
 
   const [loading, setLoading] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [cloudStatus, setCloudStatus] = useState<{
+    connected: boolean;
+    firestoreState: string;
+    storage?: { bucketActive: boolean; bucket: string; mode: string };
+  } | null>(null);
 
   const handleSelectTab = (tab: AdminTab) => {
     setActiveTab(tab);
+    onUpdatePreferences?.({ activeTab: tab });
     setMobileMenuOpen(false);
     setTimeout(() => {
       const el = document.getElementById('admin-content-viewport');
@@ -148,7 +173,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
   const [calibratingGps, setCalibratingGps] = useState(false);
 
   // Selected session for monthly working days & holiday calendar
-  const [selectedSessionId, setSelectedSessionId] = useState(settings.currentSessionId || '');
+  const [selectedSessionId, setSelectedSessionId] = useState(
+    userPreferences?.adminCalendarSessionId || settings.currentSessionId || ''
+  );
   const [editableMonthlyDays, setEditableMonthlyDays] = useState<MonthlyWorkingDay[]>([]);
   const [savingWorkingDays, setSavingWorkingDays] = useState(false);
   const [showAddMonthRow, setShowAddMonthRow] = useState(false);
@@ -162,9 +189,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
 
   // Holiday Calendar State & Modal
   const [calendarMonth, setCalendarMonth] = useState<string>(() => {
+    if (userPreferences?.adminCalendarMonth) return userPreferences.adminCalendarMonth;
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
+
+  // Restore saved Admin preferences when Firestore session loads
+  useEffect(() => {
+    if (!userPreferences) return;
+    const validTabs: AdminTab[] = ['overview', 'sessions', 'working_days', 'trades', 'officers', 'documents', 'rules', 'audit'];
+    if (userPreferences.activeTab && validTabs.includes(userPreferences.activeTab as AdminTab)) {
+      setActiveTab(userPreferences.activeTab as AdminTab);
+    }
+    if (userPreferences.adminCalendarSessionId) {
+      setSelectedSessionId(userPreferences.adminCalendarSessionId);
+    }
+    if (userPreferences.adminCalendarMonth) {
+      setCalendarMonth(userPreferences.adminCalendarMonth);
+    }
+  }, [userPreferences?.userId, userPreferences?.activeTab, userPreferences?.adminCalendarSessionId, userPreferences?.adminCalendarMonth]);
   const [holidayModalOpen, setHolidayModalOpen] = useState(false);
   const [editingHoliday, setEditingHoliday] = useState<HolidayRecord | null>(null);
   const [savingHoliday, setSavingHoliday] = useState(false);
@@ -256,18 +299,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
   const reloadData = async () => {
     setLoading(true);
     try {
-      const [sList, tList, oList, aList, hList] = await Promise.all([
+      const [sList, tList, oList, aList, hList, cStatus] = await Promise.all([
         fetchSessions(),
         fetchTrades(),
         fetchOfficers(),
         fetchAuditLogs(),
         fetchHolidays(),
+        fetchCloudStatus().catch(() => null),
       ]);
       setSessions(sList);
       setTrades(tList);
       setOfficers(oList);
       setAuditLogs(aList);
       setHolidays(hList);
+      if (cStatus) setCloudStatus(cStatus);
       if (sList.length > 0 && !selectedSessionId) {
         setSelectedSessionId(sList[0].id);
       }
@@ -360,7 +405,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
   const handleCalendarMonthStep = (delta: number) => {
     const [y, m] = calendarMonth.split('-').map(Number);
     const d = new Date(y, m - 1 + delta, 1);
-    setCalendarMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    const nextMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    setCalendarMonth(nextMonth);
+    onUpdatePreferences?.({ adminCalendarMonth: nextMonth });
   };
 
   // Helper to generate 12 monthly slots based on session dates
@@ -946,6 +993,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
               {activeTab === 'working_days' && <CalendarDays className="w-4 h-4" />}
               {activeTab === 'trades' && <Layers className="w-4 h-4" />}
               {activeTab === 'officers' && <Users className="w-4 h-4" />}
+              {activeTab === 'documents' && <FolderOpen className="w-4 h-4" />}
               {activeTab === 'rules' && <Settings className="w-4 h-4" />}
               {activeTab === 'audit' && <ShieldAlert className="w-4 h-4" />}
             </span>
@@ -963,6 +1011,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
                 {activeTab === 'working_days' && 'Session Calendar & Holidays'}
                 {activeTab === 'trades' && 'Trade Management'}
                 {activeTab === 'officers' && 'Officers & Accounts'}
+                {activeTab === 'documents' && 'Documents & Circulars'}
                 {activeTab === 'rules' && 'Campus Geofence & Rules'}
                 {activeTab === 'audit' && 'Audit Trail Logs'}
               </h3>
@@ -1093,6 +1142,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
                 <span className="text-slate-500 font-normal">नियम व सुरक्षा</span>
               </div>
               {[
+                { id: 'documents', label: 'Documents & Circulars', hindi: 'दस्तावेज़ व परिपत्र', icon: FolderOpen },
                 { id: 'rules', label: 'Campus Geofence & Rules', hindi: 'जियोफेंस एवं नियम', icon: Settings },
                 { id: 'audit', label: 'Audit Trail Logs', hindi: 'ऑडिट ट्रेल', icon: ShieldAlert, badge: auditLogs.length > 0 ? auditLogs.length : undefined },
               ].map((item) => {
@@ -1296,6 +1346,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
                 <span className="text-slate-500 font-normal">नियम व सुरक्षा</span>
               </div>
               {[
+                { id: 'documents', label: 'Documents & Circulars', hindi: 'दस्तावेज़ व परिपत्र', icon: FolderOpen },
                 { id: 'rules', label: 'Campus Geofence & Rules', hindi: 'जियोफेंस एवं नियम', icon: Settings },
                 {
                   id: 'audit',
@@ -1392,8 +1443,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
 
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
               <span className="text-slate-500 font-medium">Attendance Window</span>
-              <div className="text-lg font-bold text-blue-700 mt-1 font-mono">07:00 – 10:00 AM</div>
-              <span className="text-[11px] text-slate-500">GPS Geofence Perimeter: 400m</span>
+              <div className="text-lg font-bold text-blue-700 mt-1 font-mono">
+                {String(settings.attendanceWindow?.startHour ?? 7).padStart(2, '0')}:
+                {String(settings.attendanceWindow?.startMinute ?? 0).padStart(2, '0')} –{' '}
+                {String(settings.attendanceWindow?.endHour ?? 15).padStart(2, '0')}:
+                {String(settings.attendanceWindow?.endMinute ?? 0).padStart(2, '0')}
+              </div>
+              <span className="text-[11px] text-slate-500">
+                GPS Perimeter: {settings.campusLocation?.radiusMeters || 1500}m · Auto-Absent:{' '}
+                {String(settings.attendanceWindow?.autoAbsentHour ?? 17).padStart(2, '0')}:00
+              </span>
             </div>
           </div>
 
@@ -1496,9 +1555,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
                 <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Cloud Database</span>
                 <div className="text-base font-extrabold text-white font-mono mt-0.5 flex items-center gap-1.5">
                   <Cloud className="w-4 h-4 text-emerald-400" />
-                  <span>Firestore</span>
+                  <span>{cloudStatus?.connected === false ? 'Reconnecting' : 'Firestore Live'}</span>
                 </div>
-                <span className="text-[10px] text-emerald-400 font-medium">Permanent Cloud Storage</span>
+                <span className="text-[10px] text-emerald-400 font-medium">Permanent Cloud Persistence</span>
               </div>
               <div className="bg-slate-950/80 p-3 rounded-xl border border-slate-800/80">
                 <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Protected Capacity</span>
@@ -1511,9 +1570,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
                 <span className="text-[10px] text-blue-400 font-medium">Survives Logout &amp; Reboots</span>
               </div>
               <div className="bg-slate-950/80 p-3 rounded-xl border border-slate-800/80">
-                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Secondary Shield</span>
-                <div className="text-base font-extrabold text-white font-mono mt-0.5">IndexedDB + JSON</div>
-                <span className="text-[10px] text-slate-400 font-medium">Offline Browser Mirror</span>
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Document Vault</span>
+                <div className="text-base font-extrabold text-white font-mono mt-0.5">
+                  {cloudStatus?.storage?.bucketActive ? 'Firebase Storage' : 'Firestore Vault'}
+                </div>
+                <span className="text-[10px] text-slate-400 font-medium">
+                  {cloudStatus?.storage?.bucketActive ? 'Cloud Bucket Active' : 'Chunked Cloud Files Active'}
+                </span>
               </div>
             </div>
 
@@ -1712,6 +1775,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
                             onClick={() => {
                               setSelectedSessionId(sess.id);
                               setActiveTab('working_days');
+                              onUpdatePreferences?.({ adminCalendarSessionId: sess.id, activeTab: 'working_days' });
                             }}
                             className="p-1.5 text-blue-600 hover:bg-blue-50 rounded flex items-center gap-1 text-[11px] font-medium"
                             title="Open Session Calendar, Holidays & Monthly Working Days"
@@ -1803,7 +1867,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
                     <span className="text-slate-700 font-semibold">Session:</span>
                     <select
                       value={selectedSessionId}
-                      onChange={(e) => setSelectedSessionId(e.target.value)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setSelectedSessionId(val);
+                        onUpdatePreferences?.({ adminCalendarSessionId: val });
+                      }}
                       className="px-2 py-0.5 border border-slate-300 rounded font-medium text-slate-800 bg-white"
                     >
                       {sessions.map((s) => (
@@ -3010,6 +3078,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onSett
             </table>
           </div>
         </div>
+      )}
+
+      {/* TAB: DOCUMENTS & CIRCULARS VAULT */}
+      {activeTab === 'documents' && (
+        <DocumentVaultPanel
+          currentUserId={currentUserId || 'usr_admin'}
+          currentUserName={currentUserName || settings.adminAccount?.name || 'Principal / Admin'}
+          currentUserRole="admin"
+          trades={trades}
+          sessions={sessions}
+        />
       )}
         </main>
       </div>

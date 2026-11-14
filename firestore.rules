@@ -105,6 +105,30 @@ service cloud.firestore {
       allow write: if isSystemAdmin() || isSignedIn() || isValidId(indentId);
     }
 
+    // Document Vault metadata
+    match /documents/{docId} {
+      allow read: if true;
+      allow write: if isSystemAdmin() || isSignedIn() || isValidId(docId);
+    }
+
+    // Stored binary file chunks in Firestore
+    match /storedFiles/{fileId} {
+      allow read: if true;
+      allow write: if isSystemAdmin() || isSignedIn() || isValidId(fileId);
+    }
+
+    // User-specific workspace preferences and filters
+    match /userPreferences/{userId} {
+      allow read: if true;
+      allow write: if isSystemAdmin() || isSignedIn() || isValidId(userId);
+    }
+
+    // Persistent server-verified authentication sessions
+    match /authSessions/{token} {
+      allow read: if true;
+      allow write: if isSystemAdmin() || isSignedIn() || isValidId(token);
+    }
+
     match /auditLogs/{logId} {
       allow read: if true;
       allow write: if isSystemAdmin() || isSignedIn() || isValidId(logId);
@@ -112,6 +136,10 @@ service cloud.firestore {
 
     match /system/{docId} {
       allow read, write: if true;
+    }
+
+    match /test/{docId} {
+      allow read: if true;
     }
   }
 }

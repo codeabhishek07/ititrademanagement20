@@ -17,7 +17,7 @@ import {
   X,
   Database,
 } from 'lucide-react';
-import { UserRole, AppNotification } from '../types.ts';
+import { UserRole, AppNotification, UserPreferences } from '../types.ts';
 import { fetchNotifications } from '../api.ts';
 import { PWAInstallButton } from './PWAInstallButton.tsx';
 
@@ -34,16 +34,18 @@ interface HeaderProps {
   onLogout: () => void;
   onSwitchRole?: (role: UserRole, id?: string) => void;
   onOpenResetConfirm?: () => void;
-  onNavigateTraineeTab?: (tab: 'mark_attendance' | 'history' | 'leaves' | 'warnings' | 'tools') => void;
+  userPreferences?: UserPreferences | null;
+  onUpdatePreferences?: (partial: Partial<UserPreferences>) => void;
+  onNavigateTraineeTab?: (tab: 'mark_attendance' | 'history' | 'leaves' | 'warnings' | 'tools' | 'documents') => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   currentUser,
   onLogout,
-  onSwitchRole,
+  userPreferences,
+  onUpdatePreferences,
   onNavigateTraineeTab,
 }) => {
-  // Real-time notifications state for trainees
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [readIds, setReadIds] = useState<Set<string>>(() => {
     try {
@@ -56,6 +58,17 @@ export const Header: React.FC<HeaderProps> = ({
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'leaves' | 'warnings'>('all');
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Sync read notification IDs from Firestore preferences whenever restored
+  useEffect(() => {
+    if (Array.isArray(userPreferences?.readNotificationIds)) {
+      setReadIds((prev) => {
+        const merged = new Set(prev);
+        userPreferences.readNotificationIds?.forEach((id) => merged.add(id));
+        return merged;
+      });
+    }
+  }, [userPreferences?.readNotificationIds]);
 
   // Poll notifications in real-time if logged in as Trainee
   useEffect(() => {
@@ -111,22 +124,26 @@ export const Header: React.FC<HeaderProps> = ({
     const allIds = new Set(readIds);
     notifications.forEach((n) => allIds.add(n.id));
     setReadIds(allIds);
+    const arr = Array.from(allIds);
     try {
-      localStorage.setItem('iti_read_notifications', JSON.stringify(Array.from(allIds)));
-    } catch (e) {
+      localStorage.setItem('iti_read_notifications', JSON.stringify(arr));
+    } catch {
       // ignore
     }
+    onUpdatePreferences?.({ readNotificationIds: arr });
   };
 
   const markSingleAsRead = (id: string) => {
     const next = new Set(readIds);
     next.add(id);
     setReadIds(next);
+    const arr = Array.from(next);
     try {
-      localStorage.setItem('iti_read_notifications', JSON.stringify(Array.from(next)));
-    } catch (e) {
+      localStorage.setItem('iti_read_notifications', JSON.stringify(arr));
+    } catch {
       // ignore
     }
+    onUpdatePreferences?.({ readNotificationIds: arr });
   };
 
   const handleNotificationClick = (n: AppNotification) => {
@@ -434,13 +451,13 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
             </div>
 
-            {/* Browser Auto-Preservation Status Indicator */}
+            {/* Cloud Firestore Live Persistence Indicator */}
             <div
               className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border bg-slate-900 border-slate-800 text-[10px] font-mono text-slate-300 shadow-xs"
-              title="Continuous Auto-Save: Institutional records and marks are saved to browser storage and restored automatically across logins"
+              title="Connected to Firebase Cloud Firestore: All records, files, and preferences persist permanently across sessions and devices"
             >
               <Database className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="font-bold text-white">Auto-Save</span>
+              <span className="font-bold text-white">Firestore Sync</span>
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
             </div>
 

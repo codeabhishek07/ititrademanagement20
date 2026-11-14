@@ -40,6 +40,7 @@ import {
   LeaveRequest,
   AcademicSession,
   SystemSettings,
+  UserPreferences,
 } from '../../types.ts';
 import {
   fetchAssessments,
@@ -57,6 +58,8 @@ interface DigitalProgressCardTrackerProps {
   officerName: string;
   sessions?: AcademicSession[];
   settings?: SystemSettings;
+  userPreferences?: UserPreferences | null;
+  onUpdatePreferences?: (partial: Partial<UserPreferences>) => void;
 }
 
 // Official NCVT 11-Month Academic Calendar (August 2026 to June 2027)
@@ -106,9 +109,13 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
   officerName,
   sessions,
   settings,
+  userPreferences,
+  onUpdatePreferences,
 }) => {
   const [trainees, setTrainees] = useState<Trainee[]>([]);
-  const [selectedTraineeId, setSelectedTraineeId] = useState<string>('');
+  const [selectedTraineeId, setSelectedTraineeId] = useState<string>(
+    userPreferences?.selectedProgressTraineeId || ''
+  );
   const [assessments, setAssessments] = useState<TraineeAssessment[]>([]);
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [leaves, setLeaves] = useState<LeaveRequest[]>([]);
@@ -116,7 +123,9 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string>('');
   const [modalOpen, setModalOpen] = useState(false);
-  const [selectedBreakdownMonth, setSelectedBreakdownMonth] = useState<string>('2026-08');
+  const [selectedBreakdownMonth, setSelectedBreakdownMonth] = useState<string>(
+    userPreferences?.selectedBreakdownMonth || '2026-08'
+  );
   const [viewLayout, setViewLayout] = useState<'standard' | 'landscape'>('landscape');
   const [hoveredPoint, setHoveredPoint] = useState<{
     index: number;
@@ -176,10 +185,15 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
       .then((tList) => {
         setTrainees(tList);
         if (tList.length > 0) {
-          // If no trainee selected or current selected is not in this trade, pick first
           setSelectedTraineeId((prev) => {
-            const exists = tList.some((t) => t.id === prev);
-            return exists ? prev : tList[0].id;
+            if (prev && tList.some((t) => t.id === prev)) return prev;
+            if (
+              userPreferences?.selectedProgressTraineeId &&
+              tList.some((t) => t.id === userPreferences.selectedProgressTraineeId)
+            ) {
+              return userPreferences.selectedProgressTraineeId;
+            }
+            return tList[0].id;
           });
         } else {
           setSelectedTraineeId('');
@@ -188,6 +202,19 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
       .catch((err) => console.error('Failed to load trainees:', err))
       .finally(() => setLoading(false));
   }, [tradeId]);
+
+  // Persist user selections cleanly
+  useEffect(() => {
+    if (selectedTraineeId && selectedTraineeId !== userPreferences?.selectedProgressTraineeId) {
+      onUpdatePreferences?.({ selectedProgressTraineeId: selectedTraineeId });
+    }
+  }, [selectedTraineeId]);
+
+  useEffect(() => {
+    if (selectedBreakdownMonth && selectedBreakdownMonth !== userPreferences?.selectedBreakdownMonth) {
+      onUpdatePreferences?.({ selectedBreakdownMonth });
+    }
+  }, [selectedBreakdownMonth]);
 
   // 2. Load Trainee Specific Data (Assessments, Attendance, Leaves)
   useEffect(() => {
@@ -203,9 +230,10 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
       .then((data) => {
         setAssessments(data);
         if (data.length > 0) {
-          // Default breakdown month to latest assessment month
           const sorted = [...data].sort((a, b) => b.month.localeCompare(a.month));
-          setSelectedBreakdownMonth(sorted[0].month);
+          setSelectedBreakdownMonth((prev) =>
+            prev && sorted.some((a) => a.month === prev) ? prev : sorted[0].month
+          );
         }
       })
       .catch(() => setAssessments([]));

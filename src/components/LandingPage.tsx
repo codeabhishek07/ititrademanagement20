@@ -26,6 +26,7 @@ import { requestPasswordReset, resetPasswordWithToken } from '../api.ts';
 
 interface LandingPageProps {
   onLogin: (params: { role: UserRole; email: string; password?: string }) => Promise<void>;
+  onGoogleLogin?: (preferredRole?: UserRole) => Promise<void>;
   onCustomLogin?: (params: { role: UserRole; email: string; password?: string }) => void;
   onSelectRole?: (role: UserRole) => void;
   trades: Trade[];
@@ -34,6 +35,7 @@ interface LandingPageProps {
 
 export const LandingPage: React.FC<LandingPageProps> = ({
   onLogin,
+  onGoogleLogin,
   onCustomLogin,
   trades,
   sessions,
@@ -43,6 +45,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
   // Password Recovery Flow State
@@ -264,7 +267,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </span>
               <span className="flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5 text-emerald-600" />
-                GPS Geofence: 7:00 AM – 10:00 AM (Radius 400m)
+                GPS Geofence: 7:00 AM – 3:00 PM (Auto-Absent: 5:00 PM)
               </span>
               <span className="flex items-center gap-1.5">
                 <Building2 className="w-3.5 h-3.5 text-blue-600" />
@@ -441,10 +444,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </div>
             </div>
 
-            <div className="pt-2">
+            <div className="pt-2 space-y-2.5">
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || googleLoading}
                 className="w-full py-3 px-4 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-400 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2 shadow-xs cursor-pointer disabled:cursor-not-allowed"
               >
                 {loading ? (
@@ -459,15 +462,41 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   </>
                 )}
               </button>
+
+              {onGoogleLogin && (
+                <button
+                  type="button"
+                  disabled={loading || googleLoading}
+                  onClick={async () => {
+                    setErrorMessage('');
+                    try {
+                      setGoogleLoading(true);
+                      await onGoogleLogin(selectedRole);
+                    } catch (err: any) {
+                      setErrorMessage(err.message || 'Google Sign-In failed.');
+                    } finally {
+                      setGoogleLoading(false);
+                    }
+                  }}
+                  className="w-full py-2.5 px-4 bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 font-semibold rounded-lg transition-colors flex items-center justify-center gap-2 shadow-xs cursor-pointer disabled:opacity-60"
+                >
+                  <ShieldCheck className="w-4 h-4 text-blue-600" />
+                  <span>
+                    {googleLoading
+                      ? 'Authenticating with Google...'
+                      : 'Sign in with Google (Firebase Auth)'}
+                  </span>
+                </button>
+              )}
             </div>
           </form>
 
           <div className="mt-6 pt-5 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
             <span className="flex items-center gap-1">
               <Lock className="w-3 h-3 text-emerald-600" />
-              Secure Encrypted Authentication
+              Persistent Firebase Cloud Auth &amp; Firestore Sync
             </span>
-            <span>Version 2.4.0 (Production)</span>
+            <span>Version 2.6.0 (Production)</span>
           </div>
         </div>
 
@@ -483,7 +512,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <li className="flex items-start gap-2.5">
                 <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                 <span>
-                  <strong>GPS Geofenced Attendance:</strong> Trainees must mark daily attendance between 7:00 AM and 10:00 AM while physically inside the 400m campus boundary.
+                  <strong>GPS Geofenced Attendance:</strong> Trainees must mark daily attendance between 7:00 AM and 3:00 PM while inside the institutional campus boundary (auto-absent runs at 5:00 PM).
                 </span>
               </li>
               <li className="flex items-start gap-2.5">

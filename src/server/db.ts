@@ -5,9 +5,12 @@ import {
   seedDatabaseToFirestore,
   syncDiffToFirestore,
   persistItemToFirestore,
+  persistBatchToFirestore,
   deleteItemFromFirestore,
   purgeAllDemoDocumentsFromFirestore,
+  flushPendingRetryOps,
   isDemoIdOrName,
+  type PendingFirestoreOp,
 } from './firestoreAdapter.ts';
 import type {
   SystemSettings,
@@ -17,7 +20,6 @@ import type {
   TrainingOfficer,
   Trainee,
   AttendanceRecord,
-  AttendanceStatus,
   LeaveRequest,
   WarningNotice,
   InventoryItem,
@@ -28,6 +30,9 @@ import type {
   WeeklyPlan,
   TraineeAssessment,
   HolidayRecord,
+  StoredDocumentRecord,
+  UserPreferences,
+  AuthSessionRecord,
 } from '../types.ts';
 
 export interface DatabaseSchema {
@@ -48,12 +53,14 @@ export interface DatabaseSchema {
   demonstrationPlans: DemonstrationPlan[];
   weeklyPlans: WeeklyPlan[];
   assessments: TraineeAssessment[];
+  documents: StoredDocumentRecord[];
+  userPreferences: UserPreferences[];
+  authSessions: AuthSessionRecord[];
 }
 
 const DATA_DIR = path.resolve(process.cwd(), 'data');
 const DATA_FILE = path.join(DATA_DIR, 'iti_db.json');
 
-// Raigarh ITI Campus GPS Coords (Chakradhar Nagar / Boirdadar ITI Campus Raigarh)
 const DEFAULT_CAMPUS_LAT = 21.8958;
 const DEFAULT_CAMPUS_LNG = 83.4133;
 
@@ -134,8 +141,6 @@ function getInitialDatabase(): DatabaseSchema {
     { id: 'mwd_9', sessionId: 'session_2025_2026', month: '2026-04', totalDays: 30, workingDays: 22, holidays: 8, remarks: 'Ambedkar Jayanti, Ram Navami' },
     { id: 'mwd_10', sessionId: 'session_2025_2026', month: '2026-05', totalDays: 31, workingDays: 25, holidays: 6, remarks: 'Regular trade practical tests' },
   ];
-
-  const holidays: HolidayRecord[] = [];
 
   const trades: Trade[] = [
     {
@@ -246,11 +251,6 @@ function getInitialDatabase(): DatabaseSchema {
     },
   ];
 
-  const trainees: Trainee[] = [];
-  const attendance: AttendanceRecord[] = [];
-  const leaves: LeaveRequest[] = [];
-  const warnings: WarningNotice[] = [];
-
   const inventory: InventoryItem[] = [
     {
       id: 'inv_elec_1',
@@ -352,36 +352,37 @@ function getInitialDatabase(): DatabaseSchema {
     },
   ];
 
-  const indents: IndentRecord[] = [];
-  const auditLogs: AuditLog[] = [];
-  const lessonPlans: LessonPlan[] = [];
-  const demonstrationPlans: DemonstrationPlan[] = [];
-  const weeklyPlans: WeeklyPlan[] = [];
-  const assessments: TraineeAssessment[] = [];
-
   return {
     settings,
     sessions,
     monthlyWorkingDays,
-    holidays,
+    holidays: [],
     trades,
     officers,
-    trainees,
-    attendance,
-    leaves,
-    warnings,
+    trainees: [],
+    attendance: [],
+    leaves: [],
+    warnings: [],
     inventory,
-    indents,
-    auditLogs,
-    lessonPlans,
-    demonstrationPlans,
-    weeklyPlans,
-    assessments,
+    indents: [],
+    auditLogs: [],
+    lessonPlans: [],
+    demonstrationPlans: [],
+    weeklyPlans: [],
+    assessments: [],
+    documents: [],
+    userPreferences: [],
+    authSessions: [],
   };
 }
 
 class Database {
   private data: DatabaseSchema;
+  private initPromise: Promise<void> | null = null;
+  private isFirestoreInitialized = false;
+  private firestoreStatus: 'connecting' | 'connected' | 'degraded' = 'connecting';
+  private syncTimer: NodeJS.Timeout | null = null;
+  private lastSyncedData: DatabaseSchema | null = null;
 
   constructor() {
     this.data = this.load();
@@ -398,7 +399,6 @@ class Database {
         const parsed = JSON.parse(raw);
         const initial = getInitialDatabase();
 
-        // Strictly filter out any demo or dummy records
         const cleanTrainees = (Array.isArray(parsed.trainees) ? parsed.trainees : []).filter((t: any) => !isDemoIdOrName(t));
         const validTraineeIds = new Set(cleanTrainees.map((t: any) => t.id));
 
@@ -421,7 +421,6 @@ class Database {
         const cleanDemoPlans = (Array.isArray(parsed.demonstrationPlans) ? parsed.demonstrationPlans : []).filter((p: any) => !isDemoIdOrName(p));
         const cleanWeeklyPlans = (Array.isArray(parsed.weeklyPlans) ? parsed.weeklyPlans : []).filter((p: any) => !isDemoIdOrName(p));
         const cleanAuditLogs = (Array.isArray(parsed.auditLogs) ? parsed.auditLogs : []).filter((log: any) => !isDemoIdOrName(log));
-
         const cleanHolidays = (Array.isArray(parsed.holidays) ? parsed.holidays : []).filter((h: any) => !isDemoIdOrName(h));
 
         const merged: DatabaseSchema = {
@@ -438,22 +437,21 @@ class Database {
           demonstrationPlans: cleanDemoPlans,
           weeklyPlans: cleanWeeklyPlans,
           auditLogs: cleanAuditLogs,
+          documents: Array.isArray(parsed.documents) ? parsed.documents : [],
+          userPreferences: Array.isArray(parsed.userPreferences) ? parsed.userPreferences : [],
+          authSessions: Array.isArray(parsed.authSessions) ? parsed.authSessions : [],
         };
         this.saveDirect(merged);
         return merged;
       }
     } catch (err) {
-      console.error('Error loading database file, initializing defaults:', err);
+      console.error('Error loading local cache file:', err);
     }
 
     const initial = getInitialDatabase();
     this.saveDirect(initial);
     return initial;
   }
-
-  private isFirestoreInitialized: boolean = false;
-  private syncTimer: NodeJS.Timeout | null = null;
-  private lastSyncedData: DatabaseSchema | null = null;
 
   private saveDirect(dataToSave: DatabaseSchema) {
     try {
@@ -462,21 +460,40 @@ class Database {
       }
       fs.writeFileSync(DATA_FILE, JSON.stringify(dataToSave, null, 2), 'utf-8');
     } catch (err) {
-      console.error('Error writing database to disk:', err);
+      console.error('Error writing local mirror file:', err);
     }
   }
 
-  /**
-   * Initializes Firestore on server boot.
-   * Loads saved institutional data from Firestore if present, or seeds initial data to Firestore if empty.
-   */
-  public async initFirestore(): Promise<void> {
-    try {
-      console.log('[Firestore] Checking persistent cloud database connection...');
-      const cloudData = await loadDatabaseFromFirestore();
+  public getFirestoreConnectionStatus() {
+    return {
+      initialized: this.isFirestoreInitialized,
+      status: this.firestoreStatus,
+    };
+  }
 
-      if (cloudData && cloudData.settings && Array.isArray(cloudData.trades) && cloudData.trades.length > 0) {
-        console.log('[Firestore] Successfully restored persistent database from Firestore cloud!');
+  /**
+   * Ensures Firestore initialization completes (bounded so startup never hangs indefinitely),
+   * preventing requests from reading empty uninitialized memory.
+   */
+  public async ensureInitialized(): Promise<void> {
+    if (this.isFirestoreInitialized) return;
+    if (!this.initPromise) {
+      this.initPromise = this.initFirestore();
+    }
+    await Promise.race([
+      this.initPromise,
+      new Promise<void>((resolve) => setTimeout(resolve, 16000)),
+    ]);
+  }
+
+  public async initFirestore(): Promise<void> {
+    if (this.isFirestoreInitialized) return;
+    try {
+      console.log('[Firestore] Loading permanent institutional state...');
+      const loadResult = await loadDatabaseFromFirestore();
+
+      if (loadResult.status === 'ok') {
+        const cloudData = loadResult.data;
         const cloudSettings = cloudData.settings || {};
         const rawWindow = cloudSettings.attendanceWindow || {};
         const mergedWindow = {
@@ -487,7 +504,6 @@ class Database {
           autoAbsentHour: rawWindow.autoAbsentHour !== undefined ? rawWindow.autoAbsentHour : 17,
           autoAbsentMinute: rawWindow.autoAbsentMinute !== undefined ? rawWindow.autoAbsentMinute : 0,
         };
-        // Ensure user's new attendance window of 7:00 to 15:00 and 17:00 auto absent takes precedence if older 10 or 11 is stored
         if (mergedWindow.endHour <= 11) {
           mergedWindow.endHour = 15;
           mergedWindow.startHour = 7;
@@ -526,7 +542,7 @@ class Database {
           warnings: (Array.isArray(cloudData.warnings) ? cloudData.warnings : []).filter(
             (w: any) => validTraineeIds.has(w.traineeId) && !isDemoIdOrName(w)
           ),
-          inventory: Array.isArray(cloudData.inventory) ? cloudData.inventory : this.data.inventory,
+          inventory: Array.isArray(cloudData.inventory) && cloudData.inventory.length > 0 ? cloudData.inventory : this.data.inventory,
           indents: (Array.isArray(cloudData.indents) ? cloudData.indents : []).filter(
             (i: any) => validTraineeIds.has(i.traineeId) && !isDemoIdOrName(i)
           ),
@@ -534,46 +550,91 @@ class Database {
           lessonPlans: (Array.isArray(cloudData.lessonPlans) ? cloudData.lessonPlans : []).filter((p: any) => !isDemoIdOrName(p)),
           demonstrationPlans: (Array.isArray(cloudData.demonstrationPlans) ? cloudData.demonstrationPlans : []).filter((p: any) => !isDemoIdOrName(p)),
           weeklyPlans: (Array.isArray(cloudData.weeklyPlans) ? cloudData.weeklyPlans : []).filter((p: any) => !isDemoIdOrName(p)),
+          documents: Array.isArray(cloudData.documents) ? cloudData.documents : [],
+          userPreferences: Array.isArray(cloudData.userPreferences) ? cloudData.userPreferences : [],
+          authSessions: Array.isArray(cloudData.authSessions) ? cloudData.authSessions : [],
         };
         this.lastSyncedData = JSON.parse(JSON.stringify(this.data));
-        // Also update local cache file
         this.saveDirect(this.data);
-        // Clean up any leftover demo docs in background without blocking startup
+        this.firestoreStatus = 'connected';
         purgeAllDemoDocumentsFromFirestore().catch(() => {});
-      } else {
-        console.log('[Firestore] Cloud database is empty or unreachable. Continuing with local state...');
+      } else if (loadResult.status === 'empty') {
+        console.log('[Firestore] Empty database detected — seeding initial institutional structure...');
         await seedDatabaseToFirestore(this.data);
         this.lastSyncedData = JSON.parse(JSON.stringify(this.data));
+        this.firestoreStatus = 'connected';
+      } else {
+        // Error/timeout loading Firestore: do NOT overwrite Firestore! Retain local mirror and flush retries later
+        console.warn('[Firestore] Could not reach Firestore cleanly on boot:', loadResult.error);
+        this.firestoreStatus = 'degraded';
       }
       this.isFirestoreInitialized = true;
     } catch (err) {
-      console.error('[Firestore] Initialization notice:', err);
+      console.error('[Firestore] Boot exception:', err);
+      this.firestoreStatus = 'degraded';
+      this.isFirestoreInitialized = true;
     }
   }
 
-  /**
-   * Debounced diff synchronization of changed records to Firestore.
-   */
   public scheduleFirestoreSync() {
     if (this.syncTimer) {
       clearTimeout(this.syncTimer);
     }
     this.syncTimer = setTimeout(async () => {
       try {
+        await flushPendingRetryOps();
         const snapshot = JSON.parse(JSON.stringify(this.data));
         const ok = await syncDiffToFirestore(this.lastSyncedData, snapshot);
         if (ok) {
           this.lastSyncedData = snapshot;
+          this.firestoreStatus = 'connected';
         }
       } catch (err) {
         console.error('[Firestore] Background sync notice:', err);
       }
-    }, 1500);
+    }, 1200);
   }
 
   /**
-   * Immediately saves an individual item to Firestore.
+   * Immediately writes a single document to Firestore and awaits completion before HTTP response returns.
    */
+  public async persistItemNow(collName: string, id: string, data: any, typeTag?: string): Promise<boolean> {
+    this.saveDirect(this.data);
+    if (isDemoIdOrName({ ...data, id })) return true;
+    const ok = await persistItemToFirestore(collName, id, data, typeTag);
+    if (ok) {
+      this.lastSyncedData = JSON.parse(JSON.stringify(this.data));
+      this.firestoreStatus = 'connected';
+    }
+    return ok;
+  }
+
+  /**
+   * Immediately deletes a single document from Firestore and awaits completion.
+   */
+  public async deleteItemNow(collName: string, id: string): Promise<boolean> {
+    this.saveDirect(this.data);
+    const ok = await deleteItemFromFirestore(collName, id);
+    if (ok) {
+      this.lastSyncedData = JSON.parse(JSON.stringify(this.data));
+      this.firestoreStatus = 'connected';
+    }
+    return ok;
+  }
+
+  /**
+   * Immediately executes an atomic Firestore batch commit for multiple documents.
+   */
+  public async persistBatchNow(ops: PendingFirestoreOp[]): Promise<boolean> {
+    this.saveDirect(this.data);
+    const ok = await persistBatchToFirestore(ops);
+    if (ok) {
+      this.lastSyncedData = JSON.parse(JSON.stringify(this.data));
+      this.firestoreStatus = 'connected';
+    }
+    return ok;
+  }
+
   public persistItem(collName: string, id: string, data: any, typeTag?: string) {
     if (isDemoIdOrName({ ...data, id })) return;
     persistItemToFirestore(collName, id, data, typeTag).catch((err) => {
@@ -581,23 +642,19 @@ class Database {
     });
   }
 
-  /**
-   * Immediately deletes an individual item from Firestore.
-   */
   public deleteItem(collName: string, id: string) {
     deleteItemFromFirestore(collName, id).catch((err) => {
       console.warn(`[Firestore] Failed to delete ${collName}/${id}:`, err);
     });
   }
 
-  /**
-   * Forces an immediate, synchronous upload of changed records to Firestore.
-   */
   public async forceFirestoreSync(): Promise<void> {
+    await flushPendingRetryOps();
     const snapshot = JSON.parse(JSON.stringify(this.data));
     const ok = await syncDiffToFirestore(this.lastSyncedData, snapshot);
     if (ok) {
       this.lastSyncedData = snapshot;
+      this.firestoreStatus = 'connected';
     }
   }
 
@@ -612,6 +669,9 @@ class Database {
     if (!Array.isArray(this.data.lessonPlans)) this.data.lessonPlans = [];
     if (!Array.isArray(this.data.demonstrationPlans)) this.data.demonstrationPlans = [];
     if (!Array.isArray(this.data.weeklyPlans)) this.data.weeklyPlans = [];
+    if (!Array.isArray(this.data.documents)) this.data.documents = [];
+    if (!Array.isArray(this.data.userPreferences)) this.data.userPreferences = [];
+    if (!Array.isArray(this.data.authSessions)) this.data.authSessions = [];
     return this.data;
   }
 
@@ -629,8 +689,6 @@ class Database {
     }
 
     const initial = getInitialDatabase();
-
-    // Strictly filter out any demo or dummy records from imported backup
     const cleanTrainees = (Array.isArray(rawData.trainees) ? rawData.trainees : []).filter((t: any) => !isDemoIdOrName(t));
     const validTraineeIds = new Set(cleanTrainees.map((t: any) => t.id));
 
@@ -674,6 +732,9 @@ class Database {
       demonstrationPlans: cleanDemoPlans,
       weeklyPlans: cleanWeeklyPlans,
       assessments: cleanAssessments,
+      documents: Array.isArray(rawData.documents) ? rawData.documents : this.data.documents,
+      userPreferences: Array.isArray(rawData.userPreferences) ? rawData.userPreferences : this.data.userPreferences,
+      authSessions: this.data.authSessions,
     };
 
     this.data = merged;
@@ -698,11 +759,11 @@ class Database {
       ...log,
     };
     this.data.auditLogs.unshift(entry);
-    // keep max 300 logs
     if (this.data.auditLogs.length > 300) {
       this.data.auditLogs = this.data.auditLogs.slice(0, 300);
     }
-    this.save();
+    this.saveDirect(this.data);
+    this.persistItem('auditLogs', entry.id, entry);
     return entry;
   }
 }

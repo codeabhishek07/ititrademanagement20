@@ -13,7 +13,7 @@ import type { DatabaseSchema } from './db.ts';
 /**
  * Strips undefined properties recursively so Firestore setDoc does not throw
  */
-function cleanForFirestore<T>(obj: T): T {
+export function cleanForFirestore<T>(obj: T): T {
   if (obj === null || obj === undefined) return obj;
   if (Array.isArray(obj)) {
     return obj.map((item) => cleanForFirestore(item)) as any;
@@ -31,7 +31,7 @@ function cleanForFirestore<T>(obj: T): T {
 }
 
 /**
- * Recognizes any sample, dummy, or test records so they never enter production state
+ * Recognizes ONLY legacy seeded demo/dummy records so real bulk-imported or manual trainees are NEVER stripped.
  */
 export const isDemoIdOrName = (item: any): boolean => {
   if (!item) return false;
@@ -41,11 +41,11 @@ export const isDemoIdOrName = (item: any): boolean => {
   const indentNo = String(item.indentNo || '').toLowerCase();
   const refNo = String(item.refNumber || '').toLowerCase();
 
-  // Demo trainee IDs
+  // Exact legacy demo trainee IDs (never block tr_<timestamp> or bulk real imports)
   if (['tr_1', 'tr_2', 'tr_3', 'tr_4', 'tr_5', 'tr_6', 'tr_7', 'tr_1794498305273'].includes(id)) return true;
-  if (id.startsWith('tr_bulk_') || id.startsWith('test_')) return true;
+  if (id.startsWith('test_')) return true;
 
-  // Demo trainee names
+  // Exact legacy demo trainee names
   if (
     name.includes('rohan sahu') ||
     name.includes('pooja kashyap') ||
@@ -54,13 +54,12 @@ export const isDemoIdOrName = (item: any): boolean => {
     name.includes('vikas tande') ||
     name.includes('dinesh yadav') ||
     name.includes('neha agrawal') ||
-    name.includes('aakash verma') ||
-    name.startsWith('trainee ')
+    name.includes('aakash verma')
   ) {
     return true;
   }
 
-  // Demo rolls
+  // Exact legacy demo rolls
   if (
     roll.includes('ele-014') ||
     roll.includes('ele-015') ||
@@ -69,13 +68,12 @@ export const isDemoIdOrName = (item: any): boolean => {
     roll.includes('ele-018') ||
     roll.includes('elec-101') ||
     roll.includes('fit-001') ||
-    roll.includes('cop-005') ||
-    roll.includes('test-')
+    roll.includes('cop-005')
   ) {
     return true;
   }
 
-  // Demo indents / warnings / plans / sample assessments
+  // Exact legacy demo indents / warnings / plans / sample assessments
   if (['ind_01', 'ind_02', 'warn_1', 'lp_01', 'lp_02', 'dp_01', 'wp_1', 'asm_1'].includes(id)) return true;
   if (indentNo.includes('ind/2026/elec/089') || indentNo.includes('ind/2026/elec/085')) return true;
   if (refNo.includes('iti-rai/elec/warn/2025/03')) return true;
@@ -89,20 +87,36 @@ export function isFirestoreWriteQuotaExceeded(): boolean {
   return Date.now() < writeQuotaExceededUntil;
 }
 
-function handleWriteError(context: string, err: any) {
+export interface PendingFirestoreOp {
+  type: 'set' | 'delete';
+  coll: string;
+  id: string;
+  data?: any;
+}
+
+const pendingRetryOps = new Map<string, PendingFirestoreOp>();
+
+function enqueueRetryOp(op: PendingFirestoreOp) {
+  pendingRetryOps.set(`${op.coll}/${op.id}`, op);
+}
+
+export function getPendingRetryCount(): number {
+  return pendingRetryOps.size;
+}
+
+function handleWriteError(context: string, err: any): boolean {
   const msg = String(err?.message || err || '');
   if (
     msg.includes('RESOURCE_EXHAUSTED') ||
     msg.includes('resource-exhausted') ||
-    msg.includes('Quota') ||
-    msg.includes('timeout')
+    msg.includes('Quota')
   ) {
-    // Pause Firestore writes for 10 minutes to prevent gRPC backoff hang and preserve local persistence
     writeQuotaExceededUntil = Date.now() + 10 * 60 * 1000;
-    console.warn(`[Firestore Write Paused - ${context}]: ${msg}`);
-  } else {
-    console.warn(`[Firestore ${context} notice]:`, err);
+    console.warn(`[Firestore Quota Reached - ${context}]: ${msg}`);
+    return true;
   }
+  console.warn(`[Firestore ${context} error]:`, msg);
+  return false;
 }
 
 async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -119,32 +133,29 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): P
   }
 }
 
+export type LoadFirestoreResult =
+  | { status: 'ok'; data: DatabaseSchema }
+  | { status: 'empty' }
+  | { status: 'error'; error: string };
+
 /**
- * Loads the complete database schema from Firestore.
- * Strictly filters out any lingering demo accounts or dummy records.
+ * Loads the complete database schema from Firestore cleanly without misidentifying timeouts as empty DB.
  */
-export async function loadDatabaseFromFirestore(): Promise<DatabaseSchema | null> {
+export async function loadDatabaseFromFirestore(): Promise<LoadFirestoreResult> {
   try {
     const settingsRef = doc(firestore, 'settings', 'main');
-    const settingsSnap = await withTimeout(getDoc(settingsRef), 6000, 'getDoc(settings/main)');
+    const settingsSnap = await withTimeout(getDoc(settingsRef), 15000, 'getDoc(settings/main)');
 
     if (!settingsSnap.exists()) {
-      console.log('Firestore is empty or not yet seeded. Initial clean seed will be created.');
-      return null;
+      console.log('[Firestore] No settings/main found. Treating Firestore as unseeded.');
+      return { status: 'empty' };
     }
 
-    console.log('Found persistent database in Firestore! Loading collections...');
     const settings = settingsSnap.data() as any;
 
-    // Helper to fetch entire collection
     const fetchCollection = async (collName: string) => {
-      try {
-        const snap = await withTimeout(getDocs(collection(firestore, collName)), 6000, `getDocs(${collName})`);
-        return snap.docs.map((d) => ({ ...d.data(), id: d.id } as any));
-      } catch (err) {
-        console.warn(`Failed to fetch ${collName} from Firestore:`, err);
-        return [];
-      }
+      const snap = await withTimeout(getDocs(collection(firestore, collName)), 15000, `getDocs(${collName})`);
+      return snap.docs.map((d) => ({ ...d.data(), id: d.id } as any));
     };
 
     const [
@@ -162,6 +173,9 @@ export async function loadDatabaseFromFirestore(): Promise<DatabaseSchema | null
       rawAuditLogs,
       rawAssessments,
       rawPlans,
+      documents,
+      userPreferences,
+      authSessions,
     ] = await Promise.all([
       fetchCollection('sessions'),
       fetchCollection('workingDays'),
@@ -177,9 +191,11 @@ export async function loadDatabaseFromFirestore(): Promise<DatabaseSchema | null
       fetchCollection('auditLogs'),
       fetchCollection('assessments'),
       fetchCollection('plans'),
+      fetchCollection('documents'),
+      fetchCollection('userPreferences'),
+      fetchCollection('authSessions'),
     ]);
 
-    // Strictly filter out any demo records
     const trainees = (rawTrainees || []).filter((t: any) => !isDemoIdOrName(t));
     const validTraineeIds = new Set(trainees.map((t: any) => t.id));
 
@@ -211,37 +227,41 @@ export async function loadDatabaseFromFirestore(): Promise<DatabaseSchema | null
     const weeklyPlans = plans.filter((p: any) => p.__type === 'weekly') || [];
 
     console.log(
-      `Clean state loaded from Firestore: ${trainees.length} Trainees, ${assessments.length} Assessments, ${trades.length} Trades, ${sessions.length} Sessions, ${attendance.length} Attendance records.`
+      `[Firestore Loaded] Trainees: ${trainees.length}, Attendance: ${attendance.length}, Assessments: ${assessments.length}, Holidays: ${holidays.length}, Documents: ${documents.length}, UserPrefs: ${userPreferences.length}`
     );
 
     return {
-      settings,
-      sessions,
-      monthlyWorkingDays,
-      holidays: holidays || [],
-      trades,
-      officers,
-      trainees,
-      attendance,
-      leaves,
-      warnings,
-      inventory,
-      indents,
-      auditLogs,
-      lessonPlans,
-      demonstrationPlans,
-      weeklyPlans,
-      assessments,
+      status: 'ok',
+      data: {
+        settings,
+        sessions,
+        monthlyWorkingDays,
+        holidays: holidays || [],
+        trades,
+        officers,
+        trainees,
+        attendance,
+        leaves,
+        warnings,
+        inventory,
+        indents,
+        auditLogs,
+        lessonPlans,
+        demonstrationPlans,
+        weeklyPlans,
+        assessments,
+        documents: documents || [],
+        userPreferences: userPreferences || [],
+        authSessions: authSessions || [],
+      },
     };
-  } catch (err) {
-    console.error('Error connecting or loading from Firestore:', err);
-    return null;
+  } catch (err: any) {
+    const msg = String(err?.message || err || '');
+    console.error('[Firestore] Load error:', msg);
+    return { status: 'error', error: msg };
   }
 }
 
-/**
- * Permanently removes all demo records, test trainees, and sample documents from Firestore.
- */
 export async function purgeAllDemoDocumentsFromFirestore(): Promise<number> {
   if (isFirestoreWriteQuotaExceeded()) return 0;
   let totalDeleted = 0;
@@ -259,7 +279,7 @@ export async function purgeAllDemoDocumentsFromFirestore(): Promise<number> {
   for (const collName of collectionsToClean) {
     if (isFirestoreWriteQuotaExceeded()) break;
     try {
-      const snap = await withTimeout(getDocs(collection(firestore, collName)), 5000, `getDocs(${collName})`);
+      const snap = await withTimeout(getDocs(collection(firestore, collName)), 8000, `getDocs(${collName})`);
       if (!snap.empty) {
         const refsToDelete = snap.docs.filter((docSnap) =>
           isDemoIdOrName({ ...docSnap.data(), id: docSnap.id })
@@ -272,11 +292,8 @@ export async function purgeAllDemoDocumentsFromFirestore(): Promise<number> {
           for (const docSnap of chunk) {
             batch.delete(docSnap.ref);
           }
-          await withTimeout(batch.commit(), 5000, `purge(${collName})`);
+          await withTimeout(batch.commit(), 8000, `purge(${collName})`);
           totalDeleted += chunk.length;
-        }
-        if (refsToDelete.length > 0) {
-          console.log(`[Firestore Purge] Permanently removed ${refsToDelete.length} demo items from '${collName}'.`);
         }
       }
     } catch (err) {
@@ -289,8 +306,7 @@ export async function purgeAllDemoDocumentsFromFirestore(): Promise<number> {
 }
 
 /**
- * Diff-based synchronization: only writes changed/added documents and deletes removed ones.
- * Prevents burning Firestore daily write quota on unchanged collections.
+ * Diff-based synchronization for reconciliation/manual cloud sync.
  */
 export async function syncDiffToFirestore(
   prevData: DatabaseSchema | null,
@@ -303,22 +319,28 @@ export async function syncDiffToFirestore(
   }
 
   try {
-    const ops: Array<{ type: 'set' | 'delete'; coll: string; id: string; data?: any }> = [];
+    const ops: PendingFirestoreOp[] = [];
 
     if (JSON.stringify(prevData.settings) !== JSON.stringify(nextData.settings)) {
       ops.push({ type: 'set', coll: 'settings', id: 'main', data: nextData.settings });
     }
 
-    const diffCollection = (collName: string, prevList: any[], nextList: any[], typeTag?: string) => {
+    const diffCollection = (
+      collName: string,
+      prevList: any[],
+      nextList: any[],
+      typeTag?: string,
+      idKey: string = 'id'
+    ) => {
       const prevMap = new Map<string, any>();
       for (const item of (prevList || []).filter((x) => !isDemoIdOrName(x))) {
-        const rawId = String(item.id || item.code || '');
+        const rawId = String(item[idKey] || item.id || item.code || '');
         if (rawId) prevMap.set(rawId.replace(/[^a-zA-Z0-9_\-]/g, '_'), item);
       }
 
       const nextMap = new Map<string, any>();
       for (const item of (nextList || []).filter((x) => !isDemoIdOrName(x))) {
-        const rawId = String(item.id || item.code || Math.random().toString(36).substring(2));
+        const rawId = String(item[idKey] || item.id || item.code || Math.random().toString(36).substring(2));
         const id = rawId.replace(/[^a-zA-Z0-9_\-]/g, '_');
         const payload = typeTag ? { ...item, __type: typeTag } : item;
         nextMap.set(id, payload);
@@ -348,70 +370,50 @@ export async function syncDiffToFirestore(
     diffCollection('inventory', prevData.inventory, nextData.inventory);
     diffCollection('indents', prevData.indents, nextData.indents);
     diffCollection('assessments', prevData.assessments, nextData.assessments);
+    diffCollection('documents', prevData.documents || [], nextData.documents || []);
+    diffCollection('userPreferences', prevData.userPreferences || [], nextData.userPreferences || [], undefined, 'userId');
+    diffCollection('authSessions', prevData.authSessions || [], nextData.authSessions || [], undefined, 'token');
     diffCollection('auditLogs', (prevData.auditLogs || []).slice(0, 50), (nextData.auditLogs || []).slice(0, 50));
     diffCollection('plans', prevData.lessonPlans, nextData.lessonPlans, 'lesson');
     diffCollection('plans', prevData.demonstrationPlans, nextData.demonstrationPlans, 'demo');
     diffCollection('plans', prevData.weeklyPlans, nextData.weeklyPlans, 'weekly');
 
     if (ops.length === 0) return true;
-
-    const chunkSize = 400;
-    for (let i = 0; i < ops.length; i += chunkSize) {
-      if (isFirestoreWriteQuotaExceeded()) return false;
-      const chunk = ops.slice(i, i + chunkSize);
-      const batch = writeBatch(firestore);
-      for (const op of chunk) {
-        const docRef = doc(firestore, op.coll, op.id);
-        if (op.type === 'delete') {
-          batch.delete(docRef);
-        } else {
-          batch.set(docRef, cleanForFirestore(op.data), { merge: true });
-        }
-      }
-      await withTimeout(batch.commit(), 5000, `syncDiff(${chunk.length} ops)`);
-    }
-
-    console.log(`[Firestore] Synced ${ops.length} changed record(s) to cloud.`);
-    return true;
+    return await persistBatchToFirestore(ops);
   } catch (err) {
     handleWriteError('syncDiff', err);
     return false;
   }
 }
 
-/**
- * Persists clean production state to Firestore.
- */
 export async function seedDatabaseToFirestore(dbData: DatabaseSchema): Promise<void> {
   if (isFirestoreWriteQuotaExceeded()) return;
   try {
-    // 1. Settings
     if (dbData.settings) {
       await withTimeout(
         setDoc(doc(firestore, 'settings', 'main'), cleanForFirestore(dbData.settings), { merge: true }),
-        5000,
+        10000,
         'setDoc(settings/main)'
       );
     }
 
-    // Helper to batch write a list
-    const batchWriteList = async (collName: string, items: any[], typeTag?: string) => {
+    const batchWriteList = async (collName: string, items: any[], typeTag?: string, idKey: string = 'id') => {
       if (isFirestoreWriteQuotaExceeded()) return;
       const cleanItems = (items || []).filter((item) => !isDemoIdOrName(item));
       if (!Array.isArray(cleanItems) || cleanItems.length === 0) return;
-      const chunkSize = 400; // Firestore 500-limit safety buffer
+      const chunkSize = 400;
       for (let i = 0; i < cleanItems.length; i += chunkSize) {
         if (isFirestoreWriteQuotaExceeded()) return;
         const chunk = cleanItems.slice(i, i + chunkSize);
         const batch = writeBatch(firestore);
         for (const item of chunk) {
-          const rawId = String(item.id || item.code || Math.random().toString(36).substring(2));
+          const rawId = String(item[idKey] || item.id || item.code || Math.random().toString(36).substring(2));
           const id = rawId.replace(/[^a-zA-Z0-9_\-]/g, '_');
           const docRef = doc(firestore, collName, id);
           const dataToSave = typeTag ? { ...item, __type: typeTag } : item;
           batch.set(docRef, cleanForFirestore(dataToSave), { merge: true });
         }
-        await withTimeout(batch.commit(), 5000, `batch(${collName})`);
+        await withTimeout(batch.commit(), 10000, `batch(${collName})`);
       }
     };
 
@@ -428,50 +430,117 @@ export async function seedDatabaseToFirestore(dbData: DatabaseSchema): Promise<v
       batchWriteList('inventory', dbData.inventory),
       batchWriteList('indents', dbData.indents),
       batchWriteList('assessments', dbData.assessments),
+      batchWriteList('documents', dbData.documents || []),
+      batchWriteList('userPreferences', dbData.userPreferences || [], undefined, 'userId'),
       batchWriteList('auditLogs', dbData.auditLogs.slice(0, 50)),
       batchWriteList('plans', dbData.lessonPlans, 'lesson'),
       batchWriteList('plans', dbData.demonstrationPlans, 'demo'),
       batchWriteList('plans', dbData.weeklyPlans, 'weekly'),
     ]);
 
-    console.log('Database state verified and synced to Firestore.');
+    console.log('[Firestore] Seeded clean institutional state.');
   } catch (err) {
     handleWriteError('seedDatabase', err);
   }
 }
 
 /**
- * Persists an individual item update to Firestore in the background.
+ * Immediately persists a single document to Firestore and queues retry on transient failure.
  */
 export async function persistItemToFirestore(
   collName: string,
   rawId: string,
   itemData: any,
   typeTag?: string
-): Promise<void> {
-  if (isFirestoreWriteQuotaExceeded()) return;
-  if (isDemoIdOrName({ ...itemData, id: rawId })) return;
+): Promise<boolean> {
+  if (isDemoIdOrName({ ...itemData, id: rawId })) return true;
+  const id = String(rawId).replace(/[^a-zA-Z0-9_\-]/g, '_');
+  const payload = typeTag ? { ...itemData, __type: typeTag } : itemData;
+
+  if (isFirestoreWriteQuotaExceeded()) {
+    enqueueRetryOp({ type: 'set', coll: collName, id, data: payload });
+    return false;
+  }
 
   try {
-    const id = String(rawId).replace(/[^a-zA-Z0-9_\-]/g, '_');
     const docRef = doc(firestore, collName, id);
-    const dataToSave = typeTag ? { ...itemData, __type: typeTag } : itemData;
-    await withTimeout(setDoc(docRef, cleanForFirestore(dataToSave), { merge: true }), 5000, `setDoc(${collName}/${id})`);
+    await withTimeout(setDoc(docRef, cleanForFirestore(payload), { merge: true }), 10000, `setDoc(${collName}/${id})`);
+    pendingRetryOps.delete(`${collName}/${id}`);
+    return true;
   } catch (err) {
-    handleWriteError(`persistItem ${collName}/${rawId}`, err);
+    enqueueRetryOp({ type: 'set', coll: collName, id, data: payload });
+    handleWriteError(`persistItem ${collName}/${id}`, err);
+    return false;
   }
 }
 
 /**
- * Removes an item from Firestore.
+ * Immediately deletes a single document from Firestore and queues retry on transient failure.
  */
-export async function deleteItemFromFirestore(collName: string, rawId: string): Promise<void> {
-  if (isFirestoreWriteQuotaExceeded()) return;
-  try {
-    const id = String(rawId).replace(/[^a-zA-Z0-9_\-]/g, '_');
-    const docRef = doc(firestore, collName, id);
-    await withTimeout(deleteDoc(docRef), 5000, `deleteDoc(${collName}/${id})`);
-  } catch (err) {
-    handleWriteError(`deleteItem ${collName}/${rawId}`, err);
+export async function deleteItemFromFirestore(collName: string, rawId: string): Promise<boolean> {
+  const id = String(rawId).replace(/[^a-zA-Z0-9_\-]/g, '_');
+  if (isFirestoreWriteQuotaExceeded()) {
+    enqueueRetryOp({ type: 'delete', coll: collName, id });
+    return false;
   }
+
+  try {
+    const docRef = doc(firestore, collName, id);
+    await withTimeout(deleteDoc(docRef), 10000, `deleteDoc(${collName}/${id})`);
+    pendingRetryOps.delete(`${collName}/${id}`);
+    return true;
+  } catch (err) {
+    enqueueRetryOp({ type: 'delete', coll: collName, id });
+    handleWriteError(`deleteItem ${collName}/${id}`, err);
+    return false;
+  }
+}
+
+/**
+ * Atomically executes a batch of Firestore set/delete operations immediately.
+ */
+export async function persistBatchToFirestore(ops: PendingFirestoreOp[]): Promise<boolean> {
+  if (!ops || ops.length === 0) return true;
+  if (isFirestoreWriteQuotaExceeded()) {
+    ops.forEach((op) => enqueueRetryOp(op));
+    return false;
+  }
+
+  const chunkSize = 400;
+  try {
+    for (let i = 0; i < ops.length; i += chunkSize) {
+      if (isFirestoreWriteQuotaExceeded()) {
+        ops.slice(i).forEach((op) => enqueueRetryOp(op));
+        return false;
+      }
+      const chunk = ops.slice(i, i + chunkSize);
+      const batch = writeBatch(firestore);
+      for (const op of chunk) {
+        const cleanId = String(op.id).replace(/[^a-zA-Z0-9_\-]/g, '_');
+        const docRef = doc(firestore, op.coll, cleanId);
+        if (op.type === 'delete') {
+          batch.delete(docRef);
+        } else {
+          batch.set(docRef, cleanForFirestore(op.data), { merge: true });
+        }
+      }
+      await withTimeout(batch.commit(), 10000, `batch(${chunk.length})`);
+      for (const op of chunk) {
+        const cleanId = String(op.id).replace(/[^a-zA-Z0-9_\-]/g, '_');
+        pendingRetryOps.delete(`${op.coll}/${cleanId}`);
+      }
+    }
+    return true;
+  } catch (err) {
+    ops.forEach((op) => enqueueRetryOp(op));
+    handleWriteError('persistBatch', err);
+    return false;
+  }
+}
+
+export async function flushPendingRetryOps(): Promise<number> {
+  if (pendingRetryOps.size === 0 || isFirestoreWriteQuotaExceeded()) return 0;
+  const ops = Array.from(pendingRetryOps.values());
+  const ok = await persistBatchToFirestore(ops);
+  return ok ? ops.length : 0;
 }

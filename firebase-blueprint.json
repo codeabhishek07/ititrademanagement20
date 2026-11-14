@@ -158,6 +158,76 @@
         "remarks": { "type": "string" }
       },
       "required": ["id", "date", "title", "category"]
+    },
+    "document": {
+      "title": "StoredDocumentRecord",
+      "description": "Persistent institutional file, circular, medical certificate, or photo metadata linked to Firebase Storage or Firestore",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "fileName": { "type": "string" },
+        "mimeType": { "type": "string" },
+        "sizeBytes": { "type": "number" },
+        "category": { "type": "string" },
+        "storagePath": { "type": "string" },
+        "downloadUrl": { "type": "string" },
+        "storageProvider": { "type": "string", "enum": ["firebase_storage", "firestore_storage"] },
+        "uploadedById": { "type": "string" },
+        "uploadedByRole": { "type": "string", "enum": ["admin", "officer", "trainee"] },
+        "tradeId": { "type": "string" },
+        "traineeId": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "title", "fileName", "downloadUrl", "storageProvider", "uploadedById", "uploadedByRole", "createdAt"]
+    },
+    "storedFile": {
+      "title": "StoredFileChunk",
+      "description": "Chunked file payload stored in Cloud Firestore when Cloud Storage bucket is uninitialized",
+      "type": "object",
+      "properties": {
+        "docId": { "type": "string" },
+        "partIndex": { "type": "number" },
+        "totalChunks": { "type": "number" },
+        "mimeType": { "type": "string" },
+        "fileName": { "type": "string" },
+        "data": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["docId", "partIndex", "totalChunks", "data"]
+    },
+    "userPreference": {
+      "title": "UserPreferences",
+      "description": "Persistent user-specific workspace filters, selected tabs, and notification state across sessions",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "officer", "trainee"] },
+        "adminActiveTab": { "type": "string" },
+        "officerActiveTab": { "type": "string" },
+        "traineeActiveTab": { "type": "string" },
+        "selectedTradeId": { "type": "string" },
+        "selectedSessionId": { "type": "string" },
+        "selectedRegister": { "type": "string" },
+        "attendanceDate": { "type": "string" },
+        "historyMonth": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["userId", "role", "updatedAt"]
+    },
+    "authSession": {
+      "title": "AuthSessionRecord",
+      "description": "Persistent server-verified login session restored across browser restarts",
+      "type": "object",
+      "properties": {
+        "token": { "type": "string" },
+        "userId": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "officer", "trainee"] },
+        "createdAt": { "type": "string" },
+        "lastActiveAt": { "type": "string" },
+        "expiresAt": { "type": "string" }
+      },
+      "required": ["token", "userId", "role", "expiresAt"]
     }
   },
   "firestore": {
@@ -204,6 +274,22 @@
     "/holidays/{holidayId}": {
       "schema": "holiday",
       "description": "Admin-designated session holidays restricting attendance"
+    },
+    "/documents/{docId}": {
+      "schema": "document",
+      "description": "Persistent document metadata linked to Firebase Storage or chunked Firestore payloads"
+    },
+    "/storedFiles/{fileId}": {
+      "schema": "storedFile",
+      "description": "Binary document chunks stored safely in Cloud Firestore"
+    },
+    "/userPreferences/{userId}": {
+      "schema": "userPreference",
+      "description": "User-specific persistent workspace preferences, active tabs, and filters"
+    },
+    "/authSessions/{token}": {
+      "schema": "authSession",
+      "description": "Persistent server-verified authentication sessions"
     }
   }
 }

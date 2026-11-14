@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Header } from './components/Header.tsx';
 import { LandingPage } from './components/LandingPage.tsx';
 import { AdminDashboard } from './components/admin/AdminDashboard.tsx';
@@ -9,14 +9,27 @@ import {
   SystemSettings,
   Trade,
   AcademicSession,
+  UserPreferences,
 } from './types.ts';
-import { fetchBootstrap, loginApi, fetchTrades, fetchSessions } from './api.ts';
-import { RefreshCw, Database, CheckCircle2, AlertCircle, ArrowUpCircle, X } from 'lucide-react';
+import {
+  fetchBootstrap,
+  loginApi,
+  googleLoginApi,
+  fetchAuthSession,
+  logoutApi,
+  fetchUserPreferences,
+  saveUserPreferences,
+  getAuthToken,
+} from './api.ts';
+import {
+  signInWithGooglePopup,
+  signOutFirebaseClient,
+  subscribeFirebaseAuth,
+} from './firebase.ts';
+import { RefreshCw, Database, CheckCircle2, ArrowUpCircle, X } from 'lucide-react';
 import { OfflineIndicator } from './components/OfflineIndicator.tsx';
 import {
   triggerAutoBackup,
-  autoRestoreIfServerWashedOut,
-  checkForRestorableBackup,
   restoreBackupPayload,
   clearAllSystemBackupsAndDemoCache,
 } from './services/backupService.ts';
@@ -38,6 +51,23 @@ interface CurrentUser {
   gender?: string;
 }
 
+const LEGACY_DEMO_IDS = new Set(['tr_1', 'tr_2', 'tr_3', 'tr_4', 'tr_5', 'tr_6', 'tr_7', 'tr_1794498305273']);
+
+function isLegacyDemoSession(parsed: any): boolean {
+  const id = String(parsed?.id || '').toLowerCase();
+  const name = String(parsed?.name || '').toLowerCase();
+  return (
+    LEGACY_DEMO_IDS.has(id) ||
+    name.includes('rohan sahu') ||
+    name.includes('pooja kashyap') ||
+    name.includes('amit bhagat') ||
+    name.includes('kavita patel') ||
+    name.includes('vikas tande') ||
+    name.includes('dinesh yadav') ||
+    name.includes('neha agrawal')
+  );
+}
+
 export default function App() {
   const [loading, setLoading] = useState(true);
   const [autoRestoreNotice, setAutoRestoreNotice] = useState<string>('');
@@ -47,25 +77,12 @@ export default function App() {
     payload?: any;
   } | null>(null);
 
-  // Restore persistent login session from localStorage
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(() => {
     try {
       const saved = localStorage.getItem('iti_session_user');
       if (!saved) return null;
       const parsed = JSON.parse(saved);
-      // Discard any lingering demo session
-      const id = String(parsed?.id || '').toLowerCase();
-      const name = String(parsed?.name || '').toLowerCase();
-      if (
-        id.startsWith('tr_') ||
-        name.includes('rohan sahu') ||
-        name.includes('pooja kashyap') ||
-        name.includes('amit bhagat') ||
-        name.includes('kavita patel') ||
-        name.includes('vikas tande') ||
-        name.includes('dinesh yadav') ||
-        name.includes('neha agrawal')
-      ) {
+      if (isLegacyDemoSession(parsed)) {
         localStorage.removeItem('iti_session_user');
         return null;
       }
@@ -76,11 +93,26 @@ export default function App() {
     }
   });
 
+  const [userPreferences, setUserPreferences] = useState<UserPreferences | null>(null);
   const [settings, setSettings] = useState<SystemSettings | null>(null);
   const [trades, setTrades] = useState<Trade[]>([]);
   const [sessions, setSessions] = useState<AcademicSession[]>([]);
 
-  // Automatically save current session to localStorage whenever currentUser updates
+  const [traineeActiveTab, setTraineeActiveTab] = useState<
+    'mark_attendance' | 'history' | 'leaves' | 'warnings' | 'tools' | 'documents'
+  >(() => {
+    try {
+      const saved = localStorage.getItem('iti_trainee_active_tab');
+      if (saved && ['mark_attendance', 'history', 'leaves', 'warnings', 'tools', 'documents'].includes(saved)) {
+        return saved as any;
+      }
+    } catch {
+      // ignore
+    }
+    return 'mark_attendance';
+  });
+
+  // Persist lightweight session cache locally while Firestore authSessions remains authoritative
   useEffect(() => {
     try {
       if (currentUser) {
@@ -89,37 +121,93 @@ export default function App() {
         localStorage.removeItem('iti_session_user');
       }
     } catch (err) {
-      console.warn('Failed to persist session to localStorage:', err);
+      console.warn('Failed to persist session cache:', err);
     }
   }, [currentUser]);
+
+  const updateUserPreferences = useCallback(
+    (partial: Partial<UserPreferences>) => {
+      if (!currentUser) return;
+      setUserPreferences((prev) => {
+        const next: UserPreferences = {
+          ...(prev || { userId: currentUser.id, role: currentUser.role, updatedAt: new Date().toISOString() }),
+          ...partial,
+          userId: currentUser.id,
+          role: currentUser.role,
+          updatedAt: new Date().toISOString(),
+        };
+        return next;
+      });
+      saveUserPreferences(currentUser.id, {
+        ...partial,
+        role: currentUser.role,
+      }).catch(() => {});
+    },
+    [currentUser?.id, currentUser?.role]
+  );
+
+  // Apply loaded preferences when session restores or switches user
+  const applyRestoredPreferences = (prefs: UserPreferences | null | undefined, role: UserRole) => {
+    if (!prefs) return;
+    setUserPreferences(prefs);
+    if (
+      role === 'trainee' &&
+      prefs.activeTab &&
+      ['mark_attendance', 'history', 'leaves', 'warnings', 'tools', 'documents'].includes(prefs.activeTab)
+    ) {
+      setTraineeActiveTab(prefs.activeTab as any);
+    }
+  };
 
   const loadInitialData = async () => {
     try {
       setLoading(true);
 
-      // Wipe any lingering demo cache in IndexedDB on first load of clean version
       if (localStorage.getItem('iti_demo_cleared_v3') !== 'true') {
         await clearAllSystemBackupsAndDemoCache().catch(() => {});
         localStorage.setItem('iti_demo_cleared_v3', 'true');
       }
 
-      // Bootstrap application from server
-      const data = await fetchBootstrap();
-      setSettings(data.settings);
-      setSessions(data.sessions);
-      setTrades(data.trades);
+      const [bootstrapData, sessionRes] = await Promise.all([
+        fetchBootstrap(),
+        fetchAuthSession().catch(() => ({ authenticated: false, user: null, preferences: null })),
+      ]);
 
-      // If user is a trainee and tradeName is missing, resolve it from fresh trades list
-      setCurrentUser((prev) => {
-        if (!prev) return null;
-        if (prev.role === 'trainee' && prev.tradeId && (!prev.tradeName || prev.tradeName === 'Electrician')) {
-          const matchedTrade = data.trades.find((t) => t.id === prev.tradeId);
-          if (matchedTrade && matchedTrade.name !== prev.tradeName) {
-            return { ...prev, tradeName: matchedTrade.name };
-          }
+      setSettings(bootstrapData.settings);
+      setSessions(bootstrapData.sessions);
+      setTrades(bootstrapData.trades);
+
+      if (sessionRes.authenticated && sessionRes.user) {
+        const restoredUser = sessionRes.user as CurrentUser;
+        if (restoredUser.role === 'trainee' && restoredUser.tradeId) {
+          const matchedTrade = bootstrapData.trades.find((t) => t.id === restoredUser.tradeId);
+          if (matchedTrade) restoredUser.tradeName = matchedTrade.name;
         }
-        return prev;
-      });
+        setCurrentUser(restoredUser);
+        if (sessionRes.preferences) {
+          applyRestoredPreferences(sessionRes.preferences, restoredUser.role);
+        } else {
+          const loadedPrefs = await fetchUserPreferences(restoredUser.id);
+          applyRestoredPreferences(loadedPrefs, restoredUser.role);
+        }
+      } else {
+        // Fallback: if local token is missing or offline, keep non-demo cached user & load saved preferences
+        const hasToken = Boolean(getAuthToken());
+        if (hasToken) {
+          // Server explicitly rejected/expired session token
+          setCurrentUser(null);
+          setUserPreferences(null);
+        } else {
+          setCurrentUser((prev) => {
+            if (!prev || isLegacyDemoSession(prev)) return null;
+            if (prev.role === 'trainee' && prev.tradeId && !prev.tradeName) {
+              const matchedTrade = bootstrapData.trades.find((t) => t.id === prev.tradeId);
+              if (matchedTrade) return { ...prev, tradeName: matchedTrade.name };
+            }
+            return prev;
+          });
+        }
+      }
     } catch (err) {
       console.error('Failed to bootstrap applet:', err);
     } finally {
@@ -129,44 +217,52 @@ export default function App() {
 
   useEffect(() => {
     loadInitialData();
+    const unsubAuth = subscribeFirebaseAuth(() => {
+      // Keeps Firebase Auth state synchronized cleanly
+    });
 
-    // Periodic auto-backup every 60 seconds to continuously safeguard data
     const interval = setInterval(() => {
       triggerAutoBackup('auto_sync', currentUser?.role || 'active_session').catch(() => {});
     }, 60000);
 
-    return () => clearInterval(interval);
-  }, [currentUser?.role]);
+    return () => {
+      unsubAuth();
+      clearInterval(interval);
+    };
+  }, []);
 
-  // Handle Manual Restore from Banner
   const handleRestoreFromBanner = async () => {
     if (!manualRestoreAvailable?.payload) return;
     try {
       setLoading(true);
       await restoreBackupPayload(manualRestoreAvailable.payload, 'user_prompt_restore');
       setManualRestoreAvailable(null);
-      setAutoRestoreNotice('Database successfully restored from your browser backup!');
+      setAutoRestoreNotice('Database successfully restored from your institutional backup!');
       setTimeout(() => setAutoRestoreNotice(''), 6000);
       await loadInitialData();
     } catch (err: any) {
-      alert(`Restore failed: ${err.message}`);
+      console.error('Restore failed:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  // Handle Real Credentials Login
   const handleLogin = async (params: { role: UserRole; email: string; password?: string }) => {
     try {
       setLoading(true);
       const res = await loginApi(params);
-      const user = res.user;
+      const user = res.user as CurrentUser;
       if (params.role === 'trainee') {
         const trTrade = trades.find((t) => t.id === user.tradeId);
-        user.tradeName = trTrade?.name || 'Electrician';
+        user.tradeName = trTrade?.name || user.tradeName || '';
       }
       setCurrentUser(user);
-      // Auto-backup upon successful login
+      if (res.preferences) {
+        applyRestoredPreferences(res.preferences, user.role);
+      } else {
+        const loadedPrefs = await fetchUserPreferences(user.id);
+        applyRestoredPreferences(loadedPrefs, user.role);
+      }
       triggerAutoBackup('auto_sync', user.role).catch(() => {});
     } catch (err: any) {
       throw err;
@@ -175,38 +271,64 @@ export default function App() {
     }
   };
 
-  // Trainee active tab persistent state
-  const [traineeActiveTab, setTraineeActiveTab] = useState<'mark_attendance' | 'history' | 'leaves' | 'warnings' | 'tools'>(() => {
+  const handleGoogleLogin = async (preferredRole?: UserRole) => {
     try {
-      const saved = localStorage.getItem('iti_trainee_active_tab');
-      if (saved && ['mark_attendance', 'history', 'leaves', 'warnings', 'tools'].includes(saved)) {
-        return saved as any;
+      setLoading(true);
+      const { user: fbUser } = await signInWithGooglePopup();
+      if (!fbUser.email) {
+        throw new Error('Your Google account does not provide a verified email address.');
       }
-    } catch (e) {}
-    return 'mark_attendance';
-  });
+      const res = await googleLoginApi({
+        email: fbUser.email,
+        uid: fbUser.uid,
+        role: preferredRole,
+      });
+      const mappedUser = res.user as CurrentUser;
+      if (mappedUser.role === 'trainee') {
+        const trTrade = trades.find((t) => t.id === mappedUser.tradeId);
+        mappedUser.tradeName = trTrade?.name || mappedUser.tradeName || '';
+      }
+      setCurrentUser(mappedUser);
+      if (res.preferences) {
+        applyRestoredPreferences(res.preferences, mappedUser.role);
+      } else {
+        const loadedPrefs = await fetchUserPreferences(mappedUser.id);
+        applyRestoredPreferences(loadedPrefs, mappedUser.role);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  useEffect(() => {
+  const handleTraineeTabChange = (
+    tab: 'mark_attendance' | 'history' | 'leaves' | 'warnings' | 'tools' | 'documents'
+  ) => {
+    setTraineeActiveTab(tab);
     try {
-      if (traineeActiveTab) {
-        localStorage.setItem('iti_trainee_active_tab', traineeActiveTab);
-      }
-    } catch (e) {}
-  }, [traineeActiveTab]);
+      localStorage.setItem('iti_trainee_active_tab', tab);
+    } catch {
+      // ignore
+    }
+    updateUserPreferences({ activeTab: tab });
+  };
 
   const handleLogout = async () => {
-    // Preserve entire current database snapshot before destroying session
     try {
       await triggerAutoBackup('before_logout', currentUser?.role || 'user');
-    } catch (e) {}
+    } catch {
+      // ignore
+    }
+    await logoutApi();
+    await signOutFirebaseClient();
 
     setCurrentUser(null);
+    setUserPreferences(null);
     try {
       localStorage.removeItem('iti_session_user');
-      localStorage.removeItem('iti_trainee_active_tab');
-      localStorage.removeItem('iti_officer_active_tab');
-      localStorage.removeItem('iti_admin_active_tab');
-    } catch (e) {}
+      localStorage.removeItem('iti_session_token');
+    } catch {
+      // ignore
+    }
   };
 
   if (loading && !settings) {
@@ -224,7 +346,7 @@ export default function App() {
             <RefreshCw className="w-4 h-4 animate-spin text-amber-600" />
             <span>Loading ITI Trade Management System...</span>
           </div>
-          <p className="text-xs text-slate-500">Government ITI Raigarh, Chhattisgarh</p>
+          <p className="text-xs text-slate-500">Connecting to Google Cloud Firestore · Govt. ITI Raigarh</p>
         </div>
       </div>
     );
@@ -232,14 +354,14 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
-      {/* Universal Top Bar with Real-time Trainee Alerts */}
       <Header
         currentUser={currentUser}
         onLogout={handleLogout}
-        onNavigateTraineeTab={(tab) => setTraineeActiveTab(tab)}
+        userPreferences={userPreferences}
+        onUpdatePreferences={updateUserPreferences}
+        onNavigateTraineeTab={(tab) => handleTraineeTabChange(tab)}
       />
 
-      {/* Auto-Restore Toast Notification */}
       {autoRestoreNotice && (
         <div className="bg-emerald-900 text-emerald-100 border-b border-emerald-800 text-xs px-4 py-2.5 flex items-center justify-between shadow-xs animate-in fade-in duration-200">
           <div className="max-w-7xl mx-auto w-full flex items-center justify-between gap-3">
@@ -257,7 +379,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Restorable Backup Available Prompt Banner */}
       {manualRestoreAvailable && (
         <div className="bg-amber-950 text-amber-100 border-b border-amber-800 text-xs px-4 py-2.5 flex items-center justify-between shadow-xs">
           <div className="max-w-7xl mx-auto w-full flex flex-wrap items-center justify-between gap-3">
@@ -265,7 +386,7 @@ export default function App() {
               <Database className="w-4 h-4 text-amber-400 shrink-0" />
               <div>
                 <span className="font-bold text-white">Saved Institutional Backup Found: </span>
-                <span className="text-amber-200">{manualRestoreAvailable.reason || 'Custom marks & trainees available in browser'}</span>
+                <span className="text-amber-200">{manualRestoreAvailable.reason || 'Custom marks & trainees available'}</span>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -287,11 +408,11 @@ export default function App() {
         </div>
       )}
 
-      {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6">
         {!currentUser ? (
           <LandingPage
             onLogin={handleLogin}
+            onGoogleLogin={handleGoogleLogin}
             trades={trades}
             sessions={sessions}
           />
@@ -300,6 +421,10 @@ export default function App() {
             {currentUser.role === 'admin' && settings && (
               <AdminDashboard
                 settings={settings}
+                currentUserId={currentUser.id}
+                currentUserName={currentUser.name}
+                userPreferences={userPreferences}
+                onUpdatePreferences={updateUserPreferences}
                 onSettingsUpdate={(newSettings) => setSettings(newSettings)}
               />
             )}
@@ -317,6 +442,8 @@ export default function App() {
                 trades={trades}
                 sessions={sessions}
                 settings={settings}
+                userPreferences={userPreferences}
+                onUpdatePreferences={updateUserPreferences}
                 onOfficerUpdate={(updated) => {
                   setCurrentUser((prev) => (prev ? { ...prev, ...updated } : null));
                 }}
@@ -339,7 +466,9 @@ export default function App() {
                 }}
                 settings={settings}
                 selectedTab={traineeActiveTab}
-                onTabChange={setTraineeActiveTab}
+                onTabChange={handleTraineeTabChange}
+                userPreferences={userPreferences}
+                onUpdatePreferences={updateUserPreferences}
                 onTraineeUpdate={(updated) => {
                   setCurrentUser((prev) => (prev ? { ...prev, ...updated } : null));
                 }}
@@ -349,7 +478,6 @@ export default function App() {
         )}
       </main>
 
-      {/* Footer */}
       <footer className="bg-white border-t border-slate-200 py-4 px-4 sm:px-6 text-xs text-slate-500">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3 text-center md:text-left">
           <div className="flex items-center gap-2">
@@ -358,17 +486,17 @@ export default function App() {
             <span>रोजगार एवं प्रशिक्षण संचालनालय, छत्तीसगढ़</span>
           </div>
           <div className="flex items-center gap-3 text-[11px] text-slate-400">
-            <span>NCVT / DGT Compliant</span>
+            <span>NCVT / DGT Compliant · Cloud Firestore Sync</span>
             <span>·</span>
             <span>
-              GPS Geofence: {settings?.campusLocation?.lat || 21.8958}° N, {settings?.campusLocation?.lng || 83.4133}° E (±{settings?.campusLocation?.radiusMeters || 450}m)
+              GPS Geofence: {settings?.campusLocation?.lat || 21.8958}° N, {settings?.campusLocation?.lng || 83.4133}° E (±{settings?.campusLocation?.radiusMeters || 1500}m)
             </span>
           </div>
         </div>
       </footer>
 
-      {/* Floating Offline & Sync Status Indicator */}
       <OfflineIndicator />
     </div>
   );
 }
+

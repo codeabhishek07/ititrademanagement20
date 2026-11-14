@@ -19,12 +19,58 @@ import {
   WeeklyPlan,
   TraineeAssessment,
   HolidayRecord,
+  StoredDocumentRecord,
+  DocumentCategory,
+  UserPreferences,
+  UserRole,
 } from './types.ts';
 import {
   getCachedData,
   setCachedData,
   enqueueOfflineAction,
 } from './offline/indexedDb.ts';
+
+const AUTH_TOKEN_KEY = 'iti_session_token';
+
+export function getAuthToken(): string {
+  try {
+    return localStorage.getItem(AUTH_TOKEN_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+export function setAuthToken(token: string | null) {
+  try {
+    if (token) {
+      localStorage.setItem(AUTH_TOKEN_KEY, token);
+    } else {
+      localStorage.removeItem(AUTH_TOKEN_KEY);
+    }
+  } catch {
+    // ignore storage restriction
+  }
+}
+
+function withAuthHeaders(headers?: HeadersInit): HeadersInit {
+  const token = getAuthToken();
+  const base: Record<string, string> = {};
+  if (headers && typeof headers === 'object' && !Array.isArray(headers)) {
+    Object.assign(base, headers);
+  }
+  if (token) {
+    base['x-iti-session'] = token;
+  }
+  return base;
+}
+
+export function apiFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+  return fetch(input, {
+    ...init,
+    credentials: 'include',
+    headers: withAuthHeaders(init.headers),
+  });
+}
 
 /**
  * Helper to fetch data with network-first strategy, falling back to IndexedDB cache
@@ -95,8 +141,8 @@ export async function loginApi(params: {
   password?: string;
   officerId?: string;
   traineeId?: string;
-}) {
-  const res = await fetch('/api/auth/login', {
+}): Promise<{ user: any; sessionToken?: string; preferences?: UserPreferences | null }> {
+  const res = await apiFetch('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -105,7 +151,52 @@ export async function loginApi(params: {
     const err = await res.json().catch(() => ({ error: 'Login failed' }));
     throw new Error(err.error || 'Login failed');
   }
+  const data = await res.json();
+  if (data.sessionToken) {
+    setAuthToken(data.sessionToken);
+  }
+  return data;
+}
+
+export async function googleLoginApi(params: {
+  email: string;
+  uid: string;
+  role?: 'admin' | 'officer' | 'trainee';
+}): Promise<{ user: any; sessionToken?: string; preferences?: UserPreferences | null }> {
+  const res = await apiFetch('/api/auth/google', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || 'Google authentication failed');
+  }
+  if (data.sessionToken) {
+    setAuthToken(data.sessionToken);
+  }
+  return data;
+}
+
+export async function fetchAuthSession(): Promise<{
+  authenticated: boolean;
+  user: any | null;
+  sessionToken?: string;
+  preferences?: UserPreferences | null;
+}> {
+  const res = await apiFetch('/api/auth/session');
+  if (!res.ok) return { authenticated: false, user: null };
   return res.json();
+}
+
+export async function logoutApi(): Promise<void> {
+  try {
+    await apiFetch('/api/auth/logout', { method: 'POST' });
+  } catch {
+    // ignore network errors on logout
+  } finally {
+    setAuthToken(null);
+  }
 }
 
 export async function fetchSettings(): Promise<SystemSettings> {
@@ -516,6 +607,9 @@ export async function applyLeave(payload: {
   toDate: string;
   days: number;
   reason: string;
+  attachmentDocId?: string;
+  attachmentName?: string;
+  attachmentUrl?: string;
 }) {
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
     await enqueueOfflineAction({
@@ -896,7 +990,7 @@ export async function bulkImportTrainees(payload: {
   officerId: string;
   officerName: string;
 }) {
-  const res = await fetch('/api/trainees/bulk', {
+  const res = await apiFetch('/api/trainees/bulk', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -905,6 +999,120 @@ export async function bulkImportTrainees(payload: {
   if (!res.ok) throw new Error(data.error || 'Failed to bulk import trainees');
   return data;
 }
+
+// -------------------------------------------------------------
+// Persistent User Preferences (Cloud Firestore)
+// -------------------------------------------------------------
+export async function fetchUserPreferences(userId: string): Promise<UserPreferences | null> {
+  if (!userId) return null;
+  try {
+    const res = await apiFetch(`/api/user-preferences/${encodeURIComponent(userId)}`);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+export async function saveUserPreferences(
+  userId: string,
+  prefs: Partial<UserPreferences> & { role?: UserRole }
+): Promise<UserPreferences | null> {
+  if (!userId) return null;
+  try {
+    const res = await apiFetch(`/api/user-preferences/${encodeURIComponent(userId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(prefs),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.preferences || null;
+  } catch {
+    return null;
+  }
+}
+
+// -------------------------------------------------------------
+// Persistent Document Vault & Cloud Status
+// -------------------------------------------------------------
+export async function fetchDocuments(params?: {
+  category?: string;
+  tradeId?: string;
+  traineeId?: string;
+  uploadedById?: string;
+}): Promise<StoredDocumentRecord[]> {
+  const qs = params
+    ? new URLSearchParams(Object.entries(params).filter(([, v]) => Boolean(v)) as [string, string][]).toString()
+    : '';
+  const url = qs ? `/api/documents?${qs}` : '/api/documents';
+  return fetchWithOfflineCache<StoredDocumentRecord[]>(
+    `iti_cache_documents_${qs || 'all'}`,
+    () => apiFetch(url),
+    []
+  );
+}
+
+export async function uploadDocument(payload: {
+  title: string;
+  fileName: string;
+  mimeType: string;
+  base64Content?: string;
+  category: DocumentCategory;
+  uploadedById: string;
+  uploadedByName: string;
+  uploadedByRole: UserRole;
+  tradeId?: string;
+  sessionId?: string;
+  traineeId?: string;
+  relatedId?: string;
+  remarks?: string;
+  existingDownloadUrl?: string;
+  existingStoragePath?: string;
+}): Promise<{ success: boolean; document: StoredDocumentRecord }> {
+  const res = await apiFetch('/api/documents/upload', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to upload document');
+  }
+  return data;
+}
+
+export async function deleteDocument(id: string): Promise<{ success: boolean }> {
+  const res = await apiFetch(`/api/documents/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to delete document');
+  }
+  return data;
+}
+
+export async function fetchCloudStatus(): Promise<{
+  connected: boolean;
+  firestoreState: string;
+  quotaPaused: boolean;
+  pendingWrites: number;
+  provider: string;
+  databaseId: string;
+  project: string;
+  storage: {
+    bucket: string;
+    bucketActive: boolean;
+    mode: 'firebase_storage' | 'firestore_storage';
+  };
+  summary: Record<string, number>;
+}> {
+  const res = await apiFetch('/api/system/cloud-status');
+  if (!res.ok) throw new Error('Failed to fetch cloud persistence status');
+  return res.json();
+}
+
 
 
 

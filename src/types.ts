@@ -123,6 +123,8 @@ export interface Trainee {
   status: 'active' | 'inactive' | 'passed_out';
   admissionDate: string;
   password?: string;
+  photoDocId?: string;
+  photoUrl?: string;
 }
 
 export type AttendanceStatus = 'Present' | 'Absent' | 'CL' | 'Medical Leave' | 'Half-Day Leave';
@@ -172,6 +174,9 @@ export interface LeaveRequest {
   reviewedBy?: string;
   reviewerRemarks?: string;
   reviewedAt?: string;
+  attachmentDocId?: string;
+  attachmentName?: string;
+  attachmentUrl?: string;
 }
 
 export interface WarningNotice {
@@ -335,5 +340,65 @@ export interface TraineeAssessment {
     practicalExam: number; // /10
   };
   remarks: string;
+}
+
+export type DocumentCategory =
+  | 'Circular & Order'
+  | 'Study Material'
+  | 'Practical Sheet'
+  | 'Leave Medical Certificate'
+  | 'Trainee Document'
+  | 'Institutional Backup'
+  | 'Other';
+
+export interface StoredDocumentRecord {
+  id: string;
+  title: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  category: DocumentCategory;
+  storagePath: string;
+  downloadUrl: string;
+  storageProvider: 'firebase_storage' | 'firestore_storage';
+  chunkCount?: number;
+  uploadedById: string;
+  uploadedByName: string;
+  uploadedByRole: UserRole;
+  tradeId?: string;
+  sessionId?: string;
+  traineeId?: string;
+  relatedId?: string;
+  remarks?: string;
+  createdAt: string;
+}
+
+export interface UserPreferences {
+  userId: string;
+  role: UserRole;
+  activeTab?: string;
+  selectedTradeId?: string;
+  selectedSessionId?: string;
+  selectedRegister?: string;
+  attendanceDate?: string;
+  historyMonth?: string;
+  noticeLanguage?: 'hindi' | 'bilingual' | 'english';
+  readNotificationIds?: string[];
+  selectedProgressTraineeId?: string;
+  selectedBreakdownMonth?: string;
+  adminCalendarSessionId?: string;
+  adminCalendarMonth?: string;
+  searchQuery?: string;
+  updatedAt: string;
+}
+
+export interface AuthSessionRecord {
+  token: string;
+  userId: string;
+  role: UserRole;
+  user: Record<string, any>;
+  createdAt: string;
+  lastActiveAt: string;
+  expiresAt: string;
 }
 

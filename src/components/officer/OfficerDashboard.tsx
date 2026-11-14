@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Users,
   CalendarCheck2,
@@ -28,6 +28,8 @@ import {
   Menu,
   Ban,
   Calendar,
+  FolderOpen,
+  Cloud,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import {
@@ -42,6 +44,7 @@ import {
   SystemSettings,
   AcademicSession,
   HolidayRecord,
+  UserPreferences,
 } from '../../types.ts';
 import {
   fetchOfficer,
@@ -72,6 +75,7 @@ import { LessonPlanManager } from './LessonPlanManager.tsx';
 import { DemonstrationPlanManager } from './DemonstrationPlanManager.tsx';
 import { WeeklyPlanManager } from './WeeklyPlanManager.tsx';
 import { DigitalProgressCardTracker } from './DigitalProgressCardTracker.tsx';
+import { DocumentVaultPanel } from '../DocumentVaultPanel.tsx';
 
 interface OfficerDashboardProps {
   officer: {
@@ -85,23 +89,56 @@ interface OfficerDashboardProps {
   trades: Trade[];
   sessions: AcademicSession[];
   settings: SystemSettings;
+  userPreferences?: UserPreferences | null;
+  onUpdatePreferences?: (partial: Partial<UserPreferences>) => void;
   onOfficerUpdate?: (updated: { name?: string; email?: string; mobile?: string; assignedTradeIds?: string[] }) => void;
 }
 
-type OfficerTab = 'attendance' | 'trainees' | 'leaves' | 'warnings' | 'inventory' | 'indents' | 'reports' | 'lesson_plans' | 'demonstration_plans' | 'weekly_plans' | 'assessments';
+type OfficerTab =
+  | 'attendance'
+  | 'trainees'
+  | 'leaves'
+  | 'warnings'
+  | 'inventory'
+  | 'indents'
+  | 'reports'
+  | 'lesson_plans'
+  | 'demonstration_plans'
+  | 'weekly_plans'
+  | 'assessments'
+  | 'documents';
+
+const VALID_OFFICER_TABS: OfficerTab[] = [
+  'attendance',
+  'trainees',
+  'leaves',
+  'warnings',
+  'inventory',
+  'indents',
+  'reports',
+  'lesson_plans',
+  'demonstration_plans',
+  'weekly_plans',
+  'assessments',
+  'documents',
+];
 
 export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
   officer,
   trades,
   sessions,
   settings,
+  userPreferences,
+  onUpdatePreferences,
   onOfficerUpdate,
 }) => {
-  // Persistent active tab across page refreshes
   const [activeTab, setActiveTab] = useState<OfficerTab>(() => {
+    if (userPreferences?.activeTab && VALID_OFFICER_TABS.includes(userPreferences.activeTab as OfficerTab)) {
+      return userPreferences.activeTab as OfficerTab;
+    }
     try {
       const saved = localStorage.getItem('iti_officer_active_tab');
-      if (saved && ['attendance', 'trainees', 'leaves', 'warnings', 'inventory', 'indents', 'reports', 'lesson_plans', 'demonstration_plans', 'weekly_plans', 'assessments'].includes(saved)) {
+      if (saved && VALID_OFFICER_TABS.includes(saved as OfficerTab)) {
         return saved as OfficerTab;
       }
     } catch (e) {}
@@ -114,14 +151,24 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
     } catch (e) {}
   }, [activeTab]);
 
-  const [selectedRegister, setSelectedRegister] = useState<RegisterType>('monthly_attendance');
+  const [selectedRegister, setSelectedRegister] = useState<RegisterType>(
+    (userPreferences?.selectedRegister as RegisterType) || 'monthly_attendance'
+  );
+  useEffect(() => {
+    if (selectedRegister && selectedRegister !== userPreferences?.selectedRegister) {
+      onUpdatePreferences?.({ selectedRegister });
+    }
+  }, [selectedRegister]);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState('');
   const [syncingAssignments, setSyncingAssignments] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [autoSavingAttendance, setAutoSavingAttendance] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const pendingAttendanceDirtyRef = useRef(false);
 
   const handleSelectTab = (tab: OfficerTab) => {
     setActiveTab(tab);
+    onUpdatePreferences?.({ activeTab: tab });
     setMobileMenuOpen(false);
     setTimeout(() => {
       const el = document.getElementById('officer-content-viewport');
@@ -174,6 +221,11 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
   );
 
   const [selectedTradeId, setSelectedTradeId] = useState<string>(() => {
+    if (userPreferences?.selectedTradeId) {
+      if (officerTrades.some((t) => t.id === userPreferences.selectedTradeId) || activeTradePool.some((t) => t.id === userPreferences.selectedTradeId)) {
+        return userPreferences.selectedTradeId;
+      }
+    }
     try {
       const saved = localStorage.getItem('iti_officer_selected_trade');
       if (saved && officerTrades.some((t) => t.id === saved)) return saved;
@@ -253,6 +305,9 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
   }, [currentOfficer.assignedTradeIds, officerTrades, selectedTradeId, activeTradePool]);
 
   const [selectedSessionId, setSelectedSessionId] = useState<string>(() => {
+    if (userPreferences?.selectedSessionId && sessions.some((s) => s.id === userPreferences.selectedSessionId)) {
+      return userPreferences.selectedSessionId;
+    }
     try {
       const saved = localStorage.getItem('iti_officer_selected_session');
       if (saved && sessions.some((s) => s.id === saved)) return saved;
@@ -270,7 +325,40 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
 
   // Main entity states
   const [trainees, setTrainees] = useState<Trainee[]>([]);
-  const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
+  const [attendanceDate, setAttendanceDate] = useState(
+    userPreferences?.attendanceDate || new Date().toISOString().split('T')[0]
+  );
+
+  // Sync restored userPreferences from Firestore whenever userPreferences resolves
+  useEffect(() => {
+    if (!userPreferences) return;
+    if (userPreferences.activeTab && VALID_OFFICER_TABS.includes(userPreferences.activeTab as OfficerTab)) {
+      setActiveTab(userPreferences.activeTab as OfficerTab);
+    }
+    if (
+      userPreferences.selectedTradeId &&
+      (officerTrades.some((t) => t.id === userPreferences.selectedTradeId) ||
+        activeTradePool.some((t) => t.id === userPreferences.selectedTradeId))
+    ) {
+      setSelectedTradeId(userPreferences.selectedTradeId);
+    }
+    if (userPreferences.selectedSessionId && sessions.some((s) => s.id === userPreferences.selectedSessionId)) {
+      setSelectedSessionId(userPreferences.selectedSessionId);
+    }
+    if (userPreferences.selectedRegister) {
+      setSelectedRegister(userPreferences.selectedRegister as RegisterType);
+    }
+    if (userPreferences.attendanceDate) {
+      setAttendanceDate(userPreferences.attendanceDate);
+    }
+  }, [
+    userPreferences?.userId,
+    userPreferences?.activeTab,
+    userPreferences?.selectedTradeId,
+    userPreferences?.selectedSessionId,
+    userPreferences?.selectedRegister,
+    userPreferences?.attendanceDate,
+  ]);
   const [dayAttendance, setDayAttendance] = useState<AttendanceRecord[]>([]);
   const [allAttendance, setAllAttendance] = useState<AttendanceRecord[]>([]);
   const [leaves, setLeaves] = useState<LeaveRequest[]>([]);
@@ -499,7 +587,8 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
       setIndents(indList);
       setHolidays(holList);
 
-      // Initialize local edits with existing records
+      // Initialize local edits with existing records without triggering dirty auto-save
+      pendingAttendanceDirtyRef.current = false;
       const initialMap: Record<string, AttendanceStatus> = {};
       tList.forEach((tr) => {
         const found = attDayList.find((a) => a.traineeId === tr.id);
@@ -527,6 +616,71 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
       h.date === attendanceDate &&
       (!h.sessionId || h.sessionId === 'all' || h.sessionId === selectedSessionId)
   );
+
+  // Automatic real-time debounced attendance persistence to Cloud Firestore
+  useEffect(() => {
+    if (!pendingAttendanceDirtyRef.current || activeHoliday || trainees.length === 0) return;
+    const timer = setTimeout(async () => {
+      try {
+        setAutoSavingAttendance('saving');
+        const recordsToSave = Object.entries(attendanceEdits).map(([traineeId, status]) => ({
+          traineeId,
+          status,
+          remarks: `Marked/Authorized by ${officer.name}`,
+        }));
+        if (recordsToSave.length > 0) {
+          await batchSaveAttendance({
+            date: attendanceDate,
+            officerId: officer.id,
+            officerName: officer.name,
+            records: recordsToSave,
+          });
+        }
+        pendingAttendanceDirtyRef.current = false;
+        setAutoSavingAttendance('saved');
+        const [attDayList, attAllList] = await Promise.all([
+          fetchAttendance({ date: attendanceDate, tradeId: selectedTradeId }),
+          fetchAttendance({ tradeId: selectedTradeId, sessionId: selectedSessionId }),
+        ]);
+        setDayAttendance(attDayList);
+        setAllAttendance(attAllList);
+      } catch {
+        setAutoSavingAttendance('error');
+      }
+    }, 700);
+    return () => clearTimeout(timer);
+  }, [attendanceEdits, attendanceDate, selectedTradeId, selectedSessionId, Boolean(activeHoliday)]);
+
+  // Flush any pending unsaved attendance changes on tab/window unload using keepalive
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (!pendingAttendanceDirtyRef.current || activeHoliday || trainees.length === 0) return;
+      const recordsToSave = Object.entries(attendanceEdits).map(([traineeId, status]) => ({
+        traineeId,
+        status,
+        remarks: `Marked/Authorized by ${officer.name}`,
+      }));
+      if (recordsToSave.length > 0) {
+        try {
+          fetch('/api/attendance/batch-officer', {
+            method: 'POST',
+            keepalive: true,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              date: attendanceDate,
+              officerId: officer.id,
+              officerName: officer.name,
+              records: recordsToSave,
+            }),
+          }).catch(() => {});
+        } catch {
+          // ignore
+        }
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [attendanceEdits, attendanceDate, officer.id, officer.name, Boolean(activeHoliday), trainees.length]);
 
   // Compute attendance stats per trainee
   const traineeStats = trainees.map((tr) => {
@@ -558,10 +712,11 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
   // Batch Save Attendance
   const handleSaveAttendance = async () => {
     if (activeHoliday) {
-      alert(`Attendance is disabled: ${attendanceDate} is an Admin-designated Holiday ("${activeHoliday.title}").`);
+      showToast(`Attendance is disabled: ${attendanceDate} is an Admin-designated Holiday ("${activeHoliday.title}").`);
       return;
     }
     try {
+      setAutoSavingAttendance('saving');
       const recordsToSave = Object.entries(attendanceEdits).map(([traineeId, status]) => ({
         traineeId,
         status,
@@ -575,10 +730,13 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
         records: recordsToSave,
       });
 
-      showToast(`Daily attendance saved for ${recordsToSave.length} trainees`);
+      pendingAttendanceDirtyRef.current = false;
+      setAutoSavingAttendance('saved');
+      showToast(`Daily attendance saved to Firestore for ${recordsToSave.length} trainees`);
       loadData();
     } catch (err: any) {
-      alert(err.message);
+      setAutoSavingAttendance('error');
+      showToast(err.message || 'Failed to save attendance');
     }
   };
 
@@ -999,7 +1157,11 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
               <span className="text-slate-500 font-medium">Session:</span>
               <select
                 value={selectedSessionId}
-                onChange={(e) => setSelectedSessionId(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSelectedSessionId(val);
+                  onUpdatePreferences?.({ selectedSessionId: val });
+                }}
                 className="bg-transparent font-medium text-slate-800 focus:outline-hidden cursor-pointer"
               >
                 {sessions.map((s) => (
@@ -1024,7 +1186,10 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                     <button
                       key={t.id}
                       type="button"
-                      onClick={() => setSelectedTradeId(t.id)}
+                      onClick={() => {
+                        setSelectedTradeId(t.id);
+                        onUpdatePreferences?.({ selectedTradeId: t.id });
+                      }}
                       className={`px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-2 transition-all cursor-pointer shadow-xs border ${
                         isSelected
                           ? 'bg-emerald-700 text-white border-emerald-800 shadow-emerald-700/20 ring-2 ring-emerald-500/30'
@@ -1051,7 +1216,11 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                 </span>
                 <select
                   value={selectedTradeId}
-                  onChange={(e) => setSelectedTradeId(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSelectedTradeId(val);
+                    onUpdatePreferences?.({ selectedTradeId: val });
+                  }}
                   className="bg-white border border-slate-300 rounded px-2 py-1 font-medium text-slate-800 cursor-pointer"
                 >
                   {activeTradePool.map((t) => (
@@ -1090,6 +1259,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
               {activeTab === 'demonstration_plans' && <Wrench className="w-4 h-4" />}
               {activeTab === 'weekly_plans' && <CalendarCheck2 className="w-4 h-4" />}
               {activeTab === 'assessments' && <BarChart3 className="w-4 h-4" />}
+              {activeTab === 'documents' && <FolderOpen className="w-4 h-4" />}
             </span>
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
@@ -1111,6 +1281,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                 {activeTab === 'demonstration_plans' && 'Demo Plan Scheduler'}
                 {activeTab === 'weekly_plans' && 'Weekly Teaching Plan'}
                 {activeTab === 'assessments' && 'Digital Progress Card'}
+                {activeTab === 'documents' && 'Circulars & Study Files'}
               </h3>
             </div>
           </div>
@@ -1252,6 +1423,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                 { id: 'demonstration_plans', label: 'Demo Plan Scheduler', hindi: 'प्रदर्शन योजना', icon: Wrench },
                 { id: 'weekly_plans', label: 'Weekly Teaching Plan', hindi: 'साप्ताहिक शिक्षण', icon: CalendarCheck2 },
                 { id: 'assessments', label: 'Digital Progress Card', hindi: 'डिजिटल प्रगति पत्रक', icon: BarChart3 },
+                { id: 'documents', label: 'Circulars & Study Files', hindi: 'दस्तावेज़ व अध्ययन सामग्री', icon: FolderOpen },
               ].map((item) => {
                 const Icon = item.icon;
                 const isActive = activeTab === item.id;
@@ -1403,6 +1575,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                 { id: 'demonstration_plans', label: 'Demo Plan Scheduler', hindi: 'प्रदर्शन योजना', icon: Wrench },
                 { id: 'weekly_plans', label: 'Weekly Teaching Plan', hindi: 'साप्ताहिक शिक्षण', icon: CalendarCheck2 },
                 { id: 'assessments', label: 'Digital Progress Card', hindi: 'डिजिटल प्रगति पत्रक', icon: BarChart3 },
+                { id: 'documents', label: 'Circulars & Study Files', hindi: 'दस्तावेज़ व अध्ययन सामग्री', icon: FolderOpen },
               ].map((item) => {
                 const Icon = item.icon;
                 const isActive = activeTab === item.id;
@@ -1477,11 +1650,35 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                 <input
                   type="date"
                   value={attendanceDate}
-                  onChange={(e) => setAttendanceDate(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setAttendanceDate(val);
+                    onUpdatePreferences?.({ attendanceDate: val });
+                  }}
                   className={`px-2.5 py-1.5 border rounded-lg font-mono flex-1 sm:flex-initial ${
                     activeHoliday ? 'border-rose-300 bg-rose-50 text-rose-900 font-bold' : 'border-slate-300 bg-white text-slate-800'
                   }`}
                 />
+                {autoSavingAttendance !== 'idle' && !activeHoliday && (
+                  <span
+                    className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold border ${
+                      autoSavingAttendance === 'saving'
+                        ? 'bg-amber-50 text-amber-800 border-amber-200'
+                        : autoSavingAttendance === 'saved'
+                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                        : 'bg-rose-50 text-rose-800 border-rose-200'
+                    }`}
+                  >
+                    <Cloud className="w-3 h-3" />
+                    <span>
+                      {autoSavingAttendance === 'saving'
+                        ? 'Auto-saving...'
+                        : autoSavingAttendance === 'saved'
+                        ? 'Auto-saved to Firestore'
+                        : 'Save retry needed'}
+                    </span>
+                  </span>
+                )}
                 <button
                   onClick={handleTriggerAutoAbsent}
                   disabled={Boolean(activeHoliday)}
@@ -1586,7 +1783,11 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                                 <button
                                   key={st}
                                   disabled={Boolean(activeHoliday)}
-                                  onClick={() => setAttendanceEdits({ ...attendanceEdits, [tr.id]: st })}
+                                  onClick={() => {
+                                    pendingAttendanceDirtyRef.current = true;
+                                    setAutoSavingAttendance('saving');
+                                    setAttendanceEdits({ ...attendanceEdits, [tr.id]: st });
+                                  }}
                                   className={`px-2.5 py-1 text-[11px] font-semibold rounded transition-colors ${
                                     isSelected
                                       ? st === 'Present'
@@ -1853,7 +2054,20 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                       </div>
                       <div className="text-[10px] text-slate-500">{lv.days} day(s)</div>
                     </td>
-                    <td className="py-3 px-4 text-slate-600 max-w-xs">{lv.reason}</td>
+                    <td className="py-3 px-4 text-slate-600 max-w-xs">
+                      <div>{lv.reason}</div>
+                      {lv.attachmentUrl && (
+                        <a
+                          href={lv.attachmentUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 mt-1 text-[10px] font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded border border-blue-200"
+                        >
+                          <Download className="w-3 h-3" />
+                          <span>{lv.attachmentName || 'View Attachment'}</span>
+                        </a>
+                      )}
+                    </td>
                     <td className="py-3 px-4 text-center">
                       <span
                         className={`inline-block px-2 py-0.5 text-[10px] font-semibold rounded ${
@@ -2303,6 +2517,20 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
           officerName={currentOfficer.name}
           sessions={sessions}
           settings={settings}
+          userPreferences={userPreferences}
+          onUpdatePreferences={onUpdatePreferences}
+        />
+      )}
+
+      {/* TAB: DOCUMENTS & STUDY MATERIALS */}
+      {activeTab === 'documents' && (
+        <DocumentVaultPanel
+          currentUserId={currentOfficer.id}
+          currentUserName={currentOfficer.name}
+          currentUserRole="officer"
+          trades={activeTradePool}
+          sessions={sessions}
+          defaultTradeId={selectedTradeId}
         />
       )}
 
