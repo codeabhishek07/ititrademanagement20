@@ -37,15 +37,67 @@ import type {
   AuthSessionRecord,
   UserRole,
 } from './src/types.ts';
+import {
+  getDateHolidayStatus,
+  findAdminHolidayForDate,
+  calculateMonthWorkingDayBreakdown,
+  expandLeaveWorkingDates,
+  calculateTraineeAttendanceMetrics,
+  getIstDateStr,
+  getIstClockParts,
+} from './src/utils/attendanceCalendar.ts';
 
 function findHolidayForDate(data: ReturnType<typeof db.get>, dateStr: string, sessionId?: string): HolidayRecord | undefined {
-  const list = data.holidays || [];
-  return list.find((h) => {
-    if (h.date !== dateStr) return false;
-    if (!h.sessionId || h.sessionId === 'all') return true;
-    if (!sessionId) return true;
-    return h.sessionId === sessionId;
+  return findAdminHolidayForDate(data.holidays || [], dateStr, sessionId) || undefined;
+}
+
+function getDayAttendanceLock(data: ReturnType<typeof db.get>, dateStr: string, sessionId?: string) {
+  return getDateHolidayStatus(dateStr, data.holidays || [], sessionId);
+}
+
+async function cleanupInvalidHolidayAutoAbsents(targetDate?: string): Promise<number> {
+  const data = db.get();
+  const toDelete = data.attendance.filter((rec) => {
+    if (targetDate && rec.date !== targetDate) return false;
+    if (rec.markedBy !== 'system_auto_absent') return false;
+    return !getDateHolidayStatus(rec.date, data.holidays || [], rec.sessionId).isWorkingDay;
   });
+  if (toDelete.length === 0) return 0;
+  const deleteIds = new Set(toDelete.map((r) => r.id));
+  data.attendance = data.attendance.filter((r) => !deleteIds.has(r.id));
+  const ops: PendingFirestoreOp[] = toDelete.map((r) => ({
+    type: 'delete',
+    coll: 'attendance',
+    id: r.id,
+  }));
+  await db.persistBatchNow(ops);
+  console.log(`[Calendar Sanitizer] Removed ${toDelete.length} invalid auto-absent records on holidays/weekly offs.`);
+  return toDelete.length;
+}
+
+async function syncMonthlyWorkingDaysForDate(dateStr: string, scopeSessionId?: string): Promise<void> {
+  const match = /^(\d{4})-(\d{2})-\d{2}$/.exec(dateStr);
+  if (!match) return;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const monthKey = `${match[1]}-${match[2]}`;
+  const data = db.get();
+  const ops: PendingFirestoreOp[] = [];
+  data.monthlyWorkingDays.forEach((mwd, idx) => {
+    if (mwd.month !== monthKey) return;
+    if (scopeSessionId && scopeSessionId !== 'all' && mwd.sessionId !== scopeSessionId) return;
+    const breakdown = calculateMonthWorkingDayBreakdown(year, month, data.holidays || [], mwd.sessionId);
+    data.monthlyWorkingDays[idx] = {
+      ...mwd,
+      totalDays: breakdown.totalCalendarDays,
+      holidays: breakdown.totalHolidays,
+      workingDays: breakdown.totalWorkingDays,
+    };
+    ops.push({ type: 'set', coll: 'workingDays', id: mwd.id, data: data.monthlyWorkingDays[idx] });
+  });
+  if (ops.length > 0) {
+    await db.persistBatchNow(ops);
+  }
 }
 
 function calculateDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -62,7 +114,7 @@ function calculateDistanceMeters(lat1: number, lon1: number, lat2: number, lon2:
 
 async function startServer() {
   const app = express();
-  const PORT = Number(process.env.PORT) || 3000;
+  const PORT = Number(process.env.DEFAULT_APP_PORT) || 3000;
 
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ extended: true, limit: '50mb' }));
@@ -82,6 +134,7 @@ async function startServer() {
 
   // Initialize persistent Google Cloud Firestore before serving requests
   await db.ensureInitialized();
+  await cleanupInvalidHolidayAutoAbsents();
 
   // Ensure every API request runs against initialized Firestore state
   app.use('/api', async (_req: Request, _res: Response, next: any) => {
@@ -1218,6 +1271,8 @@ async function startServer() {
 
     data.holidays.push(newHoliday);
     await db.persistItemNow('holidays', newHoliday.id, newHoliday);
+    await cleanupInvalidHolidayAutoAbsents(newHoliday.date);
+    await syncMonthlyWorkingDaysForDate(newHoliday.date, newHoliday.sessionId);
     db.addAuditLog({
       userId: 'usr_admin',
       userName: newHoliday.createdBy || 'Principal / Admin',
@@ -1235,6 +1290,8 @@ async function startServer() {
     const idx = data.holidays.findIndex((h) => h.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: 'Holiday not found' });
 
+    const prevDate = data.holidays[idx].date;
+    const prevScope = data.holidays[idx].sessionId;
     const nextDate = req.body.date !== undefined ? String(req.body.date).trim() : data.holidays[idx].date;
     const nextTitle = req.body.title !== undefined ? String(req.body.title).trim() : data.holidays[idx].title;
     const nextScope = req.body.sessionId !== undefined ? (String(req.body.sessionId).trim() || 'all') : (data.holidays[idx].sessionId || 'all');
@@ -1269,6 +1326,11 @@ async function startServer() {
     };
 
     await db.persistItemNow('holidays', data.holidays[idx].id, data.holidays[idx]);
+    await cleanupInvalidHolidayAutoAbsents(nextDate);
+    await syncMonthlyWorkingDaysForDate(prevDate, prevScope);
+    if (nextDate !== prevDate || nextScope !== prevScope) {
+      await syncMonthlyWorkingDaysForDate(nextDate, nextScope);
+    }
     db.addAuditLog({
       userId: 'usr_admin',
       userName: 'Principal / Admin',
@@ -1288,6 +1350,7 @@ async function startServer() {
 
     data.holidays = data.holidays.filter((h) => h.id !== req.params.id);
     await db.deleteItemNow('holidays', req.params.id);
+    await syncMonthlyWorkingDaysForDate(target.date, target.sessionId);
     db.addAuditLog({
       userId: 'usr_admin',
       userName: 'Principal / Admin',
@@ -1637,19 +1700,18 @@ async function startServer() {
     if (!trainee) return res.status(404).json({ error: 'Trainee not found' });
 
     const now = new Date();
-    const todayStr = now.toISOString().split('T')[0];
+    const { dateStr: todayStr, hours, minutes } = getIstClockParts(now);
 
-    const holiday = findHolidayForDate(data, todayStr, trainee.sessionId);
-    if (holiday) {
+    const dayLock = getDayAttendanceLock(data, todayStr, trainee.sessionId);
+    if (dayLock.isHoliday) {
       return res.status(400).json({
-        error: `Attendance is disabled today (${todayStr}): Admin has marked this date as a Holiday ("${holiday.title}").`,
+        error: dayLock.lockReason || `Attendance is disabled today (${todayStr}): ${dayLock.title}.`,
         isHoliday: true,
-        holiday,
+        isWeeklyOff: dayLock.isWeeklyHoliday,
+        holiday: dayLock.adminHoliday,
+        dayStatus: dayLock,
       });
     }
-
-    const hours = now.getHours();
-    const minutes = now.getMinutes();
 
     const win = data.settings.attendanceWindow;
     const isWithinTimeWindow =
@@ -1695,7 +1757,7 @@ async function startServer() {
       });
     }
 
-    const timestampStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+    const timestampStr = now.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
     const newRecord: AttendanceRecord = {
       id: `att_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       traineeId: trainee.id,
@@ -1742,28 +1804,31 @@ async function startServer() {
       return res.status(400).json({ error: 'Invalid attendance records payload' });
     }
 
+    const targetDate = String(date || '').trim();
     const sampleTrainee = records
       .map((r) => data.trainees.find((t) => t.id === r.traineeId))
       .find(Boolean);
-    const holiday = findHolidayForDate(data, String(date || ''), sampleTrainee?.sessionId);
-    if (holiday) {
+    const dayLock = getDayAttendanceLock(data, targetDate, sampleTrainee?.sessionId);
+    if (dayLock.isHoliday) {
       return res.status(400).json({
-        error: `Attendance submission blocked: ${date} is designated as a Holiday ("${holiday.title}"). Attendance actions are disabled on holidays.`,
+        error: dayLock.lockReason || `Attendance submission blocked: ${targetDate} is ${dayLock.title}.`,
         isHoliday: true,
-        holiday,
+        isWeeklyOff: dayLock.isWeeklyHoliday,
+        holiday: dayLock.adminHoliday,
+        dayStatus: dayLock,
       });
     }
 
     const now = new Date();
-    const timestampStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+    const timestampStr = now.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
     const ops: PendingFirestoreOp[] = [];
 
     records.forEach((item) => {
       const trainee = data.trainees.find((t) => t.id === item.traineeId);
       if (!trainee) return;
-      if (findHolidayForDate(data, String(date || ''), trainee.sessionId)) return;
+      if (getDayAttendanceLock(data, targetDate, trainee.sessionId).isHoliday) return;
 
-      const existingIdx = data.attendance.findIndex((a) => a.traineeId === item.traineeId && a.date === date);
+      const existingIdx = data.attendance.findIndex((a) => a.traineeId === item.traineeId && a.date === targetDate);
       if (existingIdx >= 0) {
         data.attendance[existingIdx] = {
           ...data.attendance[existingIdx],
@@ -1781,7 +1846,7 @@ async function startServer() {
           rollNo: trainee.rollNo,
           tradeId: trainee.tradeId,
           sessionId: trainee.sessionId,
-          date,
+          date: targetDate,
           status: item.status,
           timestamp: timestampStr,
           markedBy: 'officer_manual',
@@ -1800,7 +1865,7 @@ async function startServer() {
       userName: officerName || 'Training Officer',
       userRole: 'officer',
       action: 'OFFICER_ATTENDANCE_UPDATE',
-      details: `Updated/marked attendance for ${records.length} trainees on date ${date}.`,
+      details: `Updated/marked attendance for ${records.length} trainees on date ${targetDate}.`,
     });
 
     res.json({ success: true, count: records.length });
@@ -1809,8 +1874,20 @@ async function startServer() {
   // Auto-mark Absent for trainees who haven't marked attendance past cutoff time
   app.post('/api/attendance/auto-absent', async (req: Request, res: Response) => {
     const { date, tradeId } = req.body;
-    const targetDate = date || new Date().toISOString().split('T')[0];
+    const targetDate = String(date || getIstDateStr()).trim();
     const data = db.get();
+
+    const baseLock = getDayAttendanceLock(data, targetDate);
+    if (baseLock.isWeeklyHoliday) {
+      return res.status(400).json({
+        error: baseLock.lockReason || `Auto-absent is disabled: ${targetDate} is ${baseLock.title}.`,
+        isHoliday: true,
+        isWeeklyOff: true,
+        holiday: baseLock.adminHoliday,
+        dayStatus: baseLock,
+        markedCount: 0,
+      });
+    }
 
     const globalHoliday = findHolidayForDate(data, targetDate);
     let targetTrainees = data.trainees.filter((t) => t.status === 'active');
@@ -1825,12 +1902,13 @@ async function startServer() {
       });
     }
 
-    if (targetTrainees.length > 0 && targetTrainees.every((tr) => Boolean(findHolidayForDate(data, targetDate, tr.sessionId)))) {
-      const hol = findHolidayForDate(data, targetDate, targetTrainees[0].sessionId);
+    if (targetTrainees.length > 0 && targetTrainees.every((tr) => getDayAttendanceLock(data, targetDate, tr.sessionId).isHoliday)) {
+      const lock = getDayAttendanceLock(data, targetDate, targetTrainees[0].sessionId);
       return res.status(400).json({
-        error: `Auto-absent is disabled: ${targetDate} is an Admin-designated Holiday ("${hol?.title || 'Holiday'}").`,
+        error: lock.lockReason || `Auto-absent is disabled: ${targetDate} is a Holiday.`,
         isHoliday: true,
-        holiday: hol,
+        isWeeklyOff: lock.isWeeklyHoliday,
+        holiday: lock.adminHoliday,
         markedCount: 0,
       });
     }
@@ -1838,7 +1916,7 @@ async function startServer() {
     let newlyMarkedAbsent = 0;
     const ops: PendingFirestoreOp[] = [];
     targetTrainees.forEach((tr) => {
-      if (findHolidayForDate(data, targetDate, tr.sessionId)) return;
+      if (getDayAttendanceLock(data, targetDate, tr.sessionId).isHoliday) return;
       const exists = data.attendance.find((a) => a.traineeId === tr.id && a.date === targetDate);
       if (!exists) {
         const rec: AttendanceRecord = {
@@ -1940,47 +2018,45 @@ async function startServer() {
       { type: 'set', coll: 'leaves', id: leave.id, data: leave },
     ];
 
-    // If approved, update or insert attendance as 'CL' or 'Medical Leave' or 'Half-Day Leave'
+    // If approved, update or insert attendance ONLY on valid working days (skip Sundays, 2nd/3rd Saturdays, Admin Holidays)
     if (status === 'approved') {
       const attStatus = leave.leaveType === 'Casual Leave (CL)' ? 'CL' : leave.leaveType === 'Medical Leave (ML)' ? 'Medical Leave' : 'Half-Day Leave';
       const trainee = data.trainees.find((t) => t.id === leave.traineeId);
-      const start = new Date(leave.fromDate);
-      const end = new Date(leave.toDate);
+      const validWorkingDates = expandLeaveWorkingDates(
+        leave.fromDate,
+        leave.toDate,
+        data.holidays || [],
+        trainee?.sessionId,
+        45
+      );
 
-      let curr = new Date(start);
-      let loopCount = 0;
-      while (curr <= end && loopCount < 31) {
-        loopCount++;
-        if (curr.getDay() !== 0) { // Skip Sundays
-          const dateStr = curr.toISOString().split('T')[0];
-          const attIdx = data.attendance.findIndex((a) => a.traineeId === leave.traineeId && a.date === dateStr);
-          if (attIdx >= 0) {
-            data.attendance[attIdx].status = attStatus;
-            data.attendance[attIdx].remarks = `Approved leave (${leave.leaveType}): ${reviewerRemarks || 'Sanctioned by Training Officer'}`;
-            data.attendance[attIdx].authorizedCorrection = true;
-            data.attendance[attIdx].correctedBy = officerName || 'Training Officer';
-            ops.push({ type: 'set', coll: 'attendance', id: data.attendance[attIdx].id, data: data.attendance[attIdx] });
-          } else if (trainee) {
-            const newAtt: AttendanceRecord = {
-              id: `att_lv_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-              traineeId: trainee.id,
-              traineeName: trainee.name,
-              rollNo: trainee.rollNo,
-              tradeId: trainee.tradeId,
-              sessionId: trainee.sessionId,
-              date: dateStr,
-              status: attStatus,
-              timestamp: '08:00 AM',
-              markedBy: 'officer_manual',
-              remarks: `Approved leave (${leave.leaveType}): ${reviewerRemarks || leave.reason}`,
-              authorizedCorrection: true,
-              correctedBy: officerName || 'Training Officer',
-            };
-            data.attendance.push(newAtt);
-            ops.push({ type: 'set', coll: 'attendance', id: newAtt.id, data: newAtt });
-          }
+      for (const dateStr of validWorkingDates) {
+        const attIdx = data.attendance.findIndex((a) => a.traineeId === leave.traineeId && a.date === dateStr);
+        if (attIdx >= 0) {
+          data.attendance[attIdx].status = attStatus;
+          data.attendance[attIdx].remarks = `Approved leave (${leave.leaveType}): ${reviewerRemarks || 'Sanctioned by Training Officer'}`;
+          data.attendance[attIdx].authorizedCorrection = true;
+          data.attendance[attIdx].correctedBy = officerName || 'Training Officer';
+          ops.push({ type: 'set', coll: 'attendance', id: data.attendance[attIdx].id, data: data.attendance[attIdx] });
+        } else if (trainee) {
+          const newAtt: AttendanceRecord = {
+            id: `att_lv_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            traineeId: trainee.id,
+            traineeName: trainee.name,
+            rollNo: trainee.rollNo,
+            tradeId: trainee.tradeId,
+            sessionId: trainee.sessionId,
+            date: dateStr,
+            status: attStatus,
+            timestamp: '08:00 AM',
+            markedBy: 'officer_manual',
+            remarks: `Approved leave (${leave.leaveType}): ${reviewerRemarks || leave.reason}`,
+            authorizedCorrection: true,
+            correctedBy: officerName || 'Training Officer',
+          };
+          data.attendance.push(newAtt);
+          ops.push({ type: 'set', coll: 'attendance', id: newAtt.id, data: newAtt });
         }
-        curr.setDate(curr.getDate() + 1);
       }
     }
 
@@ -2288,30 +2364,30 @@ async function startServer() {
       });
     });
 
-    // 2. Trainee Real-time Attendance Deficit Alert (<80%)
+    // 2. Trainee Real-time Attendance Deficit Alert (<80%) using government working-day formula
+    const traineeObj = data.trainees.find((t) => t.id === traineeId);
     const records = data.attendance.filter((a) => a.traineeId === traineeId);
-    const totalMarked = records.length;
-    if (totalMarked > 0) {
-      const presentCount = records.filter((a) => a.status === 'Present').length;
-      const clCount = records.filter((a) => a.status === 'CL').length;
-      const mlCount = records.filter((a) => a.status === 'Medical Leave').length;
-      const halfDayCount = records.filter((a) => a.status === 'Half-Day Leave').length;
-      const effectiveAttended = presentCount + clCount + mlCount + halfDayCount * 0.5;
-      const percent = Math.round((effectiveAttended / totalMarked) * 1000) / 10;
-
-      if (percent < data.settings.minimumAttendancePercent) {
-        notifications.unshift({
-          id: `notif_deficit_${traineeId}`,
-          type: 'attendance_deficit',
-          title: `CRITICAL ATTENDANCE ALERT (${percent}%)`,
-          message: `Your attendance of ${percent}% has dropped below the statutory NCVT requirement of ${data.settings.minimumAttendancePercent}%. You risk debarment from examination unless rectified immediately.`,
-          timestamp: 'Live Attendance Alert',
-          read: false,
-          priority: 'urgent',
-          linkTab: 'history',
-          metadata: { currentPercent: percent, threshold: data.settings.minimumAttendancePercent },
-        });
-      }
+    const metrics = calculateTraineeAttendanceMetrics({
+      records,
+      holidays: data.holidays || [],
+      sessionId: traineeObj?.sessionId,
+      admissionDate: traineeObj?.admissionDate,
+      referenceDate: getIstDateStr(),
+      minimumAttendancePercent: data.settings.minimumAttendancePercent,
+    });
+    if (metrics.totalWorkingDays > 0 && metrics.isBelowThreshold) {
+      const percent = metrics.attendancePercent;
+      notifications.unshift({
+        id: `notif_deficit_${traineeId}`,
+        type: 'attendance_deficit',
+        title: `CRITICAL ATTENDANCE ALERT (${percent}%)`,
+        message: `Your attendance of ${percent}% (${metrics.presentDays}/${metrics.totalWorkingDays} working days) has dropped below the statutory NCVT requirement of ${data.settings.minimumAttendancePercent}%. You risk debarment from examination unless rectified immediately.`,
+        timestamp: 'Live Attendance Alert',
+        read: false,
+        priority: 'urgent',
+        linkTab: 'history',
+        metadata: { currentPercent: percent, threshold: data.settings.minimumAttendancePercent },
+      });
     }
 
     // 3. Trainee Leave Request Updates
@@ -2356,10 +2432,11 @@ async function startServer() {
       }
     });
 
-    // 4. Today's Attendance Check (Cutoff / Absence notice)
-    const todayStr = new Date().toISOString().split('T')[0];
+    // 4. Today's Attendance Check (Cutoff / Absence notice — only on actual working days)
+    const todayStr = getIstDateStr();
+    const todayDayStatus = getDateHolidayStatus(todayStr, data.holidays || [], traineeObj?.sessionId);
     const todayRecord = records.find((a) => a.date === todayStr);
-    if (todayRecord && todayRecord.status === 'Absent') {
+    if (todayDayStatus.isWorkingDay && todayRecord && todayRecord.status === 'Absent') {
       notifications.unshift({
         id: `notif_absent_${todayStr}`,
         type: 'absent_recorded',
@@ -2676,30 +2753,32 @@ async function startServer() {
 
   // -------------------------------------------------------------
   // Scheduled Background Task: Auto-Mark Absent at 17:00 Cutoff
+  // Runs ONLY on valid working days (skips Sundays, 2nd/3rd Saturdays, Admin Holidays)
   // -------------------------------------------------------------
   let lastAutoAbsentDate = '';
   setInterval(async () => {
     try {
-      const now = new Date();
-      const hour = now.getHours();
-      const minute = now.getMinutes();
-      const todayStr = now.toISOString().split('T')[0];
+      const { dateStr: todayStr, hours: hour, minutes: minute } = getIstClockParts();
       const win = db.get().settings.attendanceWindow;
       const autoHour = win.autoAbsentHour !== undefined ? win.autoAbsentHour : 17;
       const autoMinute = win.autoAbsentMinute !== undefined ? win.autoAbsentMinute : 0;
 
-      // Run when time is at or past cutoff (17:00) and hasn't run for today yet
+      // Run when time is at or past cutoff (17:00 IST) and hasn't run for today yet
       if (
         (hour > autoHour || (hour === autoHour && minute >= autoMinute)) &&
         lastAutoAbsentDate !== todayStr
       ) {
         lastAutoAbsentDate = todayStr;
         const data = db.get();
+        const globalStatus = getDateHolidayStatus(todayStr, data.holidays || []);
+        if (globalStatus.isWeeklyHoliday) {
+          return; // Never generate auto-absent on Sundays or 2nd/3rd Saturdays
+        }
         const ops: PendingFirestoreOp[] = [];
         data.trainees.forEach((tr) => {
           if (tr.status === 'active') {
-            // Do not mark auto-absent on Admin-designated holidays
-            if (findHolidayForDate(data, todayStr, tr.sessionId)) return;
+            // Do not mark auto-absent on Sundays, 2nd/3rd Saturdays, or Admin-designated holidays
+            if (getDateHolidayStatus(todayStr, data.holidays || [], tr.sessionId).isHoliday) return;
             const exists = data.attendance.find((a) => a.traineeId === tr.id && a.date === todayStr);
             if (!exists) {
               const rec: AttendanceRecord = {
@@ -2722,7 +2801,7 @@ async function startServer() {
         });
         if (ops.length > 0) {
           await db.persistBatchNow(ops);
-          console.log(`[Auto-Absent Scheduler] Flagged ${ops.length} unmarked active trainees as Absent for date ${todayStr} at 17:00 cutoff.`);
+          console.log(`[Auto-Absent Scheduler] Flagged ${ops.length} unmarked active trainees as Absent for valid working date ${todayStr} at 17:00 cutoff.`);
         }
       }
     } catch (e) {

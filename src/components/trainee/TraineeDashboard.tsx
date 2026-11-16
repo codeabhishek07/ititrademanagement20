@@ -49,6 +49,12 @@ import {
   uploadDocument,
 } from '../../api.ts';
 import { DocumentVaultPanel } from '../DocumentVaultPanel.tsx';
+import {
+  getDateHolidayStatus,
+  calculateMonthWorkingDayBreakdown,
+  calculateTraineeAttendanceMetrics,
+  getIstDateStr,
+} from '../../utils/attendanceCalendar.ts';
 
 interface TraineeDashboardProps {
   trainee: {
@@ -161,12 +167,13 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
   const [leaveSubmitError, setLeaveSubmitError] = useState('');
   const [leaveSubmitting, setLeaveSubmitting] = useState(false);
 
-  const todayStr = new Date().toISOString().split('T')[0];
-  const todayRecord = attendanceList.find((a) => a.date === todayStr);
-  const traineeHolidays = holidays.filter(
-    (h) => !h.sessionId || h.sessionId === 'all' || !trainee.sessionId || h.sessionId === trainee.sessionId
-  );
-  const todayHoliday = traineeHolidays.find((h) => h.date === todayStr);
+  const todayStr = getIstDateStr();
+  const todayDayLock = getDateHolidayStatus(todayStr, holidays, trainee.sessionId);
+  const isTodayHolidayLocked = todayDayLock.isHoliday;
+  const todayHoliday = todayDayLock.adminHoliday;
+  const todayRecord = isTodayHolidayLocked
+    ? undefined
+    : attendanceList.find((a) => a.date === todayStr);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -269,8 +276,8 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
 
   // Mark Attendance via GPS
   const handleMarkAttendance = async () => {
-    if (todayHoliday) {
-      alert(`Attendance is disabled today (${todayStr}): Designated as Holiday ("${todayHoliday.title}").`);
+    if (isTodayHolidayLocked) {
+      alert(todayDayLock.lockReason || `Attendance is disabled today (${todayStr}): ${todayDayLock.title}.`);
       return;
     }
     if (!currentCoords && !simulateOnCampus) {
@@ -379,17 +386,25 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
     }
   };
 
-  // Calculate Personal Stats
-  const totalMarked = attendanceList.length;
-  const presentCount = attendanceList.filter((a) => a.status === 'Present').length;
-  const clCount = attendanceList.filter((a) => a.status === 'CL').length;
-  const mlCount = attendanceList.filter((a) => a.status === 'Medical Leave').length;
-  const halfDayCount = attendanceList.filter((a) => a.status === 'Half-Day Leave').length;
-  const absentCount = attendanceList.filter((a) => a.status === 'Absent').length;
-
-  const effectiveAttended = presentCount + clCount + mlCount + halfDayCount * 0.5;
-  const attendancePercent = totalMarked > 0 ? Math.round((effectiveAttended / totalMarked) * 1000) / 10 : 100;
-  const isBelowThreshold = attendancePercent < settings.minimumAttendancePercent;
+  // Calculate Personal Stats strictly excluding Sundays, 2nd/3rd Saturdays, and Admin Holidays
+  const validWorkingAttendanceList = attendanceList.filter(
+    (a) => getDateHolidayStatus(a.date, holidays, trainee.sessionId).isWorkingDay
+  );
+  const personalMetrics = calculateTraineeAttendanceMetrics({
+    records: attendanceList,
+    holidays,
+    sessionId: trainee.sessionId,
+    referenceDate: todayStr,
+    minimumAttendancePercent: settings.minimumAttendancePercent,
+  });
+  const totalMarked = personalMetrics.totalWorkingDays;
+  const presentCount = personalMetrics.presentDays;
+  const clCount = personalMetrics.clDays;
+  const mlCount = personalMetrics.mlDays;
+  const halfDayCount = personalMetrics.halfDays;
+  const absentCount = personalMetrics.absentDays;
+  const attendancePercent = personalMetrics.attendancePercent;
+  const isBelowThreshold = personalMetrics.isBelowThreshold;
 
   // Window check
   const now = new Date();
@@ -721,19 +736,19 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
               </div>
               <span
                 className={`px-2 py-0.5 rounded text-[11px] font-semibold ${
-                  todayHoliday
+                  isTodayHolidayLocked
                     ? 'bg-rose-100 text-rose-800 border border-rose-200'
                     : isTimeWithinWindow
                     ? 'bg-emerald-100 text-emerald-800'
                     : 'bg-amber-100 text-amber-800'
                 }`}
               >
-                {todayHoliday ? 'HOLIDAY (DISABLED)' : isTimeWithinWindow ? 'WINDOW OPEN' : 'WINDOW CLOSED / CUTOFF'}
+                {isTodayHolidayLocked ? 'HOLIDAY (DISABLED)' : isTimeWithinWindow ? 'WINDOW OPEN' : 'WINDOW CLOSED / CUTOFF'}
               </span>
             </div>
 
             {/* Today Holiday Lock Banner */}
-            {todayHoliday ? (
+            {isTodayHolidayLocked ? (
               <div className="p-5 rounded-xl border-2 border-rose-200 bg-rose-50/70 text-xs space-y-3">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center gap-2 text-rose-900 font-bold text-sm">
@@ -747,20 +762,20 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-slate-800">
                   <div className="bg-white p-2.5 rounded border border-rose-200">
                     <span className="text-[10px] text-slate-500">Occasion</span>
-                    <div className="font-bold text-rose-900 mt-0.5">{todayHoliday.title}</div>
+                    <div className="font-bold text-rose-900 mt-0.5">{todayDayLock.title}</div>
                   </div>
                   <div className="bg-white p-2.5 rounded border border-rose-200">
                     <span className="text-[10px] text-slate-500">Category</span>
-                    <div className="font-bold text-slate-900 mt-0.5">{todayHoliday.category}</div>
+                    <div className="font-bold text-slate-900 mt-0.5">{todayDayLock.categoryLabel}</div>
                   </div>
                   <div className="bg-white p-2.5 rounded border border-rose-200">
                     <span className="text-[10px] text-slate-500">Date</span>
-                    <div className="font-bold text-slate-900 mt-0.5 font-mono">{todayHoliday.date}</div>
+                    <div className="font-bold text-slate-900 mt-0.5 font-mono">{todayStr}</div>
                   </div>
                 </div>
                 <p className="text-rose-800">
-                  Attendance check-in and GPS verification are automatically disabled on Admin-designated holidays. No absent deduction applies today.
-                  {todayHoliday.remarks ? ` (${todayHoliday.remarks})` : ''}
+                  Attendance check-in and GPS verification are automatically disabled on Sundays, 2nd &amp; 3rd Saturdays, and Admin-designated holidays. No absent deduction applies today.
+                  {todayHoliday?.remarks ? ` (${todayHoliday.remarks})` : ''}
                 </p>
                 <button
                   type="button"
@@ -768,7 +783,7 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
                   className="w-full py-3 px-4 bg-slate-200 text-slate-500 font-bold rounded-xl text-xs flex items-center justify-center gap-2 cursor-not-allowed"
                 >
                   <Ban className="w-4 h-4" />
-                  <span>Mark Attendance Disabled (Holiday: {todayHoliday.title})</span>
+                  <span>Mark Attendance Disabled ({todayDayLock.title})</span>
                 </button>
               </div>
             ) : todayRecord ? (
@@ -965,8 +980,8 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
               </h4>
               <ul className="space-y-2 text-[11px] text-slate-600 list-disc pl-4">
                 <li>Attendance must be marked between 07:00 AM and 03:00 PM (15:00) daily.</li>
-                <li>Candidates failing to check in before 17:00 (05:00 PM) are automatically marked Absent.</li>
-                <li>Attendance marking is disabled on Sundays and Admin-designated Holidays.</li>
+                <li>Candidates failing to check in before 17:00 (05:00 PM) on a working day are automatically marked Absent.</li>
+                <li>Attendance marking is automatically disabled on Sundays, 2nd Saturdays, 3rd Saturdays, and Admin-designated Holidays.</li>
                 <li>Minimum required attendance for All India Trade Test (AITT) is 80%.</li>
               </ul>
             </div>
@@ -987,7 +1002,7 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
           {/* Graphical Summary Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-center">
-              <span className="text-slate-500 text-[10px]">Total Recorded Days</span>
+              <span className="text-slate-500 text-[10px]">Total Working Days</span>
               <div className="text-lg font-bold font-mono text-slate-900 mt-0.5">{totalMarked}</div>
             </div>
             <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-200 text-center">
@@ -1003,7 +1018,7 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
               <div className="text-lg font-bold font-mono text-blue-800 mt-0.5">{mlCount + halfDayCount}</div>
             </div>
             <div className="p-3 bg-rose-50 rounded-lg border border-rose-200 text-center">
-              <span className="text-rose-700 text-[10px]">Absent</span>
+              <span className="text-rose-700 text-[10px]">Absent (Working Days)</span>
               <div className="text-lg font-bold font-mono text-rose-800 mt-0.5">{absentCount}</div>
             </div>
           </div>
@@ -1012,7 +1027,7 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
           <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-2">
             <div className="flex justify-between items-center text-xs">
               <span className="font-semibold text-slate-800">
-                Semester Attendance Progress ({attendancePercent}% of Required 80%)
+                Semester Attendance Progress ({attendancePercent}% of Required 80% · Formula: Present / Working Days × 100)
               </span>
               <span className="font-mono text-slate-600">
                 {isBelowThreshold ? 'Deficit Warning Active' : 'Compliant with NCVT'}
@@ -1033,16 +1048,18 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
             const [yStr, mStr] = historyMonth.split('-');
             const y = parseInt(yStr, 10);
             const m = parseInt(mStr, 10);
-            const totalDays = new Date(y, m, 0).getDate();
-            const firstDow = new Date(y, m - 1, 1).getDay();
-            const cells: Array<{ day: number | null; dateStr?: string; isSunday?: boolean; holiday?: HolidayRecord; rec?: AttendanceRecord }> = [];
-            for (let i = 0; i < firstDow; i++) cells.push({ day: null });
-            for (let d = 1; d <= totalDays; d++) {
-              const dateStr = `${yStr}-${mStr}-${String(d).padStart(2, '0')}`;
-              const dow = new Date(y, m - 1, d).getDay();
-              const holiday = traineeHolidays.find((h) => h.date === dateStr);
-              const rec = attendanceList.find((a) => a.date === dateStr);
-              cells.push({ day: d, dateStr, isSunday: dow === 0, holiday, rec });
+            const breakdown = calculateMonthWorkingDayBreakdown(y, m, holidays, trainee.sessionId);
+            const firstDow = new Date(Date.UTC(y, m - 1, 1)).getUTCDay();
+            const cells: Array<
+              | { empty: true }
+              | ({ empty: false; rec?: AttendanceRecord } & (typeof breakdown.days)[number])
+            > = [];
+            for (let i = 0; i < firstDow; i++) cells.push({ empty: true });
+            for (const dayInfo of breakdown.days) {
+              const rec = dayInfo.isWorkingDay
+                ? validWorkingAttendanceList.find((a) => a.date === dayInfo.dateStr)
+                : undefined;
+              cells.push({ empty: false, ...dayInfo, rec });
             }
             const stepMonth = (delta: number) => {
               const dt = new Date(y, m - 1 + delta, 1);
@@ -1050,14 +1067,22 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
               setHistoryMonth(next);
               onUpdatePreferences?.({ historyMonth: next });
             };
-            const monthHolidays = cells.filter((c) => c.holiday);
+            const monthHolidays = cells.filter(
+              (c): c is { empty: false; rec?: AttendanceRecord } & (typeof breakdown.days)[number] =>
+                !c.empty && c.isHoliday
+            );
 
             return (
               <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
                 <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 bg-slate-50 border-b border-slate-200">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-rose-600" />
-                    <span className="font-bold text-slate-900 text-xs">Session Attendance &amp; Holiday Calendar</span>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-rose-600" />
+                      <span className="font-bold text-slate-900 text-xs">Session Attendance &amp; Holiday Calendar</span>
+                    </div>
+                    <div className="text-[11px] text-slate-600 mt-0.5 font-mono">
+                      Working Days: <strong>{breakdown.totalWorkingDays}</strong> = {breakdown.totalCalendarDays} Calendar − {breakdown.weeklyHolidays} Weekly Offs − {breakdown.adminDesignatedHolidays} Admin Holidays
+                    </div>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <button
@@ -1090,7 +1115,7 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
 
                 <div className="grid grid-cols-7 bg-slate-100 border-b border-slate-200 text-center text-[10px] font-bold text-slate-600">
                   {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((wd, idx) => (
-                    <div key={wd} className={`py-1.5 ${idx === 0 ? 'text-amber-800 bg-amber-50/70' : ''}`}>
+                    <div key={wd} className={`py-1.5 ${idx === 0 ? 'text-amber-800 bg-amber-50/70' : idx === 6 ? 'text-orange-900 bg-orange-50/40' : ''}`}>
                       {wd}
                     </div>
                   ))}
@@ -1098,38 +1123,47 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
 
                 <div className="grid grid-cols-7 divide-x divide-y divide-slate-200">
                   {cells.map((c, idx) => {
-                    if (!c.day || !c.dateStr) {
+                    if (c.empty) {
                       return <div key={`empty_tr_${idx}`} className="min-h-[54px] bg-slate-50/60" />;
                     }
                     const isToday = c.dateStr === todayStr;
+                    const isGovtSat = c.isSecondSaturday || c.isThirdSaturday;
                     return (
                       <div
                         key={c.dateStr}
                         className={`min-h-[54px] p-1.5 flex flex-col justify-between ${
-                          c.holiday
+                          c.isAdminHoliday
                             ? 'bg-rose-50 ring-1 ring-inset ring-rose-300'
+                            : isGovtSat
+                            ? 'bg-orange-50/80 ring-1 ring-inset ring-orange-200'
+                            : c.isSunday
+                            ? 'bg-amber-50/50'
                             : c.rec?.status === 'Present'
                             ? 'bg-emerald-50/50'
                             : c.rec?.status === 'Absent'
                             ? 'bg-rose-50/30'
-                            : c.isSunday
-                            ? 'bg-amber-50/40'
                             : 'bg-white'
                         }`}
-                        title={c.holiday ? `Holiday: ${c.holiday.title}` : c.rec?.status || (c.isSunday ? 'Sunday' : '')}
+                        title={c.lockReason || c.rec?.status || 'Working Day'}
                       >
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-0.5">
                           <span
                             className={`text-[11px] font-mono font-bold px-1 rounded ${
-                              isToday ? 'bg-amber-600 text-white' : c.holiday ? 'text-rose-900' : 'text-slate-700'
+                              isToday ? 'bg-amber-600 text-white' : c.isAdminHoliday ? 'text-rose-900' : isGovtSat ? 'text-orange-900' : 'text-slate-700'
                             }`}
                           >
-                            {c.day}
+                            {c.dayNumber}
                           </span>
-                          {c.holiday ? (
+                          {c.isAdminHoliday ? (
                             <span className="text-[8px] font-extrabold uppercase px-1 py-0.5 rounded bg-rose-600 text-white">
                               Holiday
                             </span>
+                          ) : isGovtSat ? (
+                            <span className="text-[8px] font-extrabold uppercase px-1 py-0.5 rounded bg-orange-600 text-white">
+                              Holiday
+                            </span>
+                          ) : c.isSunday ? (
+                            <span className="text-[8px] text-amber-800 font-bold">Sun Off</span>
                           ) : c.rec ? (
                             <span
                               className={`text-[9px] font-bold px-1 rounded ${
@@ -1142,15 +1176,17 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
                             >
                               {c.rec.status === 'Present' ? 'P' : c.rec.status === 'Absent' ? 'A' : c.rec.status === 'CL' ? 'CL' : c.rec.status === 'Medical Leave' ? 'ML' : 'HD'}
                             </span>
-                          ) : c.isSunday ? (
-                            <span className="text-[8px] text-amber-700 font-semibold">Sun</span>
                           ) : null}
                         </div>
-                        {c.holiday && (
+                        {c.isAdminHoliday && c.adminHoliday ? (
                           <div className="text-[9px] font-semibold text-rose-900 line-clamp-1 leading-tight">
-                            {c.holiday.title}
+                            {c.adminHoliday.title}
                           </div>
-                        )}
+                        ) : isGovtSat ? (
+                          <div className="text-[9px] font-semibold text-orange-800 line-clamp-1 leading-tight">
+                            {c.weeklyShortTag}
+                          </div>
+                        ) : null}
                       </div>
                     );
                   })}
@@ -1159,21 +1195,23 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
                 {monthHolidays.length > 0 && (
                   <div className="px-4 py-2.5 bg-rose-50/70 border-t border-rose-200 flex flex-wrap items-center gap-2 text-[11px]">
                     <span className="font-bold text-rose-900">Holidays in {historyMonth}:</span>
-                    {monthHolidays.map((c) => (
-                      <span
-                        key={c.dateStr}
-                        className="px-2 py-0.5 rounded bg-white border border-rose-200 text-rose-800 font-semibold"
-                      >
-                        <span className="font-mono">{c.dateStr}</span> — Holiday: {c.holiday?.title}
-                      </span>
-                    ))}
+                    {monthHolidays
+                      .filter((c) => c.isAdminHoliday || c.isSecondSaturday || c.isThirdSaturday)
+                      .map((c) => (
+                        <span
+                          key={c.dateStr}
+                          className="px-2 py-0.5 rounded bg-white border border-rose-200 text-rose-800 font-semibold"
+                        >
+                          <span className="font-mono">{c.dateStr}</span> — {c.title}
+                        </span>
+                      ))}
                   </div>
                 )}
               </div>
             );
           })()}
 
-          {/* Detailed Log Table */}
+          {/* Detailed Log Table (valid working days only) */}
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
@@ -1187,7 +1225,7 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-mono text-[11px]">
-                {attendanceList.map((rec) => (
+                {validWorkingAttendanceList.map((rec) => (
                   <tr key={rec.id} className="hover:bg-slate-50/80 transition-colors font-sans">
                     <td className="py-2.5 px-3 font-mono text-slate-900 font-semibold">{rec.date}</td>
                     <td className="py-2.5 px-3 text-center">

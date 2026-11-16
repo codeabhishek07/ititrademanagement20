@@ -57,6 +57,11 @@ import {
 } from '../../types.ts';
 import { DocumentVaultPanel } from '../DocumentVaultPanel.tsx';
 import {
+  calculateMonthWorkingDayBreakdown,
+  getDateHolidayStatus,
+  getIstDateStr,
+} from '../../utils/attendanceCalendar.ts';
+import {
   fetchSessions,
   createSession,
   updateSession,
@@ -381,6 +386,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setHolidayModalOpen(false);
       const updated = await fetchHolidays();
       setHolidays(updated);
+      if (selectedSessionId) {
+        fetchMonthlyWorkingDays(selectedSessionId)
+          .then((list) => {
+            setMonthlyDays(list);
+            setEditableMonthlyDays(list);
+          })
+          .catch(() => {});
+      }
       fetchAuditLogs().then(setAuditLogs).catch(() => {});
     } catch (err: any) {
       alert(err.message || 'Failed to save holiday');
@@ -396,6 +409,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       showToast(`Removed holiday "${holiday.title}" (${holiday.date})`);
       const updated = await fetchHolidays();
       setHolidays(updated);
+      if (selectedSessionId) {
+        fetchMonthlyWorkingDays(selectedSessionId)
+          .then((list) => {
+            setMonthlyDays(list);
+            setEditableMonthlyDays(list);
+          })
+          .catch(() => {});
+      }
       fetchAuditLogs().then(setAuditLogs).catch(() => {});
     } catch (err: any) {
       alert(err.message || 'Failed to delete holiday');
@@ -457,20 +478,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     return monthsList.map((mStr, index) => {
       const [yearStr, monthStr] = mStr.split('-');
-      const y = parseInt(yearStr);
-      const m = parseInt(monthStr);
-      const totalDays = new Date(y, m, 0).getDate();
-      const holidays = m === 10 ? 10 : m === 8 ? 8 : m === 1 ? 8 : 7;
-      const workingDays = totalDays - holidays;
+      const y = parseInt(yearStr, 10);
+      const m = parseInt(monthStr, 10);
+      const breakdown = calculateMonthWorkingDayBreakdown(y, m, holidays, session.id);
 
       return {
         id: `temp_${Date.now()}_${index}`,
         sessionId: session.id,
         month: mStr,
-        totalDays,
-        workingDays,
-        holidays,
-        remarks: defaultRemarks[monthStr] || 'Regular trade training and workshop practicals',
+        totalDays: breakdown.totalCalendarDays,
+        workingDays: breakdown.totalWorkingDays,
+        holidays: breakdown.totalHolidays,
+        remarks: defaultRemarks[monthStr] || 'Sundays, 2nd & 3rd Saturdays + Designated Holidays',
       };
     });
   };
@@ -1827,25 +1846,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         const [calYearStr, calMonStr] = calendarMonth.split('-');
         const calYear = parseInt(calYearStr, 10);
         const calMon = parseInt(calMonStr, 10);
-        const daysInCalMonth = new Date(calYear, calMon, 0).getDate();
-        const firstDayOfWeek = new Date(calYear, calMon - 1, 1).getDay();
-        const calCells: Array<{ dayNum: number | null; dateStr?: string; isSunday?: boolean; holiday?: HolidayRecord }> = [];
+        const monthBreakdown = calculateMonthWorkingDayBreakdown(
+          calYear,
+          calMon,
+          holidays,
+          selectedSessionId
+        );
+        const firstDayOfWeek = new Date(Date.UTC(calYear, calMon - 1, 1)).getUTCDay();
+        const calCells: Array<
+          | { empty: true }
+          | ({ empty: false } & (typeof monthBreakdown.days)[number])
+        > = [];
         for (let i = 0; i < firstDayOfWeek; i++) {
-          calCells.push({ dayNum: null });
+          calCells.push({ empty: true });
         }
-        for (let d = 1; d <= daysInCalMonth; d++) {
-          const dateStr = `${calYearStr}-${calMonStr}-${String(d).padStart(2, '0')}`;
-          const dow = new Date(calYear, calMon - 1, d).getDay();
-          const matchedHoliday = sessionHolidays.find((h) => h.date === dateStr);
-          calCells.push({
-            dayNum: d,
-            dateStr,
-            isSunday: dow === 0,
-            holiday: matchedHoliday,
-          });
-        }
+        monthBreakdown.days.forEach((d) => {
+          calCells.push({ empty: false, ...d });
+        });
 
-        const calMonthHolidayCount = calCells.filter((c) => c.holiday).length;
+        const todayIst = getIstDateStr();
 
         return (
           <div className="space-y-6">
@@ -1855,10 +1874,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div>
                   <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
                     <Calendar className="w-4 h-4 text-rose-600" />
-                    <span>Session Calendar &amp; Designated Holidays</span>
+                    <span>Session Calendar &amp; Government Holiday Rules</span>
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Add, edit, or manage institutional holidays on exact dates. Attendance is automatically restricted and disabled for Officers &amp; Trainees on all designated holidays.
+                    Every Sunday, 2nd Saturday, 3rd Saturday, and Admin-designated holiday is automatically locked for attendance across all months and years.
                   </p>
                 </div>
 
@@ -1898,12 +1917,52 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div className="flex items-center gap-2 text-rose-900">
                   <Ban className="w-4 h-4 text-rose-600 shrink-0" />
                   <span>
-                    <strong>Automatic Attendance Lock:</strong> On any Admin-designated Holiday, GPS check-in, Officer batch attendance, and 17:00 Auto-Absent are automatically blocked.
+                    <strong>Automatic Govt. Calendar Lock:</strong> Sundays, 2nd &amp; 3rd Saturdays, and Admin Holidays automatically block GPS check-in, Officer submission, and 17:00 Auto-Absent with zero double deduction on overlaps.
                   </span>
                 </div>
                 <span className="px-2.5 py-0.5 rounded-full bg-white border border-rose-200 text-rose-700 font-mono font-bold text-[11px]">
-                  {sessionHolidays.length} Active Holiday{sessionHolidays.length === 1 ? '' : 's'}
+                  {sessionHolidays.length} Custom Admin Holiday{sessionHolidays.length === 1 ? '' : 's'}
                 </span>
+              </div>
+
+              {/* Live Formula Summary Strip for Viewed Month */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+                  <span className="text-[11px] text-slate-500 font-medium block">Total Calendar Days</span>
+                  <div className="text-base font-bold font-mono text-slate-900 mt-0.5">
+                    {monthBreakdown.totalCalendarDays} Days
+                  </div>
+                  <span className="text-[10px] text-slate-500">{calendarMonth}</span>
+                </div>
+                <div className="p-3 rounded-lg bg-amber-50/70 border border-amber-200">
+                  <span className="text-[11px] text-amber-800 font-medium block">Weekly Holidays (Locked)</span>
+                  <div className="text-base font-bold font-mono text-amber-900 mt-0.5">
+                    {monthBreakdown.weeklyHolidays} Days
+                  </div>
+                  <span className="text-[10px] text-amber-700">
+                    {monthBreakdown.sundaysCount} Sun + {monthBreakdown.secondThirdSaturdaysCount} (2nd/3rd Sat)
+                  </span>
+                </div>
+                <div className="p-3 rounded-lg bg-rose-50/70 border border-rose-200">
+                  <span className="text-[11px] text-rose-800 font-medium block">Admin Holidays (Unique)</span>
+                  <div className="text-base font-bold font-mono text-rose-900 mt-0.5">
+                    {monthBreakdown.adminDesignatedHolidays} Days
+                  </div>
+                  <span className="text-[10px] text-rose-700">
+                    {monthBreakdown.overlappingAdminHolidays > 0
+                      ? `${monthBreakdown.overlappingAdminHolidays} on weekly off (no double count)`
+                      : `${monthBreakdown.totalAdminHolidaysInMonth} total marked`}
+                  </span>
+                </div>
+                <div className="p-3 rounded-lg bg-emerald-50/80 border border-emerald-200">
+                  <span className="text-[11px] text-emerald-800 font-semibold block">Total Working Days</span>
+                  <div className="text-base font-bold font-mono text-emerald-900 mt-0.5">
+                    {monthBreakdown.totalWorkingDays} Days
+                  </div>
+                  <span className="text-[10px] text-emerald-700 font-mono">
+                    {monthBreakdown.totalCalendarDays} − {monthBreakdown.weeklyHolidays} − {monthBreakdown.adminDesignatedHolidays} = {monthBreakdown.totalWorkingDays}
+                  </span>
+                </div>
               </div>
 
               {/* Visual Monthly Calendar Grid */}
@@ -1921,7 +1980,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <input
                       type="month"
                       value={calendarMonth}
-                      onChange={(e) => e.target.value && setCalendarMonth(e.target.value)}
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          setCalendarMonth(e.target.value);
+                          onUpdatePreferences?.({ adminCalendarMonth: e.target.value });
+                        }
+                      }}
                       className="px-2.5 py-1 bg-white border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-900"
                     />
                     <button
@@ -1937,20 +2001,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <div className="flex flex-wrap items-center gap-3 text-[11px]">
                     <span className="inline-flex items-center gap-1.5 font-semibold text-rose-800">
                       <span className="w-3 h-3 rounded bg-rose-500 inline-block" />
-                      Admin Holiday ({calMonthHolidayCount} this month)
+                      Admin Holiday ({monthBreakdown.totalAdminHolidaysInMonth})
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 font-semibold text-orange-800">
+                      <span className="w-3 h-3 rounded bg-orange-400 inline-block" />
+                      2nd &amp; 3rd Sat (Govt. Holiday)
                     </span>
                     <span className="inline-flex items-center gap-1.5 font-semibold text-amber-800">
                       <span className="w-3 h-3 rounded bg-amber-300 inline-block" />
-                      Sunday
+                      Sunday Weekly Off
                     </span>
-                    <span className="text-slate-500 hidden sm:inline">Click any calendar date to add or edit a holiday</span>
                   </div>
                 </div>
 
                 {/* Weekday Headers */}
                 <div className="grid grid-cols-7 bg-slate-100 border-b border-slate-200 text-center text-[11px] font-bold text-slate-600">
                   {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((wd, i) => (
-                    <div key={wd} className={`py-2 ${i === 0 ? 'text-amber-800 bg-amber-50/70' : ''}`}>
+                    <div key={wd} className={`py-2 ${i === 0 ? 'text-amber-800 bg-amber-50/70' : i === 6 ? 'text-orange-900 bg-orange-50/40' : ''}`}>
                       {wd}
                     </div>
                   ))}
@@ -1959,52 +2026,63 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 {/* Calendar Day Cells */}
                 <div className="grid grid-cols-7 divide-x divide-y divide-slate-200 bg-white">
                   {calCells.map((cell, idx) => {
-                    if (!cell.dayNum || !cell.dateStr) {
-                      return <div key={`empty_${idx}`} className="min-h-[68px] sm:min-h-[78px] bg-slate-50/60" />;
+                    if (cell.empty) {
+                      return <div key={`empty_${idx}`} className="min-h-[68px] sm:min-h-[82px] bg-slate-50/60" />;
                     }
-                    const isToday = cell.dateStr === new Date().toISOString().split('T')[0];
+                    const isToday = cell.dateStr === todayIst;
+                    const isGovtSat = cell.isSecondSaturday || cell.isThirdSaturday;
                     return (
                       <button
                         key={cell.dateStr}
                         type="button"
                         onClick={() =>
-                          cell.holiday
-                            ? handleOpenHolidayModal(cell.holiday)
+                          cell.adminHoliday
+                            ? handleOpenHolidayModal(cell.adminHoliday)
                             : handleOpenHolidayModal(undefined, cell.dateStr)
                         }
-                        className={`min-h-[68px] sm:min-h-[78px] p-1.5 sm:p-2 text-left flex flex-col justify-between transition-colors cursor-pointer group ${
-                          cell.holiday
+                        className={`min-h-[68px] sm:min-h-[82px] p-1.5 sm:p-2 text-left flex flex-col justify-between transition-colors cursor-pointer group ${
+                          cell.isAdminHoliday
                             ? 'bg-rose-50 hover:bg-rose-100/80 ring-1 ring-inset ring-rose-300'
+                            : isGovtSat
+                            ? 'bg-orange-50/80 hover:bg-orange-100/70 ring-1 ring-inset ring-orange-200'
                             : cell.isSunday
-                            ? 'bg-amber-50/50 hover:bg-amber-50'
+                            ? 'bg-amber-50/70 hover:bg-amber-100/60'
                             : 'bg-white hover:bg-blue-50/40'
                         }`}
                         title={
-                          cell.holiday
-                            ? `Holiday: ${cell.holiday.title} (Click to edit)`
+                          cell.lockReason
+                            ? cell.lockReason
                             : `Click to mark ${cell.dateStr} as Holiday`
                         }
                       >
-                        <div className="flex items-center justify-between w-full">
+                        <div className="flex items-center justify-between w-full gap-1">
                           <span
                             className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded ${
                               isToday
                                 ? 'bg-blue-600 text-white'
-                                : cell.holiday
+                                : cell.isAdminHoliday
                                 ? 'text-rose-900'
+                                : isGovtSat
+                                ? 'text-orange-900'
                                 : cell.isSunday
                                 ? 'text-amber-800'
                                 : 'text-slate-800'
                             }`}
                           >
-                            {cell.dayNum}
+                            {cell.dayNumber}
                           </span>
-                          {cell.holiday ? (
+                          {cell.isAdminHoliday ? (
                             <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-rose-600 text-white shadow-2xs">
                               Holiday
                             </span>
+                          ) : isGovtSat ? (
+                            <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-orange-600 text-white shadow-2xs">
+                              Holiday
+                            </span>
                           ) : cell.isSunday ? (
-                            <span className="text-[9px] font-semibold text-amber-700 hidden sm:inline">Sunday</span>
+                            <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-amber-200/80 text-amber-900">
+                              Sunday
+                            </span>
                           ) : (
                             <span className="text-[9px] text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity font-semibold">
                               + Holiday
@@ -2012,13 +2090,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           )}
                         </div>
 
-                        {cell.holiday ? (
+                        {cell.isAdminHoliday && cell.adminHoliday ? (
                           <div className="text-[10px] font-semibold text-rose-900 line-clamp-2 leading-tight mt-1">
-                            {cell.holiday.title}
+                            {cell.adminHoliday.title}
+                            {cell.isOverlap && (
+                              <span className="block text-[9px] text-orange-700 font-bold">
+                                ({cell.weeklyShortTag} Overlap)
+                              </span>
+                            )}
+                          </div>
+                        ) : isGovtSat ? (
+                          <div className="text-[10px] font-semibold text-orange-900 leading-tight mt-1">
+                            {cell.weeklyShortTag}
+                            <span className="block text-[9px] text-orange-700 font-normal">Govt. Holiday</span>
+                          </div>
+                        ) : cell.isSunday ? (
+                          <div className="text-[9px] font-medium text-amber-800 truncate">
+                            Weekly Holiday
                           </div>
                         ) : (
                           <div className="text-[9px] text-slate-400 truncate">
-                            {cell.isSunday ? 'Weekly Off' : 'Working Day'}
+                            Working Day
                           </div>
                         )}
                       </button>
@@ -2064,6 +2156,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             !h.sessionId || h.sessionId === 'all'
                               ? 'All Sessions'
                               : sessions.find((s) => s.id === h.sessionId)?.name || h.sessionId;
+                          const dayInfo = getDateHolidayStatus(h.date, holidays, selectedSessionId);
                           return (
                             <tr key={h.id} className="hover:bg-rose-50/30 transition-colors">
                               <td className="py-2.5 px-3 font-mono font-semibold text-slate-900">
@@ -2072,6 +2165,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               <td className="py-2.5 px-3">
                                 <div className="font-bold text-slate-900">{h.title}</div>
                                 {h.remarks && <div className="text-[11px] text-slate-500">{h.remarks}</div>}
+                                {dayInfo.isOverlap && (
+                                  <div className="text-[10px] text-orange-700 font-semibold mt-0.5">
+                                    Falls on {dayInfo.weeklyShortTag} — Weekly off already locked (no double deduction)
+                                  </div>
+                                )}
                               </td>
                               <td className="py-2.5 px-3">
                                 <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200 text-[10px] font-semibold">
@@ -2239,17 +2337,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       value={newMonthForm.month}
                       onChange={(e) => {
                         const mVal = e.target.value;
-                        let daysInM = 30;
                         if (mVal) {
-                          const [y, m] = mVal.split('-');
-                          daysInM = new Date(parseInt(y), parseInt(m), 0).getDate();
+                          const [y, m] = mVal.split('-').map(Number);
+                          const breakdown = calculateMonthWorkingDayBreakdown(
+                            y,
+                            m,
+                            holidays,
+                            selectedSessionId
+                          );
+                          setNewMonthForm({
+                            ...newMonthForm,
+                            month: mVal,
+                            totalDays: breakdown.totalCalendarDays,
+                            holidays: breakdown.totalHolidays,
+                            workingDays: breakdown.totalWorkingDays,
+                          });
                         }
-                        setNewMonthForm({
-                          ...newMonthForm,
-                          month: mVal,
-                          totalDays: daysInM,
-                          workingDays: daysInM - newMonthForm.holidays,
-                        });
                       }}
                       className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded font-mono text-xs"
                       required

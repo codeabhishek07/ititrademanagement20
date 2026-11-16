@@ -37,6 +37,12 @@ import {
   AttendanceStatus,
   HolidayRecord,
 } from '../../types.ts';
+import {
+  calculateMonthWorkingDayBreakdown,
+  calculateTraineeAttendanceMetrics,
+  getDateHolidayStatus,
+  getIstDateStr,
+} from '../../utils/attendanceCalendar.ts';
 
 export type RegisterType =
   | 'daily_attendance'
@@ -111,34 +117,42 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
     [holidays, selectedSessionId]
   );
 
+  const todayIst = getIstDateStr();
+
   const monthDaysInfo = useMemo(() => {
     const [yearStr, monthStr] = selectedMonth.split('-');
     const year = parseInt(yearStr, 10);
     const month = parseInt(monthStr, 10); // 1-12
-    const totalDays = new Date(year, month, 0).getDate();
+    const breakdown = calculateMonthWorkingDayBreakdown(year, month, holidays, selectedSessionId);
 
-    const days = [];
-    for (let d = 1; d <= totalDays; d++) {
-      const dateStr = `${yearStr}-${monthStr}-${String(d).padStart(2, '0')}`;
-      const dayDate = new Date(year, month - 1, d);
-      const dayOfWeek = dayDate.getDay(); // 0 is Sunday
-      const holidayObj = sessionHolidays.find((h) => h.date === dateStr);
-      days.push({
-        dayNumber: d,
-        dateStr,
-        isSunday: dayOfWeek === 0,
-        holiday: holidayObj || null,
-        isHoliday: dayOfWeek === 0 || Boolean(holidayObj),
-        dayName: ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'][dayOfWeek],
-      });
-    }
-    return { year, month, totalDays, days };
-  }, [selectedMonth, sessionHolidays]);
+    const days = breakdown.days.map((d) => ({
+      ...d,
+      holiday: d.adminHoliday,
+      isGovtSat: d.isSecondSaturday || d.isThirdSaturday,
+      dayName: ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'][d.dayOfWeek] || '',
+    }));
 
-  const dailyHoliday = useMemo(
-    () => sessionHolidays.find((h) => h.date === dailyDate) || null,
-    [sessionHolidays, dailyDate]
+    return {
+      year,
+      month,
+      totalDays: breakdown.totalCalendarDays,
+      weeklyHolidays: breakdown.weeklyHolidays,
+      sundaysCount: breakdown.sundaysCount,
+      secondThirdSaturdaysCount: breakdown.secondThirdSaturdaysCount,
+      adminDesignatedHolidays: breakdown.adminDesignatedHolidays,
+      overlappingAdminHolidays: breakdown.overlappingAdminHolidays,
+      totalHolidays: breakdown.totalHolidays,
+      totalWorkingDays: breakdown.totalWorkingDays,
+      days,
+    };
+  }, [selectedMonth, holidays, selectedSessionId]);
+
+  const dailyDayLock = useMemo(
+    () => getDateHolidayStatus(dailyDate, holidays, selectedSessionId),
+    [dailyDate, holidays, selectedSessionId]
   );
+  const dailyHoliday = dailyDayLock.adminHoliday;
+  const isDailyHolidayLocked = dailyDayLock.isHoliday;
 
   // Navigate months
   const handlePrevMonth = () => {
@@ -157,7 +171,7 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
     );
   };
 
-  // Trainee stats for all attendance
+  // Trainee stats for overall Form I roster & CSV using exact working-day formula
   const traineeStatsMap = useMemo(() => {
     const map = new Map<
       string,
@@ -175,41 +189,49 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
 
     trainees.forEach((tr) => {
       const records = allAttendance.filter((a) => a.traineeId === tr.id);
-      const total = records.length;
-      const present = records.filter((a) => a.status === 'Present').length;
-      const cl = records.filter((a) => a.status === 'CL').length;
-      const ml = records.filter((a) => a.status === 'Medical Leave').length;
-      const halfDay = records.filter((a) => a.status === 'Half-Day Leave').length;
-      const absent = records.filter((a) => a.status === 'Absent').length;
+      const trSession = sessions.find((s) => s.id === (tr.sessionId || selectedSessionId));
+      const metrics = calculateTraineeAttendanceMetrics({
+        records,
+        holidays,
+        sessionId: tr.sessionId || selectedSessionId,
+        admissionDate: tr.admissionDate,
+        sessionStartDate: trSession?.startDate,
+        referenceDate: todayIst,
+        minimumAttendancePercent: settings.minimumAttendancePercent,
+      });
 
-      const effective = present + cl + ml + halfDay * 0.5;
-      const pct = total > 0 ? (effective / total) * 100 : 100;
       map.set(tr.id, {
-        total,
-        present,
-        cl,
-        ml,
-        halfDay,
-        absent,
-        percent: Math.round(pct * 10) / 10,
-        isBelow: pct < settings.minimumAttendancePercent,
+        total: metrics.totalWorkingDays,
+        present: metrics.presentDays,
+        cl: metrics.clDays,
+        ml: metrics.mlDays,
+        halfDay: metrics.halfDays,
+        absent: metrics.absentDays,
+        percent: metrics.attendancePercent,
+        isBelow: metrics.isBelowThreshold,
       });
     });
 
     return map;
-  }, [trainees, allAttendance, settings.minimumAttendancePercent]);
+  }, [trainees, allAttendance, holidays, selectedSessionId, sessions, todayIst, settings.minimumAttendancePercent]);
 
   // 1. Daily Attendance Data
   const dailyAttendanceData = useMemo(() => {
     return trainees
       .map((tr) => {
-        const record = allAttendance.find(
-          (a) => a.traineeId === tr.id && a.date === dailyDate
-        );
+        const record = isDailyHolidayLocked
+          ? undefined
+          : allAttendance.find(
+              (a) => a.traineeId === tr.id && a.date === dailyDate
+            );
         return {
           trainee: tr,
           record: record || null,
-          status: record ? record.status : ('Unmarked' as const),
+          status: isDailyHolidayLocked
+            ? ('Holiday' as const)
+            : record
+            ? record.status
+            : ('Unmarked' as const),
         };
       })
       .filter((item) => {
@@ -220,64 +242,70 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
           item.trainee.rollNo.toLowerCase().includes(q)
         );
       });
-  }, [trainees, allAttendance, dailyDate, searchQuery]);
+  }, [trainees, allAttendance, dailyDate, searchQuery, isDailyHolidayLocked]);
 
-  // 2. Monthly Attendance Matrix Data
+  // 2. Monthly Attendance Matrix Data (Excludes Sundays, 2nd/3rd Saturdays, Admin Holidays; Formula: Present / Total Working Days * 100)
   const monthlyMatrixData = useMemo(() => {
+    const firstDayStr = monthDaysInfo.days[0]?.dateStr || `${selectedMonth}-01`;
+    const lastDayStr =
+      monthDaysInfo.days[monthDaysInfo.days.length - 1]?.dateStr || `${selectedMonth}-28`;
+
     return trainees
       .map((tr) => {
-        let presentCount = 0;
-        let leaveCount = 0;
-        let absentCount = 0;
-        let markedDays = 0;
+        const records = allAttendance.filter((a) => a.traineeId === tr.id);
+        const metrics = calculateTraineeAttendanceMetrics({
+          records,
+          holidays,
+          sessionId: tr.sessionId || selectedSessionId,
+          admissionDate: tr.admissionDate,
+          referenceDate: todayIst,
+          explicitPeriod: { startDate: firstDayStr, endDate: lastDayStr },
+          minimumAttendancePercent: settings.minimumAttendancePercent,
+        });
 
         const dailyStatuses: Record<number, string> = {};
+        const validByDate = new Map<string, AttendanceRecord>();
+        for (const rec of records) {
+          if (rec.date >= firstDayStr && rec.date <= lastDayStr) {
+            validByDate.set(rec.date, rec);
+          }
+        }
+        const sortedRecordDates = Array.from(validByDate.keys()).sort();
+        const activityStartCandidates = [
+          sortedRecordDates[0],
+          tr.admissionDate,
+        ].filter(Boolean) as string[];
+        const activityStart =
+          activityStartCandidates.length > 0 ? activityStartCandidates.sort()[0] : null;
 
-        monthDaysInfo.days.forEach(({ dayNumber, dateStr, isSunday, holiday }) => {
-          if (isSunday || holiday) {
+        monthDaysInfo.days.forEach(({ dayNumber, dateStr, isHoliday }) => {
+          if (isHoliday) {
             dailyStatuses[dayNumber] = 'H';
             return;
           }
-          const rec = allAttendance.find(
-            (a) => a.traineeId === tr.id && a.date === dateStr
-          );
+          const rec = validByDate.get(dateStr);
           if (rec) {
-            markedDays++;
-            if (rec.status === 'Present') {
-              dailyStatuses[dayNumber] = 'P';
-              presentCount++;
-            } else if (rec.status === 'CL') {
-              dailyStatuses[dayNumber] = 'CL';
-              leaveCount++;
-            } else if (rec.status === 'Medical Leave') {
-              dailyStatuses[dayNumber] = 'ML';
-              leaveCount++;
-            } else if (rec.status === 'Half-Day Leave') {
-              dailyStatuses[dayNumber] = 'HD';
-              leaveCount += 0.5;
-              presentCount += 0.5;
-            } else {
-              dailyStatuses[dayNumber] = 'A';
-              absentCount++;
-            }
+            if (rec.status === 'Present') dailyStatuses[dayNumber] = 'P';
+            else if (rec.status === 'CL') dailyStatuses[dayNumber] = 'CL';
+            else if (rec.status === 'Medical Leave') dailyStatuses[dayNumber] = 'ML';
+            else if (rec.status === 'Half-Day Leave') dailyStatuses[dayNumber] = 'HD';
+            else dailyStatuses[dayNumber] = 'A';
+          } else if (activityStart && dateStr >= activityStart && dateStr < todayIst) {
+            dailyStatuses[dayNumber] = 'A';
           } else {
             dailyStatuses[dayNumber] = '-';
           }
         });
 
-        const effective = presentCount + leaveCount;
-        const monthPct =
-          markedDays > 0 ? Math.round((effective / markedDays) * 1000) / 10 : 100;
-
         return {
           trainee: tr,
           dailyStatuses,
-          markedDays,
-          presentCount,
-          leaveCount,
-          absentCount,
-          monthPct,
-          isDeficit: monthPct < settings.minimumAttendancePercent,
+          markedDays: monthDaysInfo.totalWorkingDays,
+          presentCount: metrics.presentDays,
+          leaveCount: metrics.leaveDays,
+          absentCount: metrics.absentDays,
+          monthPct: metrics.attendancePercent,
+          isDeficit: metrics.isBelowThreshold,
         };
       })
       .filter((item) => {
@@ -288,7 +316,17 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
           item.trainee.rollNo.toLowerCase().includes(q)
         );
       });
-  }, [trainees, allAttendance, monthDaysInfo, searchQuery, settings.minimumAttendancePercent]);
+  }, [
+    trainees,
+    allAttendance,
+    monthDaysInfo,
+    selectedMonth,
+    holidays,
+    selectedSessionId,
+    todayIst,
+    searchQuery,
+    settings.minimumAttendancePercent,
+  ]);
 
   // 3. Leave Register Data
   const filteredLeaves = useMemo(() => {
@@ -881,14 +919,14 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
               </div>
             </div>
 
-            {dailyHoliday && (
+            {isDailyHolidayLocked && (
               <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 flex flex-wrap items-center justify-between gap-2 text-xs">
                 <div className="flex items-center gap-2 text-rose-900">
                   <span className="px-2 py-0.5 rounded bg-rose-600 text-white font-extrabold text-[10px] uppercase">
                     Holiday
                   </span>
-                  <span className="font-bold">{dailyHoliday.title}</span>
-                  <span className="text-rose-700">({dailyHoliday.category}) — Attendance restricted for this date</span>
+                  <span className="font-bold">{dailyDayLock.title}</span>
+                  <span className="text-rose-700">({dailyDayLock.categoryLabel}) — Attendance restricted for this date</span>
                 </div>
                 <span className="font-mono text-[11px] font-semibold text-rose-800">{dailyDate}</span>
               </div>
@@ -986,7 +1024,7 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
                         </span>
                       </td>
                       <td className="py-2.5 px-3 text-center">
-                        {dailyHoliday ? (
+                        {isDailyHolidayLocked ? (
                           <span className="inline-block px-2 py-0.5 text-[11px] font-bold rounded bg-rose-100 text-rose-800 border border-rose-200">
                             Holiday
                           </span>
@@ -1009,12 +1047,12 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
                         )}
                       </td>
                       <td className="py-2.5 px-3 font-mono text-slate-800">
-                        {dailyHoliday ? 'Holiday' : d.record?.timestamp || '—'}
+                        {isDailyHolidayLocked ? 'Holiday' : d.record?.timestamp || '—'}
                       </td>
                       <td className="py-2.5 px-3">
                         <span className="text-[11px] font-medium text-slate-700">
-                          {dailyHoliday
-                            ? 'Admin Holiday'
+                          {isDailyHolidayLocked
+                            ? dailyDayLock.categoryLabel
                             : d.record?.markedBy === 'trainee_gps'
                             ? 'GPS Geofence App'
                             : d.record?.markedBy === 'officer_manual'
@@ -1025,7 +1063,7 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
                         </span>
                       </td>
                       <td className="py-2.5 px-3">
-                        {d.record?.geotag ? (
+                        {d.record?.geotag && !isDailyHolidayLocked ? (
                           <div className="flex items-center gap-1.5 text-[11px] text-slate-600">
                             <MapPin className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                             <span>{d.record.geotag.distanceFromCampusMeters}m from ITI center</span>
@@ -1036,7 +1074,7 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
                         )}
                       </td>
                       <td className="py-2.5 px-3 text-right text-[11px] text-slate-500 font-mono">
-                        {dailyHoliday ? `Holiday: ${dailyHoliday.title}` : d.record?.remarks || 'NCVT Roll Call Validated'}
+                        {isDailyHolidayLocked ? dailyDayLock.title : d.record?.remarks || 'NCVT Roll Call Validated'}
                       </td>
                     </tr>
                   ))}
@@ -1120,25 +1158,25 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
                 </span>
                 <span className="flex items-center gap-1 font-mono font-semibold text-rose-800">
                   <span className="w-4 h-4 rounded bg-rose-100 border border-rose-300 flex items-center justify-center text-[10px]">H</span>
-                  <span>Holiday / Sunday ({monthDaysInfo.days.filter((d) => d.holiday).length} Admin Holidays)</span>
+                  <span>Holiday / Weekly Off ({monthDaysInfo.weeklyHolidays} Weekly + {monthDaysInfo.adminDesignatedHolidays} Admin)</span>
                 </span>
               </div>
-              <div className="text-[11px] text-slate-600 font-medium">
-                Mandatory NCVT Exam Eligibility: <span className="font-bold text-amber-900">80.0% Minimum</span>
+              <div className="text-[11px] text-slate-700 font-mono font-semibold">
+                Working Days: {monthDaysInfo.totalWorkingDays} = {monthDaysInfo.totalDays} − {monthDaysInfo.weeklyHolidays} − {monthDaysInfo.adminDesignatedHolidays} | Min 80.0%
               </div>
             </div>
 
-            {monthDaysInfo.days.some((d) => d.holiday) && (
+            {monthDaysInfo.days.some((d) => d.isHoliday && (d.isAdminHoliday || d.isGovtSat)) && (
               <div className="flex flex-wrap items-center gap-2 text-[11px] bg-rose-50/70 border border-rose-200 rounded-lg px-3 py-2">
                 <span className="font-bold text-rose-900 uppercase">Holidays This Month:</span>
                 {monthDaysInfo.days
-                  .filter((d) => d.holiday)
+                  .filter((d) => d.isAdminHoliday || d.isGovtSat)
                   .map((d) => (
                     <span
                       key={d.dateStr}
                       className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white border border-rose-200 text-rose-800 font-semibold"
                     >
-                      <span className="font-mono font-bold">{d.dayNumber}:</span> Holiday — {d.holiday?.title}
+                      <span className="font-mono font-bold">{d.dayNumber}:</span> {d.title}
                     </span>
                   ))}
               </div>
@@ -1163,21 +1201,19 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
                       <th
                         key={d.dayNumber}
                         className={`py-1.5 px-1 text-center font-mono text-[10px] w-6.5 border-l border-slate-200 ${
-                          d.holiday
+                          d.isAdminHoliday
                             ? 'bg-rose-100 text-rose-900 font-extrabold'
+                            : d.isGovtSat
+                            ? 'bg-orange-100 text-orange-900 font-extrabold'
                             : d.isSunday
                             ? 'bg-amber-100/60 text-amber-900 font-bold'
                             : 'text-slate-600'
                         }`}
-                        title={
-                          d.holiday
-                            ? `${d.dateStr} — Holiday: ${d.holiday.title}`
-                            : `${d.dateStr} (${d.dayName})`
-                        }
+                        title={d.lockReason || `${d.dateStr} (${d.dayName})`}
                       >
                         <div>{d.dayNumber}</div>
-                        <div className={`text-[8px] ${d.holiday ? 'text-rose-700 font-bold' : 'text-slate-400'}`}>
-                          {d.holiday ? 'HOL' : d.dayName}
+                        <div className={`text-[8px] ${d.isHoliday ? 'text-rose-700 font-bold' : 'text-slate-400'}`}>
+                          {d.isHoliday ? 'HOL' : d.dayName}
                         </div>
                       </th>
                     ))}
@@ -1218,10 +1254,12 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
                           <td
                             key={d.dayNumber}
                             className={`py-1.5 px-0.5 text-center font-mono text-[10px] font-semibold border-l border-slate-100 ${
-                              d.holiday
+                              d.isAdminHoliday
                                 ? 'bg-rose-50 text-rose-700 font-extrabold'
+                                : d.isGovtSat
+                                ? 'bg-orange-50 text-orange-800 font-extrabold'
                                 : d.isSunday
-                                ? 'bg-amber-50/50 text-slate-400'
+                                ? 'bg-amber-50/50 text-amber-700 font-bold'
                                 : val === 'P'
                                 ? 'text-emerald-700 bg-emerald-50/30'
                                 : val === 'A'
@@ -1230,7 +1268,7 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
                                 ? 'text-amber-700 bg-amber-50/30'
                                 : 'text-slate-300'
                             }`}
-                            title={d.holiday ? `Holiday: ${d.holiday.title}` : undefined}
+                            title={d.isHoliday ? d.title : undefined}
                           >
                             {val}
                           </td>
@@ -2022,8 +2060,12 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
                             <td className="p-1.5 border border-slate-400 text-center font-mono">{d.trainee.category}</td>
                             <td className="p-1.5 border border-slate-400 text-center font-bold font-mono">{d.status}</td>
                             <td className="p-1.5 border border-slate-400 font-mono">{d.record?.timestamp || '—'}</td>
-                            <td className="p-1.5 border border-slate-400">{d.record?.geotag ? 'GPS Verified' : 'Manual'}</td>
-                            <td className="p-1.5 border border-slate-400 text-right text-[10px]">{d.record?.remarks || 'NCVT Compliant'}</td>
+                            <td className="p-1.5 border border-slate-400">
+                              {isDailyHolidayLocked ? 'Holiday Locked' : d.record?.geotag ? 'GPS Verified' : 'Manual'}
+                            </td>
+                            <td className="p-1.5 border border-slate-400 text-right text-[10px]">
+                              {isDailyHolidayLocked ? dailyDayLock.title : (d.record?.remarks || 'NCVT Compliant')}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -2032,45 +2074,68 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
                 )}
 
                 {activeRegister === 'monthly_attendance' && (
-                  <div className="overflow-x-auto print:overflow-visible -mx-1 sm:mx-0 max-w-full">
-                    <table className="w-full border-collapse border border-slate-400 text-left text-[10px] min-w-[850px] print:min-w-0">
-                      <thead>
-                        <tr className="bg-slate-100 border-b border-slate-400">
-                          <th className="p-1 border border-slate-400 text-center">#</th>
-                          <th className="p-1 border border-slate-400">Roll No</th>
-                          <th className="p-1 border border-slate-400">Name</th>
-                          {monthDaysInfo.days.map((d) => (
-                            <th key={d.dayNumber} className="p-0.5 border border-slate-400 text-center font-mono">
-                              {d.dayNumber}
-                            </th>
-                          ))}
-                          <th className="p-1 border border-slate-400 text-center">P</th>
-                          <th className="p-1 border border-slate-400 text-center">L</th>
-                          <th className="p-1 border border-slate-400 text-center">A</th>
-                          <th className="p-1 border border-slate-400 text-center">%</th>
-                          <th className="p-1 border border-slate-400 text-center">Result</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {monthlyMatrixData.map((m, i) => (
-                          <tr key={m.trainee.id}>
-                            <td className="p-1 border border-slate-400 text-center font-mono">{i + 1}</td>
-                            <td className="p-1 border border-slate-400 font-mono">{m.trainee.rollNo}</td>
-                            <td className="p-1 border border-slate-400 font-semibold truncate max-w-[110px]">{m.trainee.name}</td>
+                  <div className="space-y-2">
+                    <div className="text-[10px] font-mono bg-slate-50 border border-slate-300 px-2.5 py-1.5 rounded flex flex-wrap items-center justify-between gap-2">
+                      <span>
+                        <strong>Working Days Formula:</strong> {monthDaysInfo.totalDays} Calendar Days &minus; {monthDaysInfo.weeklyHolidays} Weekly Holidays (Sun + 2nd/3rd Sat) &minus; {monthDaysInfo.adminDesignatedHolidays} Unique Admin Holidays = <strong>{monthDaysInfo.totalWorkingDays} Working Days</strong>
+                      </span>
+                      <span>
+                        <strong>H</strong> = Weekly Off / Govt. Holiday (Excluded from P / A / L)
+                      </span>
+                    </div>
+                    <div className="overflow-x-auto print:overflow-visible -mx-1 sm:mx-0 max-w-full">
+                      <table className="w-full border-collapse border border-slate-400 text-left text-[10px] min-w-[850px] print:min-w-0">
+                        <thead>
+                          <tr className="bg-slate-100 border-b border-slate-400">
+                            <th className="p-1 border border-slate-400 text-center">#</th>
+                            <th className="p-1 border border-slate-400">Roll No</th>
+                            <th className="p-1 border border-slate-400">Name</th>
                             {monthDaysInfo.days.map((d) => (
-                              <td key={d.dayNumber} className="p-0.5 border border-slate-400 text-center font-mono">
-                                {m.dailyStatuses[d.dayNumber] || '-'}
-                              </td>
+                              <th
+                                key={d.dayNumber}
+                                className={`p-0.5 border border-slate-400 text-center font-mono ${
+                                  d.isHoliday ? 'bg-slate-200 text-slate-700' : ''
+                                }`}
+                                title={d.title}
+                              >
+                                {d.dayNumber}
+                              </th>
                             ))}
-                            <td className="p-1 border border-slate-400 text-center font-bold">{m.presentCount}</td>
-                            <td className="p-1 border border-slate-400 text-center">{m.leaveCount}</td>
-                            <td className="p-1 border border-slate-400 text-center font-bold">{m.absentCount}</td>
-                            <td className="p-1 border border-slate-400 text-center font-bold">{m.monthPct}%</td>
-                            <td className="p-1 border border-slate-400 text-center">{m.isDeficit ? 'DEFICIT' : 'ELIGIBLE'}</td>
+                            <th className="p-1 border border-slate-400 text-center">P</th>
+                            <th className="p-1 border border-slate-400 text-center">L</th>
+                            <th className="p-1 border border-slate-400 text-center">A</th>
+                            <th className="p-1 border border-slate-400 text-center">WD</th>
+                            <th className="p-1 border border-slate-400 text-center">%</th>
+                            <th className="p-1 border border-slate-400 text-center">Result</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {monthlyMatrixData.map((m, i) => (
+                            <tr key={m.trainee.id}>
+                              <td className="p-1 border border-slate-400 text-center font-mono">{i + 1}</td>
+                              <td className="p-1 border border-slate-400 font-mono">{m.trainee.rollNo}</td>
+                              <td className="p-1 border border-slate-400 font-semibold truncate max-w-[110px]">{m.trainee.name}</td>
+                              {monthDaysInfo.days.map((d) => (
+                                <td
+                                  key={d.dayNumber}
+                                  className={`p-0.5 border border-slate-400 text-center font-mono ${
+                                    d.isHoliday ? 'bg-slate-100 font-bold text-slate-600' : ''
+                                  }`}
+                                >
+                                  {m.dailyStatuses[d.dayNumber] || '-'}
+                                </td>
+                              ))}
+                              <td className="p-1 border border-slate-400 text-center font-bold">{m.presentCount}</td>
+                              <td className="p-1 border border-slate-400 text-center">{m.leaveCount}</td>
+                              <td className="p-1 border border-slate-400 text-center font-bold">{m.absentCount}</td>
+                              <td className="p-1 border border-slate-400 text-center font-mono">{monthDaysInfo.totalWorkingDays}</td>
+                              <td className="p-1 border border-slate-400 text-center font-bold">{m.monthPct}%</td>
+                              <td className="p-1 border border-slate-400 text-center">{m.isDeficit ? 'DEFICIT' : 'ELIGIBLE'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 )}
 

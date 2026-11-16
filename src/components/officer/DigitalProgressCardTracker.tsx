@@ -41,6 +41,7 @@ import {
   AcademicSession,
   SystemSettings,
   UserPreferences,
+  HolidayRecord,
 } from '../../types.ts';
 import {
   fetchAssessments,
@@ -49,7 +50,12 @@ import {
   fetchTrainees,
   fetchAttendance,
   fetchLeaves,
+  fetchHolidays,
 } from '../../api.ts';
+import {
+  calculateMonthWorkingDayBreakdown,
+  getDateHolidayStatus,
+} from '../../utils/attendanceCalendar.ts';
 
 interface DigitalProgressCardTrackerProps {
   tradeId: string;
@@ -119,6 +125,7 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
   const [assessments, setAssessments] = useState<TraineeAssessment[]>([]);
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [leaves, setLeaves] = useState<LeaveRequest[]>([]);
+  const [holidays, setHolidays] = useState<HolidayRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string>('');
@@ -249,7 +256,43 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
       .catch(() => setLeaves([]));
   }, [selectedTraineeId, tradeId]);
 
+  useEffect(() => {
+    fetchHolidays()
+      .then((hList) => setHolidays(hList))
+      .catch(() => setHolidays([]));
+  }, []);
+
   const selectedTrainee = trainees.find((t) => t.id === selectedTraineeId);
+  const activeSessionId =
+    selectedTrainee?.sessionId ||
+    sessions?.find((s) => s.status === 'active')?.id ||
+    settings?.currentSessionId;
+
+  const computedAcademicMonths = useMemo(() => {
+    return ACADEMIC_MONTHS.map((m) => {
+      const [yStr, mStr] = m.monthKey.split('-');
+      const year = Number(yStr);
+      const monthNum = Number(mStr);
+      const breakdown = calculateMonthWorkingDayBreakdown(
+        year,
+        monthNum,
+        holidays,
+        activeSessionId
+      );
+      return {
+        ...m,
+        workingDays: breakdown.totalWorkingDays,
+        totalCalendarDays: breakdown.totalCalendarDays,
+        weeklyHolidays: breakdown.weeklyHolidays,
+        adminDesignatedHolidays: breakdown.adminDesignatedHolidays,
+      };
+    });
+  }, [holidays, activeSessionId]);
+
+  const computedTotalWorkingDays = useMemo(
+    () => computedAcademicMonths.reduce((acc, m) => acc + m.workingDays, 0),
+    [computedAcademicMonths]
+  );
 
   // Institution title and session display
   const instituteTitle = settings?.instituteName || 'GOVERNMENT INDUSTRIAL TRAINING INSTITUTE BILHA';
@@ -261,13 +304,17 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
   // MONTH-WISE DATA INTEGRATION (Attendance + Formative Assessments)
   // --------------------------------------------------------------------------
   const monthWiseData = useMemo(() => {
-    return ACADEMIC_MONTHS.map((m) => {
+    return computedAcademicMonths.map((m) => {
       // Find matching assessment
       const asm = assessments.find((a) => a.month === m.monthKey);
 
-      // Compute attendance stats from database for this month
-      // Filter attendance records falling within this month
-      const monthRecords = attendanceRecords.filter((r) => r.date.startsWith(m.monthKey));
+      // Compute attendance stats from database for this month strictly on actual working days
+      // (Sundays, 2nd Saturdays, 3rd Saturdays, and Admin-designated holidays are excluded)
+      const monthRecords = attendanceRecords.filter(
+        (r) =>
+          r.date.startsWith(m.monthKey) &&
+          getDateHolidayStatus(r.date, holidays, activeSessionId).isWorkingDay
+      );
 
       let presentCount = 0;
       let absentCount = 0;
@@ -284,10 +331,10 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
       }
 
       // Calculate attendance percentage for this month
-      // Att. % = (Present / Working) * 100
+      // Att. % = (Present Days / Total Working Days) * 100
       const totalAttended = presentCount;
       const attPercent = m.workingDays > 0 && totalAttended > 0
-        ? Math.min(100, Math.round((totalAttended / m.workingDays) * 100))
+        ? Math.min(100, Math.round((totalAttended / m.workingDays) * 1000) / 10)
         : 0;
 
       // Assessment marks out of 100
@@ -317,7 +364,7 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
         assessmentObj: asm,
       };
     });
-  }, [assessments, attendanceRecords, selectedTrainee]);
+  }, [computedAcademicMonths, assessments, attendanceRecords, holidays, activeSessionId]);
 
   // Totals & Cumulative Aggregations
   const sessionTotals = useMemo(() => {
@@ -358,8 +405,8 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
     });
 
     // Cumulative attendance percentage based on total session working days
-    const cumulativeAttPercent = TOTAL_WORKING_DAYS > 0
-      ? Math.round((totalPresent / TOTAL_WORKING_DAYS) * 100)
+    const cumulativeAttPercent = computedTotalWorkingDays > 0
+      ? Math.min(100, Math.round((totalPresent / computedTotalWorkingDays) * 1000) / 10)
       : 0;
 
     // Semester averages
@@ -393,7 +440,7 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
       mlDaysLeft,
       isShortage: cumulativeAttPercent < 80,
     };
-  }, [monthWiseData]);
+  }, [monthWiseData, computedTotalWorkingDays]);
 
   // Selected Month Breakdown Object
   const selectedBreakdown = useMemo(() => {
@@ -1249,7 +1296,7 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
                         SESSION TOTAL
                       </td>
                       <td className="py-2 print:py-0.5 px-1.5 print:px-0.5 font-mono border-r border-slate-300 text-[11px] print:text-[7.5px]">
-                        {TOTAL_WORKING_DAYS}
+                        {computedTotalWorkingDays}
                       </td>
                       <td className="py-2 print:py-0.5 px-1.5 print:px-0.5 font-mono text-emerald-800 border-r border-slate-300 text-[11px] print:text-[7.5px]">
                         {sessionTotals.totalPresent}
@@ -1714,7 +1761,7 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-semibold bg-white cursor-pointer"
                     required
                   >
-                    {ACADEMIC_MONTHS.map((m) => (
+                    {computedAcademicMonths.map((m) => (
                       <option key={m.monthKey} value={m.monthKey}>
                         {m.code} — {m.name} ({m.workingDays} Working Days)
                       </option>

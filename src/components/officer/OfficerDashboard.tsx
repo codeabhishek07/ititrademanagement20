@@ -76,6 +76,11 @@ import { DemonstrationPlanManager } from './DemonstrationPlanManager.tsx';
 import { WeeklyPlanManager } from './WeeklyPlanManager.tsx';
 import { DigitalProgressCardTracker } from './DigitalProgressCardTracker.tsx';
 import { DocumentVaultPanel } from '../DocumentVaultPanel.tsx';
+import {
+  getDateHolidayStatus,
+  calculateTraineeAttendanceMetrics,
+  getIstDateStr,
+} from '../../utils/attendanceCalendar.ts';
 
 interface OfficerDashboardProps {
   officer: {
@@ -611,15 +616,13 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
   }, [selectedTradeId, selectedSessionId, attendanceDate]);
 
   const currentTrade = activeTradePool.find((t) => t.id === selectedTradeId) || activeTradePool[0];
-  const activeHoliday = holidays.find(
-    (h) =>
-      h.date === attendanceDate &&
-      (!h.sessionId || h.sessionId === 'all' || h.sessionId === selectedSessionId)
-  );
+  const activeDayLock = getDateHolidayStatus(attendanceDate, holidays, selectedSessionId);
+  const activeHoliday = activeDayLock.adminHoliday;
+  const isAttendanceLockedDay = activeDayLock.isHoliday;
 
   // Automatic real-time debounced attendance persistence to Cloud Firestore
   useEffect(() => {
-    if (!pendingAttendanceDirtyRef.current || activeHoliday || trainees.length === 0) return;
+    if (!pendingAttendanceDirtyRef.current || isAttendanceLockedDay || trainees.length === 0) return;
     const timer = setTimeout(async () => {
       try {
         setAutoSavingAttendance('saving');
@@ -649,12 +652,12 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
       }
     }, 700);
     return () => clearTimeout(timer);
-  }, [attendanceEdits, attendanceDate, selectedTradeId, selectedSessionId, Boolean(activeHoliday)]);
+  }, [attendanceEdits, attendanceDate, selectedTradeId, selectedSessionId, isAttendanceLockedDay]);
 
   // Flush any pending unsaved attendance changes on tab/window unload using keepalive
   useEffect(() => {
     const handleBeforeUnload = () => {
-      if (!pendingAttendanceDirtyRef.current || activeHoliday || trainees.length === 0) return;
+      if (!pendingAttendanceDirtyRef.current || isAttendanceLockedDay || trainees.length === 0) return;
       const recordsToSave = Object.entries(attendanceEdits).map(([traineeId, status]) => ({
         traineeId,
         status,
@@ -680,39 +683,40 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [attendanceEdits, attendanceDate, officer.id, officer.name, Boolean(activeHoliday), trainees.length]);
+  }, [attendanceEdits, attendanceDate, officer.id, officer.name, isAttendanceLockedDay, trainees.length]);
 
-  // Compute attendance stats per trainee
+  // Compute attendance stats per trainee strictly excluding Sundays, 2nd/3rd Saturdays & Admin Holidays
+  const todayIst = getIstDateStr();
   const traineeStats = trainees.map((tr) => {
     const records = allAttendance.filter((a) => a.traineeId === tr.id);
-    const totalMarked = records.length;
-    const presentCount = records.filter((a) => a.status === 'Present').length;
-    const clCount = records.filter((a) => a.status === 'CL').length;
-    const mlCount = records.filter((a) => a.status === 'Medical Leave').length;
-    const halfDayCount = records.filter((a) => a.status === 'Half-Day Leave').length;
-    const absentCount = records.filter((a) => a.status === 'Absent').length;
-
-    // Present + CL + Medical + (0.5 * halfday) counts toward official NCVT attendance credit
-    const effectiveAttended = presentCount + clCount + mlCount + halfDayCount * 0.5;
-    const percent = totalMarked > 0 ? (effectiveAttended / totalMarked) * 100 : 100;
+    const trSession = sessions.find((s) => s.id === (tr.sessionId || selectedSessionId));
+    const metrics = calculateTraineeAttendanceMetrics({
+      records,
+      holidays,
+      sessionId: tr.sessionId || selectedSessionId,
+      admissionDate: tr.admissionDate,
+      sessionStartDate: trSession?.startDate,
+      referenceDate: todayIst,
+      minimumAttendancePercent: settings.minimumAttendancePercent,
+    });
 
     return {
       trainee: tr,
-      totalMarked,
-      presentCount,
-      clCount,
-      mlCount,
-      halfDayCount,
-      absentCount,
-      percent: Math.round(percent * 10) / 10,
-      isBelowThreshold: percent < settings.minimumAttendancePercent,
+      totalMarked: metrics.totalWorkingDays,
+      presentCount: metrics.presentDays,
+      clCount: metrics.clDays,
+      mlCount: metrics.mlDays,
+      halfDayCount: metrics.halfDays,
+      absentCount: metrics.absentDays,
+      percent: metrics.attendancePercent,
+      isBelowThreshold: metrics.isBelowThreshold,
     };
   });
 
   // Batch Save Attendance
   const handleSaveAttendance = async () => {
-    if (activeHoliday) {
-      showToast(`Attendance is disabled: ${attendanceDate} is an Admin-designated Holiday ("${activeHoliday.title}").`);
+    if (isAttendanceLockedDay) {
+      showToast(activeDayLock.lockReason || `Attendance is disabled on ${activeDayLock.title}.`);
       return;
     }
     try {
@@ -740,10 +744,10 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
     }
   };
 
-  // Run 17:00 (5:00 PM) Auto-Absent for unmarked trainees
+  // Run 17:00 (5:00 PM) Auto-Absent for unmarked trainees (working days only)
   const handleTriggerAutoAbsent = async () => {
-    if (activeHoliday) {
-      alert(`Auto-absent is disabled on Holiday ("${activeHoliday.title}" — ${attendanceDate}).`);
+    if (isAttendanceLockedDay) {
+      alert(activeDayLock.lockReason || `Auto-absent is disabled on Holiday ("${activeDayLock.title}" — ${attendanceDate}).`);
       return;
     }
     if (!confirm('Run automatic absent recording for any trainees who have not recorded attendance by 17:00 (05:00 PM)?')) return;
@@ -1656,10 +1660,10 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                     onUpdatePreferences?.({ attendanceDate: val });
                   }}
                   className={`px-2.5 py-1.5 border rounded-lg font-mono flex-1 sm:flex-initial ${
-                    activeHoliday ? 'border-rose-300 bg-rose-50 text-rose-900 font-bold' : 'border-slate-300 bg-white text-slate-800'
+                    isAttendanceLockedDay ? 'border-rose-300 bg-rose-50 text-rose-900 font-bold' : 'border-slate-300 bg-white text-slate-800'
                   }`}
                 />
-                {autoSavingAttendance !== 'idle' && !activeHoliday && (
+                {autoSavingAttendance !== 'idle' && !isAttendanceLockedDay && (
                   <span
                     className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold border ${
                       autoSavingAttendance === 'saving'
@@ -1681,15 +1685,15 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                 )}
                 <button
                   onClick={handleTriggerAutoAbsent}
-                  disabled={Boolean(activeHoliday)}
+                  disabled={isAttendanceLockedDay}
                   className={`px-3 py-1.5 rounded-lg font-medium transition-colors whitespace-nowrap flex-1 sm:flex-initial text-center border ${
-                    activeHoliday
+                    isAttendanceLockedDay
                       ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
                       : 'bg-rose-50 text-rose-700 hover:bg-rose-100 border-rose-200 cursor-pointer'
                   }`}
                   title={
-                    activeHoliday
-                      ? `Disabled on Holiday: ${activeHoliday.title}`
+                    isAttendanceLockedDay
+                      ? `Disabled on Holiday: ${activeDayLock.title}`
                       : 'Marks all unmarked trainees past 17:00 (05:00 PM) as Absent automatically'
                   }
                 >
@@ -1697,20 +1701,20 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                 </button>
                 <button
                   onClick={handleSaveAttendance}
-                  disabled={Boolean(activeHoliday)}
+                  disabled={isAttendanceLockedDay}
                   className={`px-3.5 py-1.5 font-medium rounded-lg shadow-xs transition-colors whitespace-nowrap flex-1 sm:flex-initial text-center ${
-                    activeHoliday
+                    isAttendanceLockedDay
                       ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
                       : 'bg-emerald-700 hover:bg-emerald-800 text-white cursor-pointer active:scale-95'
                   }`}
                 >
-                  {activeHoliday ? 'Holiday (Locked)' : 'Save Changes'}
+                  {isAttendanceLockedDay ? 'Holiday (Locked)' : 'Save Changes'}
                 </button>
               </div>
             </div>
           </div>
 
-          {activeHoliday && (
+          {isAttendanceLockedDay && (
             <div className="p-4 rounded-xl bg-rose-50 border-2 border-rose-200 flex flex-wrap items-center justify-between gap-3 text-xs">
               <div className="flex items-start gap-3">
                 <span className="p-2 rounded-lg bg-rose-600 text-white shrink-0">
@@ -1722,15 +1726,17 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                       Holiday
                     </span>
                     <span className="font-bold text-rose-950 text-sm">
-                      {activeHoliday.title} ({attendanceDate})
+                      {activeDayLock.title} ({attendanceDate})
                     </span>
                     <span className="text-[11px] font-medium text-rose-700 bg-white px-2 py-0.5 rounded border border-rose-200">
-                      {activeHoliday.category}
+                      {activeDayLock.categoryLabel}
                     </span>
                   </div>
                   <p className="text-rose-800 mt-1">
-                    This date has been marked as a <strong>Holiday</strong> by the Admin. All officer and trainee attendance submissions and 17:00 auto-absent actions are disabled for this date.
-                    {activeHoliday.remarks ? ` (${activeHoliday.remarks})` : ''}
+                    {activeDayLock.isWeeklyHoliday && !activeDayLock.isAdminHoliday
+                      ? 'Sundays, 2nd Saturdays, and 3rd Saturdays are official Government Weekly Holidays. Officer & trainee attendance submissions and 17:00 auto-absent actions are disabled and excluded from working days.'
+                      : 'This date has been marked as an official Holiday. All officer and trainee attendance submissions and 17:00 auto-absent actions are disabled for this date.'}
+                    {activeHoliday?.remarks ? ` (${activeHoliday.remarks})` : ''}
                   </p>
                 </div>
               </div>
@@ -1761,14 +1767,14 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                   const record = dayAttendance.find((a) => a.traineeId === tr.id);
 
                   return (
-                    <tr key={tr.id} className={`transition-colors ${activeHoliday ? 'bg-rose-50/20' : 'hover:bg-slate-50/80'}`}>
+                    <tr key={tr.id} className={`transition-colors ${isAttendanceLockedDay ? 'bg-rose-50/20' : 'hover:bg-slate-50/80'}`}>
                       <td className="py-3 px-4">
                         <div className="font-semibold text-slate-900">{tr.name}</div>
                         <div className="font-mono text-[11px] text-slate-500">{tr.rollNo}</div>
                       </td>
 
                       <td className="py-3 px-4 text-center">
-                        {activeHoliday ? (
+                        {isAttendanceLockedDay ? (
                           <span className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-rose-100 text-rose-800 border border-rose-200 font-bold text-[11px]">
                             <Calendar className="w-3.5 h-3.5" />
                             <span>Holiday — Disabled</span>
@@ -1782,7 +1788,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                               return (
                                 <button
                                   key={st}
-                                  disabled={Boolean(activeHoliday)}
+                                  disabled={isAttendanceLockedDay}
                                   onClick={() => {
                                     pendingAttendanceDirtyRef.current = true;
                                     setAutoSavingAttendance('saving');
@@ -1808,8 +1814,8 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                       </td>
 
                       <td className="py-3 px-4">
-                        {activeHoliday ? (
-                          <span className="text-rose-700 font-medium text-[11px]">Holiday ({activeHoliday.title})</span>
+                        {isAttendanceLockedDay ? (
+                          <span className="text-rose-700 font-medium text-[11px]">Holiday ({activeDayLock.title})</span>
                         ) : record ? (
                           <div>
                             <span className="font-mono text-slate-800">{record.timestamp}</span>
@@ -1825,7 +1831,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                       </td>
 
                       <td className="py-3 px-4">
-                        {record?.geotag ? (
+                        {record?.geotag && !isAttendanceLockedDay ? (
                           <div className="space-y-0.5 text-[11px]">
                             <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
                               <Compass className="w-3 h-3" />
@@ -1836,15 +1842,15 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                             </div>
                           </div>
                         ) : (
-                          <span className="text-slate-400 text-[11px]">{activeHoliday ? '—' : 'No GPS geotag'}</span>
+                          <span className="text-slate-400 text-[11px]">{isAttendanceLockedDay ? '—' : 'No GPS geotag'}</span>
                         )}
                       </td>
 
                       <td className="py-3 px-4 text-slate-600 text-[11px]">
-                        {activeHoliday
-                          ? `Holiday: ${activeHoliday.title} (Attendance Locked)`
+                        {isAttendanceLockedDay
+                          ? `${activeDayLock.title} (Attendance Locked)`
                           : record?.remarks || 'Regular workshop scheduled'}
-                        {record?.authorizedCorrection && !activeHoliday && (
+                        {record?.authorizedCorrection && !isAttendanceLockedDay && (
                           <span className="block text-[10px] text-amber-700 font-medium">
                             Authorized correction by: {record.correctedBy}
                           </span>
