@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BookOpen, Plus, Edit2, Trash2, Check, X, Printer, Download, Calendar } from 'lucide-react';
 import { LessonPlan, Trade } from '../../types.ts';
 import { fetchLessonPlans, saveLessonPlan, deleteLessonPlan } from '../../api.ts';
+import { getIstDateStr, addDaysToDateStr } from '../../utils/attendanceCalendar.ts';
 
 interface LessonPlanManagerProps {
   tradeId: string;
@@ -19,8 +20,8 @@ export const LessonPlanManager: React.FC<LessonPlanManagerProps> = ({ tradeId, t
   const [form, setForm] = useState({
     unitName: 'Unit 1: Introduction to Trade Tools & Safety',
     syllabusRef: 'NCQF / DGT Module 1.1 - Safety Precautions',
-    startDate: new Date().toISOString().split('T')[0],
-    endDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+    startDate: getIstDateStr(),
+    endDate: addDaysToDateStr(getIstDateStr(), 7) || getIstDateStr(),
     status: 'Pending' as 'Pending' | 'Completed',
     objectives: 'To impart thorough understanding of workshop safety rules, PPE usage, and hand tool identification.',
     teachingAid: 'Whiteboard, Chart of PPE symbols, Safety Demonstration Models',
@@ -71,8 +72,8 @@ export const LessonPlanManager: React.FC<LessonPlanManagerProps> = ({ tradeId, t
       setForm({
         unitName: 'Unit: Practical Workshop Module',
         syllabusRef: 'NCVT Syllabus Reference',
-        startDate: new Date().toISOString().split('T')[0],
-        endDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+        startDate: getIstDateStr(),
+        endDate: addDaysToDateStr(getIstDateStr(), 7) || getIstDateStr(),
         status: 'Pending',
         objectives: 'To impart practical workshop skills and theoretical foundation.',
         teachingAid: 'Blackboard, Workshop Tools, Charts',

@@ -493,7 +493,7 @@ export const DocumentVaultPanel: React.FC<DocumentVaultPanelProps> = ({
                       </div>
                       <div className="text-[10px] text-slate-400 mt-0.5">
                         Uploaded by <strong className="text-slate-600">{docItem.uploadedByName}</strong> ({docItem.uploadedByRole}) on{' '}
-                        {new Date(docItem.createdAt).toLocaleString('en-IN')}
+                        {new Date(docItem.createdAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST
                         {docItem.remarks ? ` · Note: ${docItem.remarks}` : ''}
                       </div>
                     </div>

@@ -1,3 +1,4 @@
+import './src/server/tzInit.ts';
 import express, { type Request, type Response } from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
@@ -45,6 +46,13 @@ import {
   calculateTraineeAttendanceMetrics,
   getIstDateStr,
   getIstClockParts,
+  getIstYear,
+  getIstYearMonth,
+  IST_TIMEZONE,
+  normalizeAttendanceWindow,
+  evaluateAttendanceWindow,
+  formatClock12,
+  formatClock24,
 } from './src/utils/attendanceCalendar.ts';
 
 function findHolidayForDate(data: ReturnType<typeof db.get>, dateStr: string, sessionId?: string): HolidayRecord | undefined {
@@ -136,8 +144,9 @@ async function startServer() {
   await db.ensureInitialized();
   await cleanupInvalidHolidayAutoAbsents();
 
-  // Ensure every API request runs against initialized Firestore state
-  app.use('/api', async (_req: Request, _res: Response, next: any) => {
+  // Ensure every API request runs against initialized Firestore state & exposes authoritative server epoch
+  app.use('/api', async (_req: Request, res: Response, next: any) => {
+    res.setHeader('X-Server-Time-Ms', String(Date.now()));
     await db.ensureInitialized();
     next();
   });
@@ -199,10 +208,26 @@ async function startServer() {
   // API Endpoints
   // -------------------------------------------------------------
 
+  // Authoritative Server IST Clock Synchronization Endpoint
+  app.get('/api/system/time', (_req: Request, res: Response) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const nowMs = Date.now();
+    res.json({
+      serverTimeMs: nowMs,
+      timeZone: IST_TIMEZONE,
+      utcOffset: '+05:30',
+      ist: getIstClockParts(new Date(nowMs)),
+    });
+  });
+
   // Bootstrap / Current State
   app.get('/api/bootstrap', (_req: Request, res: Response) => {
+    res.setHeader('Cache-Control', 'no-store');
     const data = db.get();
+    const nowMs = Date.now();
     res.json({
+      serverTimeMs: nowMs,
+      timeZone: IST_TIMEZONE,
       settings: data.settings,
       sessions: data.sessions,
       trades: data.trades,
@@ -243,7 +268,7 @@ async function startServer() {
         },
         data,
       };
-      res.setHeader('Content-Disposition', `attachment; filename="Govt_ITI_Raigarh_Backup_${new Date().toISOString().split('T')[0]}.json"`);
+      res.setHeader('Content-Disposition', `attachment; filename="Govt_ITI_Raigarh_Backup_${getIstDateStr()}.json"`);
       res.json(backupPayload);
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to generate institutional backup' });
@@ -1027,19 +1052,42 @@ async function startServer() {
 
   // Settings
   app.get('/api/settings', (_req: Request, res: Response) => {
+    res.setHeader('Cache-Control', 'no-store');
     res.json(db.get().settings);
   });
 
   app.put('/api/settings', async (req: Request, res: Response) => {
     const data = db.get();
-    data.settings = { ...data.settings, ...req.body };
+    const body = req.body || {};
+    const nextWindow = normalizeAttendanceWindow({
+      ...data.settings.attendanceWindow,
+      ...(body.attendanceWindow || {}),
+    });
+
+    data.settings = {
+      ...data.settings,
+      ...body,
+      campusLocation: {
+        ...data.settings.campusLocation,
+        ...(body.campusLocation || {}),
+      },
+      attendanceWindow: nextWindow,
+      leaveLimits: {
+        ...data.settings.leaveLimits,
+        ...(body.leaveLimits || {}),
+      },
+      adminAccount: {
+        ...data.settings.adminAccount,
+        ...(body.adminAccount || {}),
+      },
+    };
     await db.persistItemNow('settings', 'main', data.settings);
     db.addAuditLog({
       userId: 'usr_admin',
       userName: 'Principal / Admin',
       userRole: 'admin',
       action: 'UPDATE_SETTINGS',
-      details: 'Updated campus geofence, attendance window, or leave rules.',
+      details: `Updated attendance window (${formatClock24(nextWindow.startHour, nextWindow.startMinute)}–${formatClock24(nextWindow.endHour, nextWindow.endMinute)}, cutoff ${formatClock24(nextWindow.autoAbsentHour, nextWindow.autoAbsentMinute)}), campus geofence, or leave rules.`,
     });
     res.json({ success: true, settings: data.settings });
   });
@@ -1550,7 +1598,7 @@ async function startServer() {
       gender: req.body.gender || 'Male',
       category: req.body.category || 'OBC',
       status: req.body.status || 'active',
-      admissionDate: req.body.admissionDate || new Date().toISOString().split('T')[0],
+      admissionDate: req.body.admissionDate || getIstDateStr(),
       password: req.body.password || 'trainee123',
       photoDocId: req.body.photoDocId,
       photoUrl: req.body.photoUrl,
@@ -1604,7 +1652,7 @@ async function startServer() {
         gender,
         category,
         status: 'active',
-        admissionDate: new Date().toISOString().split('T')[0],
+        admissionDate: getIstDateStr(),
         password: item.password || 'trainee123',
       };
 
@@ -1700,7 +1748,8 @@ async function startServer() {
     if (!trainee) return res.status(404).json({ error: 'Trainee not found' });
 
     const now = new Date();
-    const { dateStr: todayStr, hours, minutes } = getIstClockParts(now);
+    const windowEval = evaluateAttendanceWindow(data.settings.attendanceWindow, now);
+    const todayStr = windowEval.istDateStr;
 
     const dayLock = getDayAttendanceLock(data, todayStr, trainee.sessionId);
     if (dayLock.isHoliday) {
@@ -1712,11 +1761,6 @@ async function startServer() {
         dayStatus: dayLock,
       });
     }
-
-    const win = data.settings.attendanceWindow;
-    const isWithinTimeWindow =
-      (hours > win.startHour || (hours === win.startHour && minutes >= win.startMinute)) &&
-      (hours < win.endHour || (hours === win.endHour && minutes <= win.endMinute));
 
     const existing = data.attendance.find((a) => a.traineeId === traineeId && a.date === todayStr);
     if (existing) {
@@ -1745,19 +1789,16 @@ async function startServer() {
       });
     }
 
-    if (!isWithinTimeWindow && !forceSimulation) {
-      const formatTime = (h: number, m: number = 0) => {
-        const ampm = h >= 12 ? 'PM' : 'AM';
-        const h12 = h % 12 || 12;
-        const mStr = m > 0 ? `:${m.toString().padStart(2, '0')}` : ':00';
-        return `${h12}${mStr} ${ampm} (${h.toString().padStart(2, '0')}:00)`;
-      };
+    if (!windowEval.isWithinWindow && !forceSimulation) {
+      const currentIstDisplay = `${formatClock12(windowEval.istHours, windowEval.istMinutes)} (${formatClock24(windowEval.istHours, windowEval.istMinutes)} IST)`;
       return res.status(400).json({
-        error: `Attendance window is closed. Official attendance window is between ${formatTime(win.startHour, win.startMinute)} and ${formatTime(win.endHour, win.endMinute)} (07:00 to 15:00). Attendance recorded outside this window requires Training Officer approval.`,
+        error: `Attendance window is closed (Current IST time: ${currentIstDisplay}). Official attendance window configured by Admin is ${windowEval.start12} (${windowEval.start24}) to ${windowEval.end12} (${windowEval.end24}). Attendance outside this window requires Training Officer approval.`,
+        attendanceWindow: windowEval.window,
+        currentIstTime: currentIstDisplay,
       });
     }
 
-    const timestampStr = now.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
+    const timestampStr = formatClock12(windowEval.istHours, windowEval.istMinutes);
     const newRecord: AttendanceRecord = {
       id: `att_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       traineeId: trainee.id,
@@ -1819,8 +1860,8 @@ async function startServer() {
       });
     }
 
-    const now = new Date();
-    const timestampStr = now.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
+    const batchIst = getIstClockParts();
+    const timestampStr = formatClock12(batchIst.hours, batchIst.minutes);
     const ops: PendingFirestoreOp[] = [];
 
     records.forEach((item) => {
@@ -1913,6 +1954,10 @@ async function startServer() {
       });
     }
 
+    const normWin = normalizeAttendanceWindow(data.settings.attendanceWindow);
+    const cutoff12 = formatClock12(normWin.autoAbsentHour, normWin.autoAbsentMinute);
+    const cutoff24 = formatClock24(normWin.autoAbsentHour, normWin.autoAbsentMinute);
+
     let newlyMarkedAbsent = 0;
     const ops: PendingFirestoreOp[] = [];
     targetTrainees.forEach((tr) => {
@@ -1928,9 +1973,9 @@ async function startServer() {
           sessionId: tr.sessionId,
           date: targetDate,
           status: 'Absent',
-          timestamp: '05:00 PM (17:00 Cutoff)',
+          timestamp: `${cutoff12} (${cutoff24} Cutoff)`,
           markedBy: 'system_auto_absent',
-          remarks: 'Automatic absent recorded past 17:00 (05:00 PM) cutoff time - Subject to authorized correction by Training Officer.',
+          remarks: `Automatic absent recorded past ${cutoff24} (${cutoff12}) cutoff time - Subject to authorized correction by Training Officer.`,
         };
         data.attendance.push(rec);
         ops.push({ type: 'set', coll: 'attendance', id: rec.id, data: rec });
@@ -2091,7 +2136,7 @@ async function startServer() {
     if (!trainee) return res.status(404).json({ error: 'Trainee not found' });
     const trade = data.trades.find((t) => t.id === trainee.tradeId);
 
-    const refNumber = `ITI-RAI/${trade?.code || 'TRD'}/WARN/${new Date().getFullYear()}/${Math.floor(10 + Math.random() * 90)}`;
+    const refNumber = `ITI-RAI/${trade?.code || 'TRD'}/WARN/${getIstYear()}/${Math.floor(10 + Math.random() * 90)}`;
     const pct = Number(attendancePercent);
     const resolvedSubjectHindi =
       subjectHindi ||
@@ -2115,7 +2160,7 @@ async function startServer() {
       subjectHindi: resolvedSubjectHindi,
       message,
       messageHindi: resolvedMessageHindi,
-      issuedDate: new Date().toISOString().split('T')[0],
+      issuedDate: getIstDateStr(),
       status: 'issued',
     };
 
@@ -2173,7 +2218,7 @@ async function startServer() {
       damagedCount: damaged,
       availableStock: available,
       binLocation: req.body.binLocation || 'General Storage',
-      lastInspected: req.body.lastInspected || new Date().toISOString().split('T')[0],
+      lastInspected: req.body.lastInspected || getIstDateStr(),
     };
 
     data.inventory.push(newItem);
@@ -2205,7 +2250,7 @@ async function startServer() {
       issuedCount: issued,
       damagedCount: damaged,
       availableStock: available,
-      lastInspected: req.body.lastInspected || new Date().toISOString().split('T')[0],
+      lastInspected: req.body.lastInspected || getIstDateStr(),
     };
 
     await db.persistItemNow('inventory', data.inventory[idx].id, data.inventory[idx]);
@@ -2259,7 +2304,7 @@ async function startServer() {
 
     const newIndent: IndentRecord = {
       id: `ind_${Date.now()}`,
-      indentNo: `IND/${new Date().getFullYear()}/${item.toolCode.slice(0, 4)}/${Math.floor(100 + Math.random() * 900)}`,
+      indentNo: `IND/${getIstYear()}/${item.toolCode.slice(0, 4)}/${Math.floor(100 + Math.random() * 900)}`,
       tradeId,
       officerId,
       officerName,
@@ -2269,8 +2314,8 @@ async function startServer() {
       itemId: item.id,
       itemName: item.name,
       quantity: qty,
-      issueDate: new Date().toISOString().split('T')[0],
-      expectedReturnDate: expectedReturnDate || new Date().toISOString().split('T')[0],
+      issueDate: getIstDateStr(),
+      expectedReturnDate: expectedReturnDate || getIstDateStr(),
       status: 'issued',
       remarks,
     };
@@ -2301,7 +2346,7 @@ async function startServer() {
     const item = data.inventory.find((i) => i.id === indent.itemId);
 
     indent.status = returnCondition === 'Damaged' ? 'damaged' : 'returned';
-    indent.actualReturnDate = new Date().toISOString().split('T')[0];
+    indent.actualReturnDate = getIstDateStr();
     indent.returnCondition = returnCondition || 'Good';
     if (remarks) indent.remarks = (indent.remarks ? indent.remarks + ' | ' : '') + remarks;
 
@@ -2437,11 +2482,14 @@ async function startServer() {
     const todayDayStatus = getDateHolidayStatus(todayStr, data.holidays || [], traineeObj?.sessionId);
     const todayRecord = records.find((a) => a.date === todayStr);
     if (todayDayStatus.isWorkingDay && todayRecord && todayRecord.status === 'Absent') {
+      const normWin = normalizeAttendanceWindow(data.settings.attendanceWindow);
+      const cutoff24 = formatClock24(normWin.autoAbsentHour, normWin.autoAbsentMinute);
+      const cutoff12 = formatClock12(normWin.autoAbsentHour, normWin.autoAbsentMinute);
       notifications.unshift({
         id: `notif_absent_${todayStr}`,
         type: 'absent_recorded',
         title: `Absence Recorded for Today (${todayStr})`,
-        message: todayRecord.remarks || 'Automatic absent recorded past 17:00 (05:00 PM) cutoff time. Authorized corrections must be processed through your Training Officer.',
+        message: todayRecord.remarks || `Automatic absent recorded past ${cutoff24} (${cutoff12}) cutoff time. Authorized corrections must be processed through your Training Officer.`,
         timestamp: todayRecord.timestamp,
         read: false,
         priority: 'high',
@@ -2472,8 +2520,8 @@ async function startServer() {
       tradeId: body.tradeId || 'trade_elec',
       unitName: body.unitName || 'New Module',
       syllabusRef: body.syllabusRef || 'NCVT Syllabus',
-      startDate: body.startDate || new Date().toISOString().split('T')[0],
-      endDate: body.endDate || new Date().toISOString().split('T')[0],
+      startDate: body.startDate || getIstDateStr(),
+      endDate: body.endDate || getIstDateStr(),
       status: body.status || 'Pending',
       objectives: body.objectives || '',
       teachingAid: body.teachingAid || '',
@@ -2524,7 +2572,7 @@ async function startServer() {
       practicalTitle: body.practicalTitle || 'Practical Demonstration',
       toolsRequired: body.toolsRequired || 'Standard Tools',
       allottedHours: Number(body.allottedHours || 4),
-      targetDate: body.targetDate || new Date().toISOString().split('T')[0],
+      targetDate: body.targetDate || getIstDateStr(),
       status: body.status || 'Pending',
       objectives: body.objectives || '',
       procedureSteps: body.procedureSteps || ['Prepare workstation', 'Execute step by step', 'Verify results'],
@@ -2641,7 +2689,7 @@ async function startServer() {
       id: idToLookFor || `asm_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       traineeId: body.traineeId,
       sessionId: body.sessionId || 'session_2025_2026',
-      month: body.month || new Date().toISOString().substring(0, 7),
+      month: body.month || getIstYearMonth(),
       testMarks: Number(body.testMarks || 0),
       attendancePercent: Number(body.attendancePercent || 85),
       parameters: body.parameters || {
@@ -2759,11 +2807,13 @@ async function startServer() {
   setInterval(async () => {
     try {
       const { dateStr: todayStr, hours: hour, minutes: minute } = getIstClockParts();
-      const win = db.get().settings.attendanceWindow;
-      const autoHour = win.autoAbsentHour !== undefined ? win.autoAbsentHour : 17;
-      const autoMinute = win.autoAbsentMinute !== undefined ? win.autoAbsentMinute : 0;
+      const win = normalizeAttendanceWindow(db.get().settings.attendanceWindow);
+      const autoHour = win.autoAbsentHour;
+      const autoMinute = win.autoAbsentMinute;
+      const cutoff12 = formatClock12(autoHour, autoMinute);
+      const cutoff24 = formatClock24(autoHour, autoMinute);
 
-      // Run when time is at or past cutoff (17:00 IST) and hasn't run for today yet
+      // Run when time is at or past configured cutoff (IST) and hasn't run for today yet
       if (
         (hour > autoHour || (hour === autoHour && minute >= autoMinute)) &&
         lastAutoAbsentDate !== todayStr
@@ -2790,9 +2840,9 @@ async function startServer() {
                 sessionId: tr.sessionId,
                 date: todayStr,
                 status: 'Absent',
-                timestamp: '05:00 PM (17:00 Cutoff)',
+                timestamp: `${cutoff12} (${cutoff24} Cutoff)`,
                 markedBy: 'system_auto_absent',
-                remarks: 'Automatic absent recorded at 17:00 (05:00 PM) cutoff time - Subject to authorized correction by Training Officer.',
+                remarks: `Automatic absent recorded at ${cutoff24} (${cutoff12}) cutoff time - Subject to authorized correction by Training Officer.`,
               };
               data.attendance.push(rec);
               ops.push({ type: 'set', coll: 'attendance', id: rec.id, data: rec });
@@ -2801,7 +2851,7 @@ async function startServer() {
         });
         if (ops.length > 0) {
           await db.persistBatchNow(ops);
-          console.log(`[Auto-Absent Scheduler] Flagged ${ops.length} unmarked active trainees as Absent for valid working date ${todayStr} at 17:00 cutoff.`);
+          console.log(`[Auto-Absent Scheduler] Flagged ${ops.length} unmarked active trainees as Absent for valid working date ${todayStr} at ${cutoff24} cutoff.`);
         }
       }
     } catch (e) {

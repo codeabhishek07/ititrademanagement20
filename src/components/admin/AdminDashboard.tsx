@@ -60,6 +60,15 @@ import {
   calculateMonthWorkingDayBreakdown,
   getDateHolidayStatus,
   getIstDateStr,
+  getIstYearMonth,
+  getIstYear,
+  stepMonthKey,
+  parseDateParts,
+  getDayOfWeekUTC,
+  getDaysInMonthUTC,
+  normalizeAttendanceWindow,
+  formatClock12,
+  formatClock24,
 } from '../../utils/attendanceCalendar.ts';
 import {
   fetchSessions,
@@ -195,8 +204,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Holiday Calendar State & Modal
   const [calendarMonth, setCalendarMonth] = useState<string>(() => {
     if (userPreferences?.adminCalendarMonth) return userPreferences.adminCalendarMonth;
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    return getIstYearMonth();
   });
 
   // Restore saved Admin preferences when Firestore session loads
@@ -223,7 +231,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     sessionId: string;
     remarks: string;
   }>({
-    date: new Date().toISOString().split('T')[0],
+    date: getIstDateStr(),
     title: '',
     category: 'National Holiday',
     sessionId: 'all',
@@ -265,6 +273,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Settings form
   const [settingsForm, setSettingsForm] = useState(settings);
+  useEffect(() => {
+    setSettingsForm(settings);
+  }, [settings]);
 
   const showToast = (msg: string) => {
     setSuccessToast(msg);
@@ -358,7 +369,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     } else {
       setEditingHoliday(null);
       setHolidayForm({
-        date: prefillDate || new Date().toISOString().split('T')[0],
+        date: prefillDate || getIstDateStr(),
         title: '',
         category: 'National Holiday',
         sessionId: selectedSessionId || 'all',
@@ -424,35 +435,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const handleCalendarMonthStep = (delta: number) => {
-    const [y, m] = calendarMonth.split('-').map(Number);
-    const d = new Date(y, m - 1 + delta, 1);
-    const nextMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const nextMonth = stepMonthKey(calendarMonth, delta);
     setCalendarMonth(nextMonth);
     onUpdatePreferences?.({ adminCalendarMonth: nextMonth });
   };
 
-  // Helper to generate 12 monthly slots based on session dates
+  // Helper to generate 12 monthly slots based on session dates (UTC calendar math, no TZ shift)
   const generateMonthsForSession = (session: AcademicSession): MonthlyWorkingDay[] => {
     let monthsList: string[] = [];
 
-    if (session.startDate && session.endDate) {
-      const start = new Date(session.startDate);
-      const end = new Date(session.endDate);
-      if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
-        let current = new Date(start.getFullYear(), start.getMonth(), 1);
-        const endMonth = new Date(end.getFullYear(), end.getMonth(), 1);
-        while (current <= endMonth) {
-          const y = current.getFullYear();
-          const m = String(current.getMonth() + 1).padStart(2, '0');
-          monthsList.push(`${y}-${m}`);
-          current.setMonth(current.getMonth() + 1);
+    const startParts = parseDateParts(session.startDate || '');
+    const endParts = parseDateParts(session.endDate || '');
+    if (startParts && endParts) {
+      let curY = startParts.year;
+      let curM = startParts.month;
+      let guard = 0;
+      while ((curY < endParts.year || (curY === endParts.year && curM <= endParts.month)) && guard < 36) {
+        monthsList.push(`${curY}-${String(curM).padStart(2, '0')}`);
+        curM++;
+        if (curM > 12) {
+          curM = 1;
+          curY++;
         }
+        guard++;
       }
     }
 
     if (monthsList.length === 0) {
       const match = session.name.match(/(\d{4})/);
-      const startYear = match ? parseInt(match[1]) : new Date().getFullYear();
+      const startYear = match ? parseInt(match[1]) : getIstYear();
       for (let i = 8; i <= 12; i++) {
         monthsList.push(`${startYear}-${String(i).padStart(2, '0')}`);
       }
@@ -802,7 +813,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       return;
     }
     const [yStr, mStr] = newMonthForm.month.split('-');
-    const totalDays = new Date(parseInt(yStr), parseInt(mStr), 0).getDate();
+    const totalDays = getDaysInMonthUTC(parseInt(yStr, 10), parseInt(mStr, 10));
     const newEntry: MonthlyWorkingDay = {
       id: `temp_${Date.now()}`,
       sessionId: selectedSessionId,
@@ -865,9 +876,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await updateSettings(settingsForm);
+      const normalizedPayload: SystemSettings = {
+        ...settingsForm,
+        attendanceWindow: normalizeAttendanceWindow(settingsForm.attendanceWindow),
+      };
+      const res = await updateSettings(normalizedPayload);
       onSettingsUpdate(res.settings);
-      showToast('System configuration & campus geofence updated successfully');
+      setSettingsForm(res.settings);
+      showToast('System configuration & attendance window updated in Cloud Firestore');
     } catch (err: any) {
       alert(err.message);
     }
@@ -1463,14 +1479,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
               <span className="text-slate-500 font-medium">Attendance Window</span>
               <div className="text-lg font-bold text-blue-700 mt-1 font-mono">
-                {String(settings.attendanceWindow?.startHour ?? 7).padStart(2, '0')}:
-                {String(settings.attendanceWindow?.startMinute ?? 0).padStart(2, '0')} –{' '}
-                {String(settings.attendanceWindow?.endHour ?? 15).padStart(2, '0')}:
-                {String(settings.attendanceWindow?.endMinute ?? 0).padStart(2, '0')}
+                {formatClock24(settings.attendanceWindow?.startHour ?? 7, settings.attendanceWindow?.startMinute ?? 0)} –{' '}
+                {formatClock24(settings.attendanceWindow?.endHour ?? 15, settings.attendanceWindow?.endMinute ?? 0)}
               </div>
               <span className="text-[11px] text-slate-500">
-                GPS Perimeter: {settings.campusLocation?.radiusMeters || 1500}m · Auto-Absent:{' '}
-                {String(settings.attendanceWindow?.autoAbsentHour ?? 17).padStart(2, '0')}:00
+                {formatClock12(settings.attendanceWindow?.startHour ?? 7, settings.attendanceWindow?.startMinute ?? 0)} –{' '}
+                {formatClock12(settings.attendanceWindow?.endHour ?? 15, settings.attendanceWindow?.endMinute ?? 0)} IST · Auto-Absent:{' '}
+                {formatClock24(settings.attendanceWindow?.autoAbsentHour ?? 17, settings.attendanceWindow?.autoAbsentMinute ?? 0)}
               </span>
             </div>
           </div>
@@ -2148,10 +2163,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {sessionHolidays.map((h) => {
-                          const dObj = new Date(`${h.date}T00:00:00`);
-                          const dayLabel = !isNaN(dObj.getTime())
-                            ? dObj.toLocaleDateString('en-IN', { weekday: 'short' })
-                            : '';
+                          const dow = getDayOfWeekUTC(h.date);
+                          const dayLabel = dow >= 0 ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dow] : '';
                           const sessName =
                             !h.sessionId || h.sessionId === 'all'
                               ? 'All Sessions'
@@ -2451,13 +2464,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     const isExceeding =
                       (Number(m.workingDays) || 0) + (Number(m.holidays) || 0) > m.totalDays;
 
-                    // Formatted month name e.g. "August 2025"
+                    // Formatted month name e.g. "August 2025" (UTC-safe without local TZ shift)
                     let monthTitle = m.month;
                     if (m.month && m.month.includes('-')) {
                       const [y, mn] = m.month.split('-');
-                      const dateObj = new Date(parseInt(y), parseInt(mn) - 1, 1);
+                      const dateObj = new Date(Date.UTC(parseInt(y, 10), parseInt(mn, 10) - 1, 1));
                       if (!isNaN(dateObj.getTime())) {
                         monthTitle = dateObj.toLocaleDateString('en-US', {
+                          timeZone: 'UTC',
                           month: 'long',
                           year: 'numeric',
                         });
@@ -2920,66 +2934,114 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-slate-600 mb-1">Opening Time (24h)</label>
+                  <label className="block text-slate-600 mb-1">Opening Time (IST)</label>
                   <input
-                    type="number"
-                    min="0"
-                    max="23"
-                    value={settingsForm.attendanceWindow.startHour}
-                    onChange={(e) =>
+                    type="time"
+                    value={formatClock24(
+                      settingsForm.attendanceWindow.startHour ?? 7,
+                      settingsForm.attendanceWindow.startMinute ?? 0
+                    )}
+                    onChange={(e) => {
+                      const [hStr, mStr] = (e.target.value || '07:00').split(':');
+                      const h = Math.min(23, Math.max(0, Number(hStr)));
+                      const m = Math.min(59, Math.max(0, Number(mStr)));
+                      if (Number.isNaN(h) || Number.isNaN(m)) return;
                       setSettingsForm({
                         ...settingsForm,
                         attendanceWindow: {
                           ...settingsForm.attendanceWindow,
-                          startHour: parseInt(e.target.value) || 7,
+                          startHour: h,
+                          startMinute: m,
                         },
-                      })
-                    }
+                      });
+                    }}
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded font-mono"
+                    required
                   />
-                  <span className="text-[10px] text-slate-500 font-mono">7 = 07:00 AM</span>
+                  <span className="text-[10px] text-slate-500 font-mono">
+                    {formatClock12(
+                      settingsForm.attendanceWindow.startHour ?? 7,
+                      settingsForm.attendanceWindow.startMinute ?? 0
+                    )}{' '}
+                    ({formatClock24(
+                      settingsForm.attendanceWindow.startHour ?? 7,
+                      settingsForm.attendanceWindow.startMinute ?? 0
+                    )} IST)
+                  </span>
                 </div>
 
                 <div>
-                  <label className="block text-slate-600 mb-1">Closing Time (24h)</label>
+                  <label className="block text-slate-600 mb-1">Closing Time (IST)</label>
                   <input
-                    type="number"
-                    min="0"
-                    max="23"
-                    value={settingsForm.attendanceWindow.endHour}
-                    onChange={(e) =>
+                    type="time"
+                    value={formatClock24(
+                      settingsForm.attendanceWindow.endHour ?? 15,
+                      settingsForm.attendanceWindow.endMinute ?? 0
+                    )}
+                    onChange={(e) => {
+                      const [hStr, mStr] = (e.target.value || '15:00').split(':');
+                      const h = Math.min(23, Math.max(0, Number(hStr)));
+                      const m = Math.min(59, Math.max(0, Number(mStr)));
+                      if (Number.isNaN(h) || Number.isNaN(m)) return;
                       setSettingsForm({
                         ...settingsForm,
                         attendanceWindow: {
                           ...settingsForm.attendanceWindow,
-                          endHour: parseInt(e.target.value) || 15,
+                          endHour: h,
+                          endMinute: m,
                         },
-                      })
-                    }
+                      });
+                    }}
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded font-mono"
+                    required
                   />
-                  <span className="text-[10px] text-slate-500 font-mono">15 = 03:00 PM (15:00)</span>
+                  <span className="text-[10px] text-slate-500 font-mono">
+                    {formatClock12(
+                      settingsForm.attendanceWindow.endHour ?? 15,
+                      settingsForm.attendanceWindow.endMinute ?? 0
+                    )}{' '}
+                    ({formatClock24(
+                      settingsForm.attendanceWindow.endHour ?? 15,
+                      settingsForm.attendanceWindow.endMinute ?? 0
+                    )} IST)
+                  </span>
                 </div>
 
                 <div>
-                  <label className="block text-slate-600 mb-1">Auto-Absent Cutoff (24h)</label>
+                  <label className="block text-slate-600 mb-1">Auto-Absent Cutoff (IST)</label>
                   <input
-                    type="number"
-                    min="0"
-                    max="23"
-                    value={settingsForm.attendanceWindow.autoAbsentHour !== undefined ? settingsForm.attendanceWindow.autoAbsentHour : 17}
-                    onChange={(e) =>
+                    type="time"
+                    value={formatClock24(
+                      settingsForm.attendanceWindow.autoAbsentHour ?? 17,
+                      settingsForm.attendanceWindow.autoAbsentMinute ?? 0
+                    )}
+                    onChange={(e) => {
+                      const [hStr, mStr] = (e.target.value || '17:00').split(':');
+                      const h = Math.min(23, Math.max(0, Number(hStr)));
+                      const m = Math.min(59, Math.max(0, Number(mStr)));
+                      if (Number.isNaN(h) || Number.isNaN(m)) return;
                       setSettingsForm({
                         ...settingsForm,
                         attendanceWindow: {
                           ...settingsForm.attendanceWindow,
-                          autoAbsentHour: parseInt(e.target.value) || 17,
+                          autoAbsentHour: h,
+                          autoAbsentMinute: m,
                         },
-                      })
-                    }
+                      });
+                    }}
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded font-mono"
+                    required
                   />
-                  <span className="text-[10px] text-slate-500 font-mono">17 = 05:00 PM (17:00)</span>
+                  <span className="text-[10px] text-slate-500 font-mono">
+                    {formatClock12(
+                      settingsForm.attendanceWindow.autoAbsentHour ?? 17,
+                      settingsForm.attendanceWindow.autoAbsentMinute ?? 0
+                    )}{' '}
+                    ({formatClock24(
+                      settingsForm.attendanceWindow.autoAbsentHour ?? 17,
+                      settingsForm.attendanceWindow.autoAbsentMinute ?? 0
+                    )} IST)
+                  </span>
                 </div>
               </div>
 

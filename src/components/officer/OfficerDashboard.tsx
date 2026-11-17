@@ -80,6 +80,9 @@ import {
   getDateHolidayStatus,
   calculateTraineeAttendanceMetrics,
   getIstDateStr,
+  normalizeAttendanceWindow,
+  formatClock12,
+  formatClock24,
 } from '../../utils/attendanceCalendar.ts';
 
 interface OfficerDashboardProps {
@@ -331,7 +334,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
   // Main entity states
   const [trainees, setTrainees] = useState<Trainee[]>([]);
   const [attendanceDate, setAttendanceDate] = useState(
-    userPreferences?.attendanceDate || new Date().toISOString().split('T')[0]
+    userPreferences?.attendanceDate || getIstDateStr()
   );
 
   // Sync restored userPreferences from Firestore whenever userPreferences resolves
@@ -520,7 +523,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
     traineeId: '',
     itemId: '',
     quantity: 1,
-    expectedReturnDate: new Date().toISOString().split('T')[0],
+    expectedReturnDate: getIstDateStr(),
     remarks: '',
   });
 
@@ -744,13 +747,17 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
     }
   };
 
-  // Run 17:00 (5:00 PM) Auto-Absent for unmarked trainees (working days only)
+  const officerNormWin = normalizeAttendanceWindow(settings.attendanceWindow);
+  const officerCutoff24 = formatClock24(officerNormWin.autoAbsentHour, officerNormWin.autoAbsentMinute);
+  const officerCutoff12 = formatClock12(officerNormWin.autoAbsentHour, officerNormWin.autoAbsentMinute);
+
+  // Run Auto-Absent for unmarked trainees past configured cutoff (working days only)
   const handleTriggerAutoAbsent = async () => {
     if (isAttendanceLockedDay) {
       alert(activeDayLock.lockReason || `Auto-absent is disabled on Holiday ("${activeDayLock.title}" — ${attendanceDate}).`);
       return;
     }
-    if (!confirm('Run automatic absent recording for any trainees who have not recorded attendance by 17:00 (05:00 PM)?')) return;
+    if (!confirm(`Run automatic absent recording for any trainees who have not recorded attendance by ${officerCutoff24} (${officerCutoff12})?`)) return;
     try {
       const res = await triggerAutoAbsent(attendanceDate, selectedTradeId);
       showToast(`Auto-absent executed. ${res.markedCount} unmarked trainees flagged as Absent.`);
@@ -1001,7 +1008,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
       traineeId: trainees[0]?.id || '',
       itemId: inventory.find((i) => i.availableStock > 0)?.id || '',
       quantity: 1,
-      expectedReturnDate: new Date().toISOString().split('T')[0],
+      expectedReturnDate: getIstDateStr(),
       remarks: 'Issued for workshop practical exercise',
     });
     setIndentModalOpen(true);
@@ -1076,7 +1083,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `ITI_Raigarh_${currentTrade?.name || 'Trade'}_Attendance_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `ITI_Raigarh_${currentTrade?.name || 'Trade'}_Attendance_${getIstDateStr()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1694,10 +1701,10 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                   title={
                     isAttendanceLockedDay
                       ? `Disabled on Holiday: ${activeDayLock.title}`
-                      : 'Marks all unmarked trainees past 17:00 (05:00 PM) as Absent automatically'
+                      : `Marks all unmarked trainees past ${officerCutoff24} (${officerCutoff12}) as Absent automatically`
                   }
                 >
-                  17:00 Auto-Absent
+                  {officerCutoff24} Auto-Absent
                 </button>
                 <button
                   onClick={handleSaveAttendance}
@@ -1734,8 +1741,8 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                   </div>
                   <p className="text-rose-800 mt-1">
                     {activeDayLock.isWeeklyHoliday && !activeDayLock.isAdminHoliday
-                      ? 'Sundays, 2nd Saturdays, and 3rd Saturdays are official Government Weekly Holidays. Officer & trainee attendance submissions and 17:00 auto-absent actions are disabled and excluded from working days.'
-                      : 'This date has been marked as an official Holiday. All officer and trainee attendance submissions and 17:00 auto-absent actions are disabled for this date.'}
+                      ? `Sundays, 2nd Saturdays, and 3rd Saturdays are official Government Weekly Holidays. Officer & trainee attendance submissions and ${officerCutoff24} auto-absent actions are disabled and excluded from working days.`
+                      : `This date has been marked as an official Holiday. All officer and trainee attendance submissions and ${officerCutoff24} auto-absent actions are disabled for this date.`}
                     {activeHoliday?.remarks ? ` (${activeHoliday.remarks})` : ''}
                   </p>
                 </div>

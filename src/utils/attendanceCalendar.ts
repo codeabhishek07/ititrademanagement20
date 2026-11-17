@@ -1,4 +1,4 @@
-import type { AttendanceRecord, HolidayRecord } from '../types.ts';
+import type { AttendanceRecord, AttendanceWindow, HolidayRecord } from '../types.ts';
 
 export type WeeklyHolidayKind = 'sunday' | 'second_saturday' | 'third_saturday';
 
@@ -107,57 +107,128 @@ export function getDaysInMonthUTC(year: number, month: number): number {
 }
 
 /**
- * Returns YYYY-MM-DD for India Standard Time (Asia/Kolkata) with safe fallback.
+ * India Standard Time (Asia/Kolkata) is permanently UTC+05:30 with no Daylight Saving Time.
+ * Using exact fixed-offset epoch arithmetic guarantees identical results across all OS/browser timezones
+ * (UTC container, PST, mobile WebViews, minimal ICU builds) and handles 00:00–05:29 IST midnight transitions accurately.
  */
-export function getIstDateStr(now: Date = new Date()): string {
+export const IST_TIMEZONE = 'Asia/Kolkata';
+export const IST_OFFSET_MINUTES = 330; // +05:30
+export const IST_OFFSET_MS = IST_OFFSET_MINUTES * 60 * 1000; // 19,800,000 ms
+
+let serverTimeOffsetMs = 0;
+
+/**
+ * Synchronizes client clock offset against authoritative backend server epoch time.
+ */
+export function updateServerTimeOffset(serverTimeMs: number): number {
+  if (!Number.isFinite(serverTimeMs) || serverTimeMs <= 0) return serverTimeOffsetMs;
+  const nextOffset = serverTimeMs - Date.now();
+  // Smooth micro-jitter (< 1.5s) while snapping immediately on larger clock skew
+  if (Math.abs(nextOffset - serverTimeOffsetMs) > 1500 || serverTimeOffsetMs === 0) {
+    serverTimeOffsetMs = nextOffset;
+  }
+  return serverTimeOffsetMs;
+}
+
+export function getServerTimeOffsetMs(): number {
+  return serverTimeOffsetMs;
+}
+
+/**
+ * Returns the current Date synchronized with the backend server clock.
+ */
+export function getSynchronizedNow(): Date {
+  return new Date(Date.now() + serverTimeOffsetMs);
+}
+
+/**
+ * Returns YYYY-MM-DD for India Standard Time (Asia/Kolkata, UTC+05:30).
+ */
+export function getIstDateStr(now: Date = getSynchronizedNow()): string {
+  const ist = new Date(now.getTime() + IST_OFFSET_MS);
+  return formatDateParts(ist.getUTCFullYear(), ist.getUTCMonth() + 1, ist.getUTCDate());
+}
+
+/**
+ * Returns YYYY-MM for India Standard Time (Asia/Kolkata, UTC+05:30).
+ */
+export function getIstYearMonth(now: Date = getSynchronizedNow()): string {
+  const ist = new Date(now.getTime() + IST_OFFSET_MS);
+  return `${ist.getUTCFullYear()}-${String(ist.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+/**
+ * Returns calendar year in India Standard Time (Asia/Kolkata, UTC+05:30).
+ */
+export function getIstYear(now: Date = getSynchronizedNow()): number {
+  const ist = new Date(now.getTime() + IST_OFFSET_MS);
+  return ist.getUTCFullYear();
+}
+
+/**
+ * Steps a YYYY-MM month key safely by deltaMonths using UTC math (immune to timezone shifts).
+ */
+export function stepMonthKey(monthKey: string, deltaMonths: number): string {
+  const mMatch = /^(\d{4})-(\d{2})$/.exec(String(monthKey || '').trim());
+  const baseYear = mMatch ? Number(mMatch[1]) : getIstYear();
+  const baseMonth = mMatch ? Number(mMatch[2]) : Number(getIstYearMonth().slice(5, 7));
+  const dt = new Date(Date.UTC(baseYear, baseMonth - 1 + deltaMonths, 1));
+  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+/**
+ * Formats an instant into localized IST timestamp string (e.g. "17/11/2026, 09:30:12 pm").
+ */
+export function formatIstDateTime(now: Date = getSynchronizedNow()): string {
   try {
-    return new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Kolkata',
-      year: 'numeric',
-      month: '2-digit',
+    return now.toLocaleString('en-IN', {
+      timeZone: IST_TIMEZONE,
       day: '2-digit',
-    }).format(now);
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
   } catch {
-    return now.toISOString().split('T')[0];
+    const p = getIstClockParts(now);
+    return `${p.dateStr} ${formatClock12(p.hours, p.minutes)} IST`;
   }
 }
 
 /**
- * Returns IST hour/minute and YYYY-MM-DD date string reliably on any server/browser timezone.
+ * Returns exact IST year, month, day, dayOfWeek, hour, minute, second, and YYYY-MM-DD date string
+ * reliably on any server or browser timezone using fixed UTC+05:30 arithmetic.
  */
-export function getIstClockParts(now: Date = new Date()): {
+export function getIstClockParts(now: Date = getSynchronizedNow()): {
   dateStr: string;
+  year: number;
+  month: number;
+  day: number;
+  dayOfWeek: number;
   hours: number;
   minutes: number;
+  seconds: number;
 } {
-  try {
-    const parts = new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'Asia/Kolkata',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    }).formatToParts(now);
-    const get = (type: string) => parts.find((p) => p.type === type)?.value || '0';
-    const year = get('year');
-    const month = get('month');
-    const day = get('day');
-    const hours = Number(get('hour')) % 24;
-    const minutes = Number(get('minute'));
-    return {
-      dateStr: `${year}-${month}-${day}`,
-      hours,
-      minutes,
-    };
-  } catch {
-    return {
-      dateStr: now.toISOString().split('T')[0],
-      hours: now.getHours(),
-      minutes: now.getMinutes(),
-    };
-  }
+  const ist = new Date(now.getTime() + IST_OFFSET_MS);
+  const year = ist.getUTCFullYear();
+  const month = ist.getUTCMonth() + 1;
+  const day = ist.getUTCDate();
+  const dayOfWeek = ist.getUTCDay();
+  const hours = ist.getUTCHours();
+  const minutes = ist.getUTCMinutes();
+  const seconds = ist.getUTCSeconds();
+
+  return {
+    dateStr: formatDateParts(year, month, day),
+    year,
+    month,
+    day,
+    dayOfWeek,
+    hours,
+    minutes,
+    seconds,
+  };
 }
 
 export function addDaysToDateStr(dateStr: string, deltaDays: number): string | null {
@@ -632,3 +703,107 @@ export function calculateTraineeAttendanceMetrics(params: {
     effectiveEndDate,
   };
 }
+
+export interface NormalizedAttendanceWindow {
+  startHour: number;
+  startMinute: number;
+  endHour: number;
+  endMinute: number;
+  autoAbsentHour: number;
+  autoAbsentMinute: number;
+}
+
+export function normalizeAttendanceWindow(
+  win?: Partial<AttendanceWindow> | null
+): NormalizedAttendanceWindow {
+  const clamp = (val: unknown, min: number, max: number, fallback: number): number => {
+    const n = Number(val);
+    if (val === undefined || val === null || val === '' || Number.isNaN(n)) return fallback;
+    return Math.min(max, Math.max(min, Math.trunc(n)));
+  };
+
+  return {
+    startHour: clamp(win?.startHour, 0, 23, 7),
+    startMinute: clamp(win?.startMinute, 0, 59, 0),
+    endHour: clamp(win?.endHour, 0, 23, 15),
+    endMinute: clamp(win?.endMinute, 0, 59, 0),
+    autoAbsentHour: clamp(win?.autoAbsentHour, 0, 23, 17),
+    autoAbsentMinute: clamp(win?.autoAbsentMinute, 0, 59, 0),
+  };
+}
+
+export function formatClock24(hour: number, minute: number = 0): string {
+  const h = ((Math.trunc(hour) % 24) + 24) % 24;
+  const m = Math.min(59, Math.max(0, Math.trunc(minute || 0)));
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+export function formatClock12(hour: number, minute: number = 0): string {
+  const h = ((Math.trunc(hour) % 24) + 24) % 24;
+  const m = Math.min(59, Math.max(0, Math.trunc(minute || 0)));
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${ampm}`;
+}
+
+export function formatClockDisplay(hour: number, minute: number = 0): string {
+  return `${formatClock12(hour, minute)} (${formatClock24(hour, minute)})`;
+}
+
+export interface AttendanceWindowEvaluation {
+  isWithinWindow: boolean;
+  istDateStr: string;
+  istHours: number;
+  istMinutes: number;
+  nowTotalMinutes: number;
+  startTotalMinutes: number;
+  endTotalMinutes: number;
+  isOvernightWindow: boolean;
+  window: NormalizedAttendanceWindow;
+  start12: string;
+  start24: string;
+  end12: string;
+  end24: string;
+  autoAbsent12: string;
+  autoAbsent24: string;
+}
+
+/**
+ * Evaluates whether the current IST time falls within the Admin-configured attendance window.
+ * Supports both same-day windows (e.g. 07:00 - 15:00) and cross-midnight windows (e.g. 22:00 - 15:00).
+ */
+export function evaluateAttendanceWindow(
+  rawWin?: Partial<AttendanceWindow> | null,
+  now: Date = getSynchronizedNow()
+): AttendanceWindowEvaluation {
+  const win = normalizeAttendanceWindow(rawWin);
+  const { dateStr: istDateStr, hours: istHours, minutes: istMinutes } = getIstClockParts(now);
+
+  const nowTotalMinutes = istHours * 60 + istMinutes;
+  const startTotalMinutes = win.startHour * 60 + win.startMinute;
+  const endTotalMinutes = win.endHour * 60 + win.endMinute;
+  const isOvernightWindow = startTotalMinutes > endTotalMinutes;
+
+  const isWithinWindow = isOvernightWindow
+    ? nowTotalMinutes >= startTotalMinutes || nowTotalMinutes <= endTotalMinutes
+    : nowTotalMinutes >= startTotalMinutes && nowTotalMinutes <= endTotalMinutes;
+
+  return {
+    isWithinWindow,
+    istDateStr,
+    istHours,
+    istMinutes,
+    nowTotalMinutes,
+    startTotalMinutes,
+    endTotalMinutes,
+    isOvernightWindow,
+    window: win,
+    start12: formatClock12(win.startHour, win.startMinute),
+    start24: formatClock24(win.startHour, win.startMinute),
+    end12: formatClock12(win.endHour, win.endMinute),
+    end24: formatClock24(win.endHour, win.endMinute),
+    autoAbsent12: formatClock12(win.autoAbsentHour, win.autoAbsentMinute),
+    autoAbsent24: formatClock24(win.autoAbsentHour, win.autoAbsentMinute),
+  };
+}
+

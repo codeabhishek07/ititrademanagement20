@@ -20,6 +20,8 @@ import {
   fetchUserPreferences,
   saveUserPreferences,
   getAuthToken,
+  fetchSettings,
+  syncServerTime,
 } from './api.ts';
 import {
   signInWithGooglePopup,
@@ -215,21 +217,39 @@ export default function App() {
     }
   };
 
+  const refreshLatestSettings = useCallback(() => {
+    syncServerTime().catch(() => {});
+    fetchSettings()
+      .then((fresh) => {
+        if (fresh && fresh.attendanceWindow) {
+          setSettings(fresh);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     loadInitialData();
     const unsubAuth = subscribeFirebaseAuth(() => {
       // Keeps Firebase Auth state synchronized cleanly
     });
 
+    const handleFocusRefresh = () => {
+      refreshLatestSettings();
+    };
+    window.addEventListener('focus', handleFocusRefresh);
+
     const interval = setInterval(() => {
+      refreshLatestSettings();
       triggerAutoBackup('auto_sync', currentUser?.role || 'active_session').catch(() => {});
-    }, 60000);
+    }, 30000);
 
     return () => {
       unsubAuth();
+      window.removeEventListener('focus', handleFocusRefresh);
       clearInterval(interval);
     };
-  }, []);
+  }, [refreshLatestSettings]);
 
   const handleRestoreFromBanner = async () => {
     if (!manualRestoreAvailable?.payload) return;
@@ -264,6 +284,7 @@ export default function App() {
         applyRestoredPreferences(loadedPrefs, user.role);
       }
       triggerAutoBackup('auto_sync', user.role).catch(() => {});
+      refreshLatestSettings();
     } catch (err: any) {
       throw err;
     } finally {
@@ -295,6 +316,7 @@ export default function App() {
         const loadedPrefs = await fetchUserPreferences(mappedUser.id);
         applyRestoredPreferences(loadedPrefs, mappedUser.role);
       }
+      refreshLatestSettings();
     } finally {
       setLoading(false);
     }
@@ -472,6 +494,7 @@ export default function App() {
                 onTraineeUpdate={(updated) => {
                   setCurrentUser((prev) => (prev ? { ...prev, ...updated } : null));
                 }}
+                onSettingsChange={(freshSettings) => setSettings(freshSettings)}
               />
             )}
           </div>

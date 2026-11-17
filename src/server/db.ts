@@ -496,22 +496,20 @@ class Database {
         const cloudData = loadResult.data;
         const cloudSettings = cloudData.settings || {};
         const rawWindow = cloudSettings.attendanceWindow || {};
-        const mergedWindow = {
-          startHour: rawWindow.startHour !== undefined ? rawWindow.startHour : 7,
-          startMinute: rawWindow.startMinute !== undefined ? rawWindow.startMinute : 0,
-          endHour: rawWindow.endHour !== undefined ? rawWindow.endHour : 15,
-          endMinute: rawWindow.endMinute !== undefined ? rawWindow.endMinute : 0,
-          autoAbsentHour: rawWindow.autoAbsentHour !== undefined ? rawWindow.autoAbsentHour : 17,
-          autoAbsentMinute: rawWindow.autoAbsentMinute !== undefined ? rawWindow.autoAbsentMinute : 0,
+        const boundInt = (v: unknown, min: number, max: number, fb: number) => {
+          const n = Number(v);
+          return v !== undefined && v !== null && v !== '' && !Number.isNaN(n)
+            ? Math.min(max, Math.max(min, Math.trunc(n)))
+            : fb;
         };
-        if (mergedWindow.endHour <= 11) {
-          mergedWindow.endHour = 15;
-          mergedWindow.startHour = 7;
-        }
-        if (!mergedWindow.autoAbsentHour || mergedWindow.autoAbsentHour < 17) {
-          mergedWindow.autoAbsentHour = 17;
-          mergedWindow.autoAbsentMinute = 0;
-        }
+        const mergedWindow = {
+          startHour: boundInt(rawWindow.startHour, 0, 23, 7),
+          startMinute: boundInt(rawWindow.startMinute, 0, 59, 0),
+          endHour: boundInt(rawWindow.endHour, 0, 23, 15),
+          endMinute: boundInt(rawWindow.endMinute, 0, 59, 0),
+          autoAbsentHour: boundInt(rawWindow.autoAbsentHour, 0, 23, 17),
+          autoAbsentMinute: boundInt(rawWindow.autoAbsentMinute, 0, 59, 0),
+        };
 
         const cleanTrainees = (Array.isArray(cloudData.trainees) ? cloudData.trainees : []).filter((t: any) => !isDemoIdOrName(t));
         const validTraineeIds = new Set(cleanTrainees.map((t: any) => t.id));

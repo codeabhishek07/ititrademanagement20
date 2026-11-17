@@ -47,6 +47,8 @@ import {
   fetchIndents,
   fetchHolidays,
   uploadDocument,
+  fetchSettings,
+  syncServerTime,
 } from '../../api.ts';
 import { DocumentVaultPanel } from '../DocumentVaultPanel.tsx';
 import {
@@ -54,6 +56,12 @@ import {
   calculateMonthWorkingDayBreakdown,
   calculateTraineeAttendanceMetrics,
   getIstDateStr,
+  getIstYearMonth,
+  stepMonthKey,
+  getSynchronizedNow,
+  evaluateAttendanceWindow,
+  formatClock12,
+  formatClock24,
 } from '../../utils/attendanceCalendar.ts';
 
 interface TraineeDashboardProps {
@@ -75,6 +83,7 @@ interface TraineeDashboardProps {
   userPreferences?: UserPreferences | null;
   onUpdatePreferences?: (partial: Partial<UserPreferences>) => void;
   onTraineeUpdate?: (updated: { email?: string; mobile?: string }) => void;
+  onSettingsChange?: (settings: SystemSettings) => void;
 }
 
 type TraineeTab = 'mark_attendance' | 'history' | 'leaves' | 'warnings' | 'tools' | 'documents';
@@ -87,6 +96,7 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
   userPreferences,
   onUpdatePreferences,
   onTraineeUpdate,
+  onSettingsChange,
 }) => {
   const [activeTab, setActiveTab] = useState<TraineeTab>(selectedTab || 'mark_attendance');
 
@@ -118,6 +128,19 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
 
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState('');
+  const [liveSettings, setLiveSettings] = useState<SystemSettings>(settings);
+  const [liveNow, setLiveNow] = useState<Date>(() => getSynchronizedNow());
+
+  useEffect(() => {
+    setLiveSettings(settings);
+  }, [settings]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setLiveNow(getSynchronizedNow());
+    }, 10000);
+    return () => clearInterval(timer);
+  }, []);
 
   // GPS State
   const [gpsLoading, setGpsLoading] = useState(false);
@@ -134,8 +157,7 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
   const [holidays, setHolidays] = useState<HolidayRecord[]>([]);
   const [historyMonth, setHistoryMonth] = useState<string>(() => {
     if (userPreferences?.historyMonth) return userPreferences.historyMonth;
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    return getIstYearMonth();
   });
   const [noticeLanguage, setNoticeLanguage] = useState<'hindi' | 'bilingual' | 'english'>(
     (userPreferences?.noticeLanguage as 'hindi' | 'bilingual' | 'english') || 'bilingual'
@@ -158,8 +180,8 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
   const [leaveForm, setLeaveForm] = useState({
     leaveType: 'Casual Leave (CL)' as LeaveType,
-    fromDate: new Date().toISOString().split('T')[0],
-    toDate: new Date().toISOString().split('T')[0],
+    fromDate: getIstDateStr(),
+    toDate: getIstDateStr(),
     days: 1,
     reason: '',
   });
@@ -167,7 +189,11 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
   const [leaveSubmitError, setLeaveSubmitError] = useState('');
   const [leaveSubmitting, setLeaveSubmitting] = useState(false);
 
-  const todayStr = getIstDateStr();
+  // Unified synchronized IST evaluation (updates dynamically across midnight and server window changes)
+  const windowEval = evaluateAttendanceWindow(liveSettings.attendanceWindow, liveNow);
+  const isTimeWithinWindow = windowEval.isWithinWindow;
+  const currentIstFormatted = `${formatClock12(windowEval.istHours, windowEval.istMinutes)} (${formatClock24(windowEval.istHours, windowEval.istMinutes)} IST)`;
+  const todayStr = windowEval.istDateStr;
   const todayDayLock = getDateHolidayStatus(todayStr, holidays, trainee.sessionId);
   const isTodayHolidayLocked = todayDayLock.isHoliday;
   const todayHoliday = todayDayLock.adminHoliday;
@@ -183,18 +209,24 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
   const loadTraineeData = async () => {
     setLoading(true);
     try {
-      const [att, lvs, wrns, inds, hols] = await Promise.all([
+      const [att, lvs, wrns, inds, hols, freshSettings] = await Promise.all([
         fetchAttendance({ traineeId: trainee.id }),
         fetchLeaves({ traineeId: trainee.id }),
         fetchWarnings({ traineeId: trainee.id }),
         fetchIndents({ traineeId: trainee.id }),
         fetchHolidays(),
+        fetchSettings().catch(() => null),
       ]);
       setAttendanceList(att);
       setLeavesList(lvs);
       setWarningsList(wrns);
       setIndentsList(inds);
       setHolidays(hols);
+      if (freshSettings && freshSettings.attendanceWindow) {
+        setLiveSettings(freshSettings);
+        onSettingsChange?.(freshSettings);
+      }
+      setLiveNow(getSynchronizedNow());
     } catch (err) {
       console.error(err);
     } finally {
@@ -203,8 +235,23 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
   };
 
   useEffect(() => {
+    syncServerTime()
+      .then(() => setLiveNow(getSynchronizedNow()))
+      .catch(() => {});
     loadTraineeData();
     requestLocation();
+    const settingsPoll = setInterval(() => {
+      Promise.all([syncServerTime().catch(() => null), fetchSettings().catch(() => null)])
+        .then(([, fresh]) => {
+          setLiveNow(getSynchronizedNow());
+          if (fresh && fresh.attendanceWindow) {
+            setLiveSettings(fresh);
+            onSettingsChange?.(fresh);
+          }
+        })
+        .catch(() => {});
+    }, 30000);
+    return () => clearInterval(settingsPoll);
   }, [trainee.id]);
 
   // Haversine distance calculator
@@ -227,10 +274,10 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
 
     if (simulateOnCampus) {
       // Simulate exact coordinates inside Govt ITI Raigarh campus
-      const simLat = settings.campusLocation.lat + 0.0002;
-      const simLng = settings.campusLocation.lng + 0.0001;
+      const simLat = liveSettings.campusLocation.lat + 0.0002;
+      const simLng = liveSettings.campusLocation.lng + 0.0001;
       setCurrentCoords({ lat: simLat, lng: simLng, accuracy: 8 });
-      const dist = computeMeters(simLat, simLng, settings.campusLocation.lat, settings.campusLocation.lng);
+      const dist = computeMeters(simLat, simLng, liveSettings.campusLocation.lat, liveSettings.campusLocation.lng);
       setDistanceToCampus(dist);
       setGpsLoading(false);
       return;
@@ -250,7 +297,7 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
           lng: parseFloat(longitude.toFixed(6)),
           accuracy: Math.round(accuracy),
         });
-        const dist = computeMeters(latitude, longitude, settings.campusLocation.lat, settings.campusLocation.lng);
+        const dist = computeMeters(latitude, longitude, liveSettings.campusLocation.lat, liveSettings.campusLocation.lng);
         setDistanceToCampus(dist);
         setGpsLoading(false);
       },
@@ -289,8 +336,8 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
       setGpsLoading(true);
       const res = await markTraineeAttendance({
         traineeId: trainee.id,
-        userLat: currentCoords?.lat || settings.campusLocation.lat,
-        userLng: currentCoords?.lng || settings.campusLocation.lng,
+        userLat: currentCoords?.lat || liveSettings.campusLocation.lat,
+        userLng: currentCoords?.lng || liveSettings.campusLocation.lng,
         accuracy: currentCoords?.accuracy || 10,
         forceSimulation: simulateOnCampus,
       });
@@ -362,8 +409,8 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
       setLeaveAttachmentFile(null);
       setLeaveForm({
         leaveType: 'Casual Leave (CL)',
-        fromDate: new Date().toISOString().split('T')[0],
-        toDate: new Date().toISOString().split('T')[0],
+        fromDate: getIstDateStr(),
+        toDate: getIstDateStr(),
         days: 1,
         reason: '',
       });
@@ -395,7 +442,7 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
     holidays,
     sessionId: trainee.sessionId,
     referenceDate: todayStr,
-    minimumAttendancePercent: settings.minimumAttendancePercent,
+    minimumAttendancePercent: liveSettings.minimumAttendancePercent,
   });
   const totalMarked = personalMetrics.totalWorkingDays;
   const presentCount = personalMetrics.presentDays;
@@ -406,22 +453,13 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
   const attendancePercent = personalMetrics.attendancePercent;
   const isBelowThreshold = personalMetrics.isBelowThreshold;
 
-  // Window check
-  const now = new Date();
-  const hours = now.getHours();
-  const minutes = now.getMinutes();
-  const win = settings.attendanceWindow;
-  const isTimeWithinWindow =
-    (hours > win.startHour || (hours === win.startHour && minutes >= win.startMinute)) &&
-    (hours < win.endHour || (hours === win.endHour && minutes <= win.endMinute));
-
   // Account for mobile GPS accuracy tolerance in workshop buildings (up to 150m buffer)
   const accuracyBuffer = currentCoords ? Math.min(currentCoords.accuracy, 150) : 0;
   const effectiveDistance = distanceToCampus !== null ? Math.max(0, distanceToCampus - accuracyBuffer) : null;
   const isWithinCampusPerimeter =
     distanceToCampus !== null &&
-    (distanceToCampus <= settings.campusLocation.radiusMeters ||
-      (effectiveDistance !== null && effectiveDistance <= settings.campusLocation.radiusMeters));
+    (distanceToCampus <= liveSettings.campusLocation.radiusMeters ||
+      (effectiveDistance !== null && effectiveDistance <= liveSettings.campusLocation.radiusMeters));
 
   return (
     <div className="space-y-6">
@@ -717,21 +755,30 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
                   <span>Campus GPS Geofence Attendance Verification</span>
                 </h3>
                 <span className="font-mono text-xs text-slate-500">
-                  {new Date().toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                  {liveNow.toLocaleDateString('en-IN', {
+                    timeZone: 'Asia/Kolkata',
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })}
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-1">
-                Authorized check-in between 07:00 AM and 03:00 PM (15:00) within Govt ITI Raigarh campus perimeter ({settings.campusLocation.radiusMeters}m). Auto-absent applies at 17:00.
+                Authorized check-in between {windowEval.start12} and {windowEval.end12} ({windowEval.start24} – {windowEval.end24} IST) within Govt ITI Raigarh campus perimeter ({liveSettings.campusLocation.radiusMeters}m). Auto-absent applies at {windowEval.autoAbsent24} ({windowEval.autoAbsent12}).
               </p>
             </div>
 
             {/* Attendance Window Notice Bar */}
-            <div className="p-3 rounded-lg border bg-slate-50 border-slate-200 flex items-center justify-between text-xs">
-              <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-blue-600" />
-                <span className="font-medium text-slate-700">Daily Attendance Window:</span>
+            <div className="p-3 rounded-lg border bg-slate-50 border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex flex-wrap items-center gap-2">
+                <Clock className="w-4 h-4 text-blue-600 shrink-0" />
+                <span className="font-medium text-slate-700">Daily Attendance Window (IST):</span>
                 <span className="font-mono font-bold text-slate-900">
-                  {settings.attendanceWindow.startHour}:00 AM – {settings.attendanceWindow.endHour > 12 ? `${settings.attendanceWindow.endHour - 12}:00 PM` : `${settings.attendanceWindow.endHour}:00 AM`} ({settings.attendanceWindow.startHour.toString().padStart(2, '0')}:00 – {settings.attendanceWindow.endHour.toString().padStart(2, '0')}:00)
+                  {windowEval.start12} – {windowEval.end12} ({windowEval.start24} – {windowEval.end24})
+                </span>
+                <span className="text-[11px] font-mono text-slate-500">
+                  · Now: {currentIstFormatted}
                 </span>
               </div>
               <span
@@ -856,7 +903,7 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
                             {distanceToCampus !== null ? `${distanceToCampus} meters` : 'Calculating...'}
                           </div>
                           <span className="text-[10px] text-slate-400">
-                            Allowed: ≤ {settings.campusLocation.radiusMeters}m
+                            Allowed: ≤ {liveSettings.campusLocation.radiusMeters}m
                           </span>
                         </div>
 
@@ -898,7 +945,7 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
                           </div>
                           <div>
                             <span className="text-slate-400 font-sans">Campus Center:</span>{' '}
-                            <span className="text-slate-800 font-semibold">{settings.campusLocation.lat}°N, {settings.campusLocation.lng}°E</span>
+                            <span className="text-slate-800 font-semibold">{liveSettings.campusLocation.lat}°N, {liveSettings.campusLocation.lng}°E</span>
                           </div>
                         </div>
                       )}
@@ -935,19 +982,31 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
                   </div>
                 </div>
 
+                {!isTimeWithinWindow && !simulateOnCampus && (
+                  <div className="p-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 text-xs flex items-start gap-2">
+                    <Clock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold">Attendance Window Currently Closed ({currentIstFormatted}).</span>{' '}
+                      Official check-in is open from <strong>{windowEval.start12} ({windowEval.start24})</strong> to <strong>{windowEval.end12} ({windowEval.end24})</strong> IST as configured by Admin. If you need late attendance, please contact your Training Officer.
+                    </div>
+                  </div>
+                )}
+
                 {/* Primary Action Button */}
                 <button
                   onClick={handleMarkAttendance}
-                  disabled={gpsLoading || (!isWithinCampusPerimeter && !simulateOnCampus)}
+                  disabled={gpsLoading || (!isWithinCampusPerimeter && !simulateOnCampus) || (!isTimeWithinWindow && !simulateOnCampus)}
                   className={`w-full py-3.5 px-6 font-bold rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md transition-all ${
-                    isWithinCampusPerimeter || simulateOnCampus
+                    (isWithinCampusPerimeter || simulateOnCampus) && (isTimeWithinWindow || simulateOnCampus)
                       ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
                       : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                   }`}
                 >
                   <CheckCircle2 className="w-5 h-5" />
                   <span>
-                    {isWithinCampusPerimeter || simulateOnCampus
+                    {!isTimeWithinWindow && !simulateOnCampus
+                      ? `Attendance Window Closed (${windowEval.start12} – ${windowEval.end12} IST)`
+                      : isWithinCampusPerimeter || simulateOnCampus
                       ? 'Mark Present Now (Verified GPS Geotag)'
                       : 'Cannot Mark: Outside ITI Raigarh Campus Boundary'}
                   </span>
@@ -964,12 +1023,12 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
                 <span>Government ITI Raigarh Campus</span>
               </h4>
               <p className="text-slate-600 text-[11px] leading-relaxed">
-                {settings.campusLocation.address}
+                {liveSettings.campusLocation.address}
               </p>
               <div className="font-mono text-[11px] text-slate-500 p-2.5 bg-slate-50 rounded border border-slate-200">
-                Lat: {settings.campusLocation.lat}° N<br />
-                Long: {settings.campusLocation.lng}° E<br />
-                Geofence Radius: {settings.campusLocation.radiusMeters}m
+                Lat: {liveSettings.campusLocation.lat}° N<br />
+                Long: {liveSettings.campusLocation.lng}° E<br />
+                Geofence Radius: {liveSettings.campusLocation.radiusMeters}m
               </div>
             </div>
 
@@ -979,10 +1038,14 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
                 <span>Attendance Regulations</span>
               </h4>
               <ul className="space-y-2 text-[11px] text-slate-600 list-disc pl-4">
-                <li>Attendance must be marked between 07:00 AM and 03:00 PM (15:00) daily.</li>
-                <li>Candidates failing to check in before 17:00 (05:00 PM) on a working day are automatically marked Absent.</li>
+                <li>
+                  Attendance must be marked between {windowEval.start12} and {windowEval.end12} ({windowEval.start24} – {windowEval.end24} IST) daily.
+                </li>
+                <li>
+                  Candidates failing to check in before {windowEval.autoAbsent24} ({windowEval.autoAbsent12}) on a working day are automatically marked Absent.
+                </li>
                 <li>Attendance marking is automatically disabled on Sundays, 2nd Saturdays, 3rd Saturdays, and Admin-designated Holidays.</li>
-                <li>Minimum required attendance for All India Trade Test (AITT) is 80%.</li>
+                <li>Minimum required attendance for All India Trade Test (AITT) is {liveSettings.minimumAttendancePercent}%.</li>
               </ul>
             </div>
           </div>
@@ -1062,8 +1125,7 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
               cells.push({ empty: false, ...dayInfo, rec });
             }
             const stepMonth = (delta: number) => {
-              const dt = new Date(y, m - 1 + delta, 1);
-              const next = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+              const next = stepMonthKey(historyMonth, delta);
               setHistoryMonth(next);
               onUpdatePreferences?.({ historyMonth: next });
             };

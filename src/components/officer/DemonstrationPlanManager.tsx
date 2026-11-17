@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Wrench, Plus, Edit2, Trash2, Check, X, Calendar, Clock } from 'lucide-react';
 import { DemonstrationPlan, Trade } from '../../types.ts';
 import { fetchDemonstrationPlans, saveDemonstrationPlan, deleteDemonstrationPlan } from '../../api.ts';
+import { getIstDateStr } from '../../utils/attendanceCalendar.ts';
 
 interface DemonstrationPlanManagerProps {
   tradeId: string;
@@ -20,7 +21,7 @@ export const DemonstrationPlanManager: React.FC<DemonstrationPlanManagerProps> =
     practicalTitle: 'Practical Demo 1: Bench Vice Filing & Hack-sawing',
     toolsRequired: 'Bench Vice, Flat File 10-inch, Hacksaw frame with blade, Try Square, Vernier Caliper',
     allottedHours: 8,
-    targetDate: new Date().toISOString().split('T')[0],
+    targetDate: getIstDateStr(),
     status: 'Pending' as 'Pending' | 'Completed',
     objectives: 'To train apprentices on accurate filing to flat surface within 0.2mm tolerance.',
     procedureSteps: [
@@ -73,7 +74,7 @@ export const DemonstrationPlanManager: React.FC<DemonstrationPlanManagerProps> =
         practicalTitle: 'Workshop Practical Demonstration',
         toolsRequired: 'Standard workshop hand tools & safety equipment',
         allottedHours: 6,
-        targetDate: new Date().toISOString().split('T')[0],
+        targetDate: getIstDateStr(),
         status: 'Pending',
         objectives: 'To execute practical skill under instructor guidance.',
         procedureSteps: ['Preparation of workshop station', 'Step by step execution', 'Inspection & measurement'],

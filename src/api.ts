@@ -29,6 +29,11 @@ import {
   setCachedData,
   enqueueOfflineAction,
 } from './offline/indexedDb.ts';
+import {
+  getIstClockParts,
+  formatClock12,
+  updateServerTimeOffset,
+} from './utils/attendanceCalendar.ts';
 
 const AUTH_TOKEN_KEY = 'iti_session_token';
 
@@ -64,12 +69,52 @@ function withAuthHeaders(headers?: HeadersInit): HeadersInit {
   return base;
 }
 
-export function apiFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
-  return fetch(input, {
+function syncClockFromResponse(res: Response) {
+  try {
+    const hdr = res.headers.get('X-Server-Time-Ms');
+    if (hdr) {
+      const ms = Number(hdr);
+      if (Number.isFinite(ms) && ms > 0) {
+        updateServerTimeOffset(ms);
+        return;
+      }
+    }
+    const dateHdr = res.headers.get('Date');
+    if (dateHdr) {
+      const ms = Date.parse(dateHdr);
+      if (Number.isFinite(ms) && ms > 0) {
+        updateServerTimeOffset(ms);
+      }
+    }
+  } catch {
+    // ignore header inspection errors
+  }
+}
+
+export async function apiFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+  const res = await fetch(input, {
     ...init,
     credentials: 'include',
     headers: withAuthHeaders(init.headers),
   });
+  syncClockFromResponse(res);
+  return res;
+}
+
+export async function syncServerTime(): Promise<{ serverTimeMs: number; timeZone: string; utcOffset: string } | null> {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) return null;
+  try {
+    const res = await fetch('/api/system/time', { cache: 'no-store' });
+    syncClockFromResponse(res);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (typeof data?.serverTimeMs === 'number') {
+      updateServerTimeOffset(data.serverTimeMs);
+    }
+    return data;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -92,8 +137,12 @@ async function fetchWithOfflineCache<T>(
   // 2. Try network fetch
   try {
     const res = await fetcher();
+    syncClockFromResponse(res);
     if (res.ok) {
       const data = (await res.json()) as T;
+      if (data && typeof data === 'object' && typeof (data as any).serverTimeMs === 'number') {
+        updateServerTimeOffset((data as any).serverTimeMs);
+      }
       // Persist to IndexedDB asynchronously
       setCachedData(cacheKey, data).catch((err) =>
         console.warn(`IndexedDB save failed for ${cacheKey}:`, err)
@@ -122,6 +171,8 @@ async function fetchWithOfflineCache<T>(
 
 export async function fetchBootstrap() {
   return fetchWithOfflineCache<{
+    serverTimeMs?: number;
+    timeZone?: string;
     settings: SystemSettings;
     sessions: AcademicSession[];
     trades: Trade[];
@@ -132,7 +183,7 @@ export async function fetchBootstrap() {
       totalTrainees: number;
       totalInventoryItems: number;
     };
-  }>('iti_cache_bootstrap', () => fetch('/api/bootstrap'));
+  }>('iti_cache_bootstrap', () => fetch('/api/bootstrap', { cache: 'no-store' }));
 }
 
 export async function loginApi(params: {
@@ -200,7 +251,10 @@ export async function logoutApi(): Promise<void> {
 }
 
 export async function fetchSettings(): Promise<SystemSettings> {
-  return fetchWithOfflineCache<SystemSettings>('iti_cache_settings', () => fetch('/api/settings'));
+  return fetchWithOfflineCache<SystemSettings>(
+    'iti_cache_settings',
+    () => fetch('/api/settings', { cache: 'no-store' })
+  );
 }
 
 export async function updateSettings(settings: Partial<SystemSettings>) {
@@ -211,8 +265,16 @@ export async function updateSettings(settings: Partial<SystemSettings>) {
   });
   if (!res.ok) throw new Error('Failed to update settings');
   const updated = await res.json();
-  // Sync to IndexedDB cache
-  setCachedData('iti_cache_settings', updated).catch(() => {});
+  // Sync unwrapped settings to IndexedDB caches
+  const cleanSettings = updated?.settings || updated;
+  setCachedData('iti_cache_settings', cleanSettings).catch(() => {});
+  getCachedData<any>('iti_cache_bootstrap')
+    .then((cached) => {
+      if (cached && typeof cached === 'object') {
+        setCachedData('iti_cache_bootstrap', { ...cached, settings: cleanSettings }).catch(() => {});
+      }
+    })
+    .catch(() => {});
   return updated;
 }
 
@@ -467,6 +529,7 @@ export async function markTraineeAttendance(payload: {
 }) {
   // 1. If explicitly offline, enqueue in IndexedDB and return optimistic record
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    const istNow = getIstClockParts();
     await enqueueOfflineAction({
       url: '/api/attendance/mark-trainee',
       method: 'POST',
@@ -481,9 +544,9 @@ export async function markTraineeAttendance(payload: {
       record: {
         id: 'offline_' + Date.now(),
         traineeId: payload.traineeId,
-        date: new Date().toISOString().split('T')[0],
+        date: istNow.dateStr,
         status: 'P' as AttendanceStatus,
-        timestamp: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }),
+        timestamp: formatClock12(istNow.hours, istNow.minutes),
         method: 'geofence',
         verifiedLocation: { lat: payload.userLat, lng: payload.userLng, distanceMeters: 0 },
         remarks: 'Recorded offline in local database (IndexedDB queued)',
@@ -498,12 +561,14 @@ export async function markTraineeAttendance(payload: {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
+    syncClockFromResponse(res);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed to mark attendance');
     return data;
   } catch (err: any) {
     // If connection dropped during flight, queue offline
     if (typeof navigator !== 'undefined' && (!navigator.onLine || err.message?.includes('Failed to fetch') || err.name === 'TypeError')) {
+      const istNow = getIstClockParts();
       await enqueueOfflineAction({
         url: '/api/attendance/mark-trainee',
         method: 'POST',
@@ -518,9 +583,9 @@ export async function markTraineeAttendance(payload: {
         record: {
           id: 'offline_' + Date.now(),
           traineeId: payload.traineeId,
-          date: new Date().toISOString().split('T')[0],
+          date: istNow.dateStr,
           status: 'P' as AttendanceStatus,
-          timestamp: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }),
+          timestamp: formatClock12(istNow.hours, istNow.minutes),
           method: 'geofence',
           verifiedLocation: { lat: payload.userLat, lng: payload.userLng, distanceMeters: 0 },
           remarks: 'Recorded offline in local database (IndexedDB queued)',

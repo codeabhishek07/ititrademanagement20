@@ -5,6 +5,7 @@ import {
   clearAllSystemBackupsAndDemoCache,
   type SystemBackupRecord,
 } from '../offline/indexedDb.ts';
+import { getIstDateStr } from '../utils/attendanceCalendar.ts';
 
 export {
   saveSystemBackup,
@@ -81,7 +82,7 @@ export async function downloadBackupFile(): Promise<void> {
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  const dateStr = new Date().toISOString().split('T')[0];
+  const dateStr = getIstDateStr();
   a.download = `Govt_ITI_Raigarh_Full_Backup_${dateStr}.json`;
   document.body.appendChild(a);
   a.click();

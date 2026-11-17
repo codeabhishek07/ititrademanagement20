@@ -42,6 +42,11 @@ import {
   calculateTraineeAttendanceMetrics,
   getDateHolidayStatus,
   getIstDateStr,
+  getIstYearMonth,
+  getIstYear,
+  stepMonthKey,
+  formatIstDateTime,
+  IST_TIMEZONE,
 } from '../../utils/attendanceCalendar.ts';
 
 export type RegisterType =
@@ -91,13 +96,8 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
-  const [dailyDate, setDailyDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [selectedMonth, setSelectedMonth] = useState(() => {
-    const today = new Date();
-    const y = today.getFullYear();
-    const m = String(today.getMonth() + 1).padStart(2, '0');
-    return `${y}-${m}`;
-  });
+  const [dailyDate, setDailyDate] = useState(() => getIstDateStr());
+  const [selectedMonth, setSelectedMonth] = useState(() => getIstYearMonth());
   const [leaveStatusFilter, setLeaveStatusFilter] = useState<string>('all');
   const [inventoryCategoryFilter, setInventoryCategoryFilter] = useState<string>('all');
   const [indentStatusFilter, setIndentStatusFilter] = useState<string>('all');
@@ -154,21 +154,13 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
   const dailyHoliday = dailyDayLock.adminHoliday;
   const isDailyHolidayLocked = dailyDayLock.isHoliday;
 
-  // Navigate months
+  // Navigate months (UTC-safe without browser timezone shift)
   const handlePrevMonth = () => {
-    const [y, m] = selectedMonth.split('-').map(Number);
-    const prevDate = new Date(y, m - 2, 1);
-    setSelectedMonth(
-      `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`
-    );
+    setSelectedMonth((prev) => stepMonthKey(prev, -1));
   };
 
   const handleNextMonth = () => {
-    const [y, m] = selectedMonth.split('-').map(Number);
-    const nextDate = new Date(y, m, 1);
-    setSelectedMonth(
-      `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}`
-    );
+    setSelectedMonth((prev) => stepMonthKey(prev, 1));
   };
 
   // Trainee stats for overall Form I roster & CSV using exact working-day formula
@@ -444,7 +436,7 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
       `"DIRECTORATE OF EMPLOYMENT & TRAINING, GOVT. OF CHHATTISGARH"`,
       `"Trade: ${currentTrade?.name || 'Trade'} (${currentTrade?.code || 'TRD'}) | Session: ${activeSessionObj?.name || '2025-2026'}"`,
       `"Training Officer: ${officer.name} (${officer.employeeId || 'CG-ITI-TO-1042'})"`,
-      `"Generated On: ${new Date().toLocaleString()}"`,
+      `"Generated On: ${formatIstDateTime()} (IST)"`,
       `""`,
     ].join('\n');
 
@@ -512,7 +504,7 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
         `"FORM V - MONTHLY TRAINEE ATTENDANCE REGISTER (1-31 MATRIX) - Month: ${selectedMonth}"\n` +
         [header.join(','), ...rows.map((r) => r.map((c) => `"${c}"`).join(','))].join('\n');
     } else if (activeRegister === 'leave_register') {
-      filename = `ITI_Raigarh_${currentTrade?.code}_Leave_Register_${new Date().toISOString().split('T')[0]}.csv`;
+      filename = `ITI_Raigarh_${currentTrade?.code}_Leave_Register_${getIstDateStr()}.csv`;
       const header = [
         'S.No.',
         'Application ID',
@@ -877,7 +869,7 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
               Session: <span className="font-mono text-slate-700">{activeSessionObj?.name}</span> · Training Officer: <span className="font-semibold text-slate-800">{officer.name}</span>
             </div>
             <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-              Ref: ITI-RAI/{currentTrade?.code}/{activeRegister.toUpperCase()}/{new Date().getFullYear()}
+              Ref: ITI-RAI/{currentTrade?.code}/{activeRegister.toUpperCase()}/{getIstYear()}
             </div>
           </div>
         </div>
@@ -2029,7 +2021,7 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
                     <span className="font-semibold">Session:</span> {activeSessionObj?.name}
                   </div>
                   <div className="text-left sm:text-right">
-                    <span className="font-semibold">Date of Report:</span> {new Date().toLocaleDateString('en-IN')}
+                    <span className="font-semibold">Date of Report:</span> {new Date().toLocaleDateString('en-IN', { timeZone: IST_TIMEZONE })} (IST)
                   </div>
                 </div>
               </div>
