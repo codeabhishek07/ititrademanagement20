@@ -1,5 +1,6 @@
 import './src/server/tzInit.ts';
 import express, { type Request, type Response } from 'express';
+import http from 'http';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
@@ -120,9 +121,35 @@ function calculateDistanceMeters(lat1: number, lon1: number, lat2: number, lon2:
   return Math.round(R * c);
 }
 
+function resolveServerPort(): number {
+  const args = process.argv.slice(2);
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--port' && args[i + 1]) {
+      const parsed = Number(args[i + 1]);
+      if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    } else if (arg.startsWith('--port=')) {
+      const parsed = Number(arg.split('=')[1]);
+      if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    }
+  }
+  return Number(process.env.DEFAULT_APP_PORT) || 3000;
+}
+
+process.on('unhandledRejection', (reason) => {
+  console.warn('[Server] Unhandled promise rejection (non-fatal):', reason);
+});
+
+process.on('uncaughtException', (err: any) => {
+  console.error('[Server] Uncaught exception:', err);
+  if (err?.code === 'EADDRINUSE' || err?.fatal === true) {
+    process.exit(1);
+  }
+});
+
 async function startServer() {
   const app = express();
-  const PORT = Number(process.env.DEFAULT_APP_PORT) || 3000;
+  const PORT = resolveServerPort();
 
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ extended: true, limit: '50mb' }));
@@ -140,9 +167,16 @@ async function startServer() {
     next(err);
   });
 
-  // Initialize persistent Google Cloud Firestore before serving requests
-  await db.ensureInitialized();
-  await cleanupInvalidHolidayAutoAbsents();
+  // Fast health endpoint so pre-warming/liveness probes succeed immediately
+  app.get('/healthz', (_req: Request, res: Response) => {
+    res.status(200).json({ ok: true, firestore: db.getFirestoreConnectionStatus() });
+  });
+
+  // Kick off Firestore initialization immediately in background so port 3000 binds fast;
+  // all /api/* handlers still await db.ensureInitialized() before serving data.
+  db.ensureInitialized()
+    .then(() => cleanupInvalidHolidayAutoAbsents())
+    .catch((err) => console.warn('[Startup Firestore Init Warning]:', err));
 
   // Ensure every API request runs against initialized Firestore state & exposes authoritative server epoch
   app.use('/api', async (_req: Request, res: Response, next: any) => {
@@ -2781,6 +2815,7 @@ async function startServer() {
   // Vite Middleware Mode for Development vs Production Static Serving
   // -------------------------------------------------------------
   const isProduction = process.env.NODE_ENV === 'production' || (process.env.NODE_ENV !== 'development' && fs.existsSync(path.join(distPath, 'index.html')));
+  let viteServer: Awaited<ReturnType<typeof createViteServer>> | null = null;
 
   if (isProduction) {
     if (fs.existsSync(distPath)) {
@@ -2792,11 +2827,19 @@ async function startServer() {
       console.warn('Production build dist/ directory not found. Please run npm run build.');
     }
   } else {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
+    viteServer = await createViteServer({
+      server: {
+        middlewareMode: true,
+        hmr: false,
+        ws: false,
+        watch:
+          process.env.DISABLE_HMR === 'true'
+            ? null
+            : { ignored: ['**/data/**', '**/dist/**', '**/public/**'] },
+      },
       appType: 'spa',
     });
-    app.use(vite.middlewares);
+    app.use(viteServer.middlewares);
   }
 
   // -------------------------------------------------------------
@@ -2804,8 +2847,9 @@ async function startServer() {
   // Runs ONLY on valid working days (skips Sundays, 2nd/3rd Saturdays, Admin Holidays)
   // -------------------------------------------------------------
   let lastAutoAbsentDate = '';
-  setInterval(async () => {
+  const autoAbsentInterval = setInterval(async () => {
     try {
+      await db.ensureInitialized();
       const { dateStr: todayStr, hours: hour, minutes: minute } = getIstClockParts();
       const win = normalizeAttendanceWindow(db.get().settings.attendanceWindow);
       const autoHour = win.autoAbsentHour;
@@ -2859,9 +2903,50 @@ async function startServer() {
     }
   }, 30000);
 
-  app.listen(PORT, '0.0.0.0', () => {
+  const httpServer = http.createServer(app);
+  let listenRetries = 0;
+  const MAX_LISTEN_RETRIES = 8;
+
+  httpServer.on('error', (err: any) => {
+    if (err?.code === 'EADDRINUSE' && listenRetries < MAX_LISTEN_RETRIES) {
+      listenRetries += 1;
+      console.warn(`[Server] Port ${PORT} busy during startup, retrying (${listenRetries}/${MAX_LISTEN_RETRIES})...`);
+      setTimeout(() => {
+        try {
+          httpServer.close();
+        } catch {
+          // ignore
+        }
+        httpServer.listen(PORT, '0.0.0.0');
+      }, 450);
+      return;
+    }
+    console.error('[Server] Fatal HTTP listen error:', err);
+    process.exit(1);
+  });
+
+  httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`Govt ITI Raigarh Server running on http://0.0.0.0:${PORT}`);
   });
+
+  const gracefulShutdown = async (signal: string) => {
+    console.log(`[Server] Received ${signal}, shutting down cleanly...`);
+    clearInterval(autoAbsentInterval);
+    try {
+      if (viteServer) {
+        await viteServer.close();
+      }
+    } catch {
+      // ignore vite close errors
+    }
+    httpServer.close(() => {
+      process.exit(0);
+    });
+    setTimeout(() => process.exit(0), 2000).unref();
+  };
+
+  process.once('SIGTERM', () => void gracefulShutdown('SIGTERM'));
+  process.once('SIGINT', () => void gracefulShutdown('SIGINT'));
 }
 
 startServer().catch((err) => {
