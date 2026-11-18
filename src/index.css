@@ -22,21 +22,117 @@
 @media print {
   @page {
     size: A4 landscape;
-    margin: 4mm 5mm;
+    margin: 6mm 8mm;
   }
 
   html, body {
-    width: 287mm !important;
-    height: 202mm !important;
-    max-width: 287mm !important;
-    max-height: 202mm !important;
     background: #ffffff !important;
     color: #0f172a !important;
     margin: 0 !important;
     padding: 0 !important;
-    overflow: hidden !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+  }
+
+  /* Keep strict single-page bounds only when NOT printing the multi-page Government Register modal */
+  body:not(.gov-register-preview-open) {
+    width: 287mm !important;
+    height: 202mm !important;
+    max-width: 287mm !important;
+    max-height: 202mm !important;
+    overflow: hidden !important;
+  }
+
+  html:has(body.gov-register-preview-open),
+  body.gov-register-preview-open {
+    width: 100% !important;
+    height: auto !important;
+    max-width: none !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  /* Isolate Government Register Print Portal when open */
+  body.gov-register-preview-open > #root {
+    display: none !important;
+  }
+
+  body.gov-register-preview-open #gov-register-print-portal {
+    position: static !important;
+    inset: auto !important;
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    max-width: none !important;
+    max-height: none !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  body.gov-register-preview-open #gov-register-print-dialog {
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    max-width: none !important;
+    max-height: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  body.gov-register-preview-open #gov-register-print-stage {
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  body.gov-register-preview-open #gov-register-print-sheet-wrapper {
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  body.gov-register-preview-open #gov-register-print-sheet {
+    width: 100% !important;
+    max-width: none !important;
+    transform: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+  }
+
+  body.gov-register-preview-open #gov-register-print-sheet table {
+    width: 100% !important;
+    min-width: 0 !important;
+    page-break-inside: auto;
+  }
+
+  body.gov-register-preview-open #gov-register-print-sheet thead {
+    display: table-header-group;
+  }
+
+  body.gov-register-preview-open #gov-register-print-sheet tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  body.gov-register-preview-open #gov-register-print-sheet .gov-register-signatory-block {
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 
   /* Hide app navigation, vertical sidebars, headers, footers, action buttons */

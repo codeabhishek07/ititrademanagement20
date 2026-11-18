@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   CalendarCheck2,
   Calendar,
@@ -24,6 +25,10 @@ import {
   Hammer,
   RotateCcw,
   BadgeAlert,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  X,
 } from 'lucide-react';
 import {
   Trade,
@@ -103,8 +108,83 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
   const [indentStatusFilter, setIndentStatusFilter] = useState<string>('all');
   const [rosterCategoryFilter, setRosterCategoryFilter] = useState<string>('all');
 
-  // Print Preview Modal State
+  // Print Preview Modal State & Responsive Auto-Fit / Zoom Telemetry
   const [printModalOpen, setPrintModalOpen] = useState(false);
+  const [previewZoomMode, setPreviewZoomMode] = useState<'fit' | 'custom'>('fit');
+  const [previewCustomScale, setPreviewCustomScale] = useState<number>(1);
+  const [previewStageWidth, setPreviewStageWidth] = useState<number>(960);
+  const [previewSheetHeight, setPreviewSheetHeight] = useState<number>(700);
+  const previewStageRef = useRef<HTMLDivElement | null>(null);
+  const previewSheetRef = useRef<HTMLDivElement | null>(null);
+
+  const naturalSheetWidth = activeRegister === 'monthly_attendance' ? 1060 : 920;
+
+  useEffect(() => {
+    if (!printModalOpen) {
+      document.body.classList.remove('gov-register-preview-open');
+      return;
+    }
+
+    document.body.classList.add('gov-register-preview-open');
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setPrintModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    const stageEl = previewStageRef.current;
+    const sheetEl = previewSheetRef.current;
+    let observer: ResizeObserver | null = null;
+
+    const measure = () => {
+      if (previewStageRef.current) {
+        setPreviewStageWidth(previewStageRef.current.clientWidth);
+      }
+      if (previewSheetRef.current) {
+        setPreviewSheetHeight(previewSheetRef.current.scrollHeight);
+      }
+    };
+
+    measure();
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(() => measure());
+      if (stageEl) observer.observe(stageEl);
+      if (sheetEl) observer.observe(sheetEl);
+    }
+    window.addEventListener('resize', measure);
+
+    return () => {
+      document.body.classList.remove('gov-register-preview-open');
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('resize', measure);
+      if (observer) observer.disconnect();
+    };
+  }, [printModalOpen, activeRegister, dailyDate, selectedMonth, searchQuery]);
+
+  const availableStageInnerWidth = Math.max(240, previewStageWidth - (previewStageWidth < 640 ? 20 : 48));
+  const fitScale = Math.min(1, Math.max(0.24, availableStageInnerWidth / naturalSheetWidth));
+  const activePreviewScale = previewZoomMode === 'fit' ? fitScale : previewCustomScale;
+
+  const handleZoomOut = () => {
+    const next = Math.max(0.25, Math.round((activePreviewScale - 0.15) * 100) / 100);
+    setPreviewZoomMode('custom');
+    setPreviewCustomScale(next);
+  };
+
+  const handleZoomIn = () => {
+    const next = Math.min(1.5, Math.round((activePreviewScale + 0.15) * 100) / 100);
+    setPreviewZoomMode('custom');
+    setPreviewCustomScale(next);
+  };
+
+  const handleResetFitZoom = () => {
+    setPreviewZoomMode('fit');
+  };
 
   const activeSessionObj = sessions.find((s) => s.id === selectedSessionId) || sessions[0];
 
@@ -1932,414 +2012,494 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
       </div>
 
       {/* ---------------- FORMAL GOVERNMENT PRINT PREVIEW MODAL ---------------- */}
-      {printModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-2xl border border-slate-300 max-w-5xl w-full p-3.5 sm:p-6 md:p-8 text-slate-900 space-y-4 sm:space-y-6 my-2 sm:my-8 max-w-full overflow-hidden print:p-0 print:m-0 print:border-none print:shadow-none print:max-w-none">
-            {/* Print Dialog Action Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-300 pb-3 sm:pb-4 print:hidden">
-              <div className="flex items-center gap-2">
-                <Printer className="w-5 h-5 text-emerald-700 shrink-0" />
-                <div>
-                  <h3 className="font-bold text-sm sm:text-base text-slate-900 leading-tight">
-                    Official Register Print Preview &amp; PDF Generation
-                  </h3>
-                  <p className="text-[10px] sm:text-xs text-slate-500">
-                    Formally formatted government register for DGT / NCVT compliance
-                  </p>
-                </div>
-              </div>
-              <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
-                <button
-                  onClick={() => window.print()}
-                  className="flex-1 sm:flex-initial px-3.5 sm:px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-lg text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap active:scale-95"
-                >
-                  <Printer className="w-3.5 h-3.5 shrink-0" />
-                  <span>Print / Save PDF</span>
-                </button>
-                <button
-                  onClick={handleExportRegisterCSV}
-                  className="flex-1 sm:flex-initial px-3.5 sm:px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap active:scale-95"
-                  title="Download clean CSV / Excel formatted spreadsheet for active register"
-                >
-                  <Download className="w-3.5 h-3.5 shrink-0" />
-                  <span>Download CSV</span>
-                </button>
-                <button
-                  onClick={() => setPrintModalOpen(false)}
-                  className="px-3.5 py-2 border border-slate-300 text-slate-700 rounded-lg text-xs hover:bg-slate-100 transition-colors cursor-pointer text-center whitespace-nowrap active:scale-95"
-                >
-                  Close Preview
-                </button>
-              </div>
-            </div>
-
-            {/* Mobile helper notice */}
-            <div className="sm:hidden flex items-center gap-1.5 text-[11px] text-amber-900 bg-amber-50 border border-amber-300 px-3 py-1.5 rounded-lg print:hidden">
-              <span>↔ Swipe table horizontally to preview. Tap "Print / Save PDF" to produce formal NCVT sheets.</span>
-            </div>
-
-            {/* Printable Area with Official Govt ITI Raigarh Letterhead */}
-            <div className="space-y-4 sm:space-y-6 border border-slate-400 p-3.5 sm:p-6 rounded-lg bg-white overflow-hidden print:border-none print:p-0">
-              {/* Header */}
-              <div className="text-center border-b-2 border-slate-900 pb-3 sm:pb-4 space-y-1">
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3 text-center sm:text-left">
-                  <img
-                    src="/assets/aistudio/iti-logo_b32addc6.png"
-                    alt="Emblem"
-                    className="w-12 h-12 sm:w-14 sm:h-14 object-contain shrink-0"
-                  />
-                  <div>
-                    <h2 className="text-xs sm:text-sm font-bold text-amber-900 leading-tight">
-                      शासकीय औद्योगिक प्रशिक्षण संस्था, रायगढ़ (छ.ग.)
-                    </h2>
-                    <h1 className="text-sm sm:text-lg font-black tracking-wide text-slate-900 uppercase leading-tight mt-0.5">
-                      GOVERNMENT INDUSTRIAL TRAINING INSTITUTE, RAIGARH (C.G.)
-                    </h1>
-                    <p className="text-[10px] sm:text-[11px] font-medium text-slate-700 leading-tight">
-                      Directorate of Employment &amp; Training, Chhattisgarh · NCVT Code: ITI-RAI-CG-04
-                    </p>
-                  </div>
-                </div>
-
-                <div className="pt-2">
-                  <div className="inline-block px-2.5 sm:px-3 py-1 bg-slate-100 border border-slate-300 rounded font-bold uppercase text-[11px] sm:text-xs tracking-wider text-slate-900 font-mono">
-                    {activeRegister === 'daily_attendance' && `FORM IV: DAILY ATTENDANCE MUSTER ROLL (${dailyDate})`}
-                    {activeRegister === 'monthly_attendance' && `FORM V: MONTHLY ATTENDANCE REGISTER MATRIX (${selectedMonth})`}
-                    {activeRegister === 'leave_register' && 'FORM VII: TRAINEE LEAVE SANCTION & RECORD REGISTER'}
-                    {activeRegister === 'workshop_inventory' && 'FORM VIII: WORKSHOP INVENTORY & CONSUMABLE STOCK REGISTER'}
-                    {activeRegister === 'tools_equipments' && 'FORM IX: DGT TOOLS, MACHINERY & EQUIPMENT REGISTER'}
-                    {activeRegister === 'indent_register' && 'FORM X: WORKSHOP TOOL INDENT & ISSUE-RETURN REGISTER'}
-                    {activeRegister === 'trainee_roster' && 'FORM I: MASTER TRAINEE ADMISSION ROSTER'}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 sm:gap-2 print:grid-cols-3 text-[11px] sm:text-xs text-slate-700 pt-2 font-mono text-center sm:text-left">
-                  <div className="text-left">
-                    <span className="font-semibold">Trade:</span> {currentTrade?.name} ({currentTrade?.code})
-                  </div>
-                  <div className="text-left sm:text-center">
-                    <span className="font-semibold">Session:</span> {activeSessionObj?.name}
-                  </div>
-                  <div className="text-left sm:text-right">
-                    <span className="font-semibold">Date of Report:</span> {new Date().toLocaleDateString('en-IN', { timeZone: IST_TIMEZONE })} (IST)
-                  </div>
-                </div>
-              </div>
-
-              {/* Printable Table Content Preview */}
-              <div className="text-xs">
-                {activeRegister === 'daily_attendance' && (
-                  <div className="overflow-x-auto print:overflow-visible -mx-1 sm:mx-0 max-w-full">
-                    <table className="w-full border-collapse border border-slate-400 text-left min-w-[650px] print:min-w-0">
-                      <thead>
-                        <tr className="bg-slate-100 border-b border-slate-400">
-                          <th className="p-1.5 border border-slate-400 text-center w-10">S.No</th>
-                          <th className="p-1.5 border border-slate-400">Roll No</th>
-                          <th className="p-1.5 border border-slate-400">Trainee Name</th>
-                          <th className="p-1.5 border border-slate-400 text-center">Category</th>
-                          <th className="p-1.5 border border-slate-400 text-center">Status</th>
-                          <th className="p-1.5 border border-slate-400">Marked Time</th>
-                          <th className="p-1.5 border border-slate-400">GPS Verification</th>
-                          <th className="p-1.5 border border-slate-400 text-right">Remarks</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {dailyAttendanceData.map((d, i) => (
-                          <tr key={d.trainee.id}>
-                            <td className="p-1.5 border border-slate-400 text-center font-mono">{i + 1}</td>
-                            <td className="p-1.5 border border-slate-400 font-mono font-semibold">{d.trainee.rollNo}</td>
-                            <td className="p-1.5 border border-slate-400">{d.trainee.name}</td>
-                            <td className="p-1.5 border border-slate-400 text-center font-mono">{d.trainee.category}</td>
-                            <td className="p-1.5 border border-slate-400 text-center font-bold font-mono">{d.status}</td>
-                            <td className="p-1.5 border border-slate-400 font-mono">{d.record?.timestamp || '—'}</td>
-                            <td className="p-1.5 border border-slate-400">
-                              {isDailyHolidayLocked ? 'Holiday Locked' : d.record?.geotag ? 'GPS Verified' : 'Manual'}
-                            </td>
-                            <td className="p-1.5 border border-slate-400 text-right text-[10px]">
-                              {isDailyHolidayLocked ? dailyDayLock.title : (d.record?.remarks || 'NCVT Compliant')}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                {activeRegister === 'monthly_attendance' && (
-                  <div className="space-y-2">
-                    <div className="text-[10px] font-mono bg-slate-50 border border-slate-300 px-2.5 py-1.5 rounded flex flex-wrap items-center justify-between gap-2">
-                      <span>
-                        <strong>Working Days Formula:</strong> {monthDaysInfo.totalDays} Calendar Days &minus; {monthDaysInfo.weeklyHolidays} Weekly Holidays (Sun + 2nd/3rd Sat) &minus; {monthDaysInfo.adminDesignatedHolidays} Unique Admin Holidays = <strong>{monthDaysInfo.totalWorkingDays} Working Days</strong>
-                      </span>
-                      <span>
-                        <strong>H</strong> = Weekly Off / Govt. Holiday (Excluded from P / A / L)
-                      </span>
+      {printModalOpen &&
+        createPortal(
+          <div
+            id="gov-register-print-portal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Official Register Print & PDF Preview"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setPrintModalOpen(false);
+            }}
+            className="fixed inset-0 z-[100] bg-slate-900/85 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-hidden"
+          >
+            <div
+              id="gov-register-print-dialog"
+              className="bg-white rounded-xl sm:rounded-2xl shadow-2xl border border-slate-300 w-full max-w-[1160px] h-full max-h-[94dvh] flex flex-col overflow-hidden text-slate-900"
+            >
+              {/* Sticky Modal Action Bar (Always visible & inside viewport on both mobile and desktop) */}
+              <div className="shrink-0 bg-slate-50 border-b border-slate-200 px-3 py-2.5 sm:px-5 sm:py-3.5 flex flex-col gap-2.5 print:hidden">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="p-1.5 rounded-lg bg-emerald-100 text-emerald-700 shrink-0">
+                      <Printer className="w-4 h-4 sm:w-5 sm:h-5" />
+                    </span>
+                    <div className="min-w-0">
+                      <h3 className="font-bold text-xs sm:text-base text-slate-900 leading-tight truncate">
+                        Official Register Print &amp; PDF Preview
+                      </h3>
+                      <p className="text-[10px] sm:text-xs text-slate-500 truncate">
+                        DGT / NCVT Formal Format · Landscape A4 · Preview Scale: {Math.round(activePreviewScale * 100)}%
+                      </p>
                     </div>
-                    <div className="overflow-x-auto print:overflow-visible -mx-1 sm:mx-0 max-w-full">
-                      <table className="w-full border-collapse border border-slate-400 text-left text-[10px] min-w-[850px] print:min-w-0">
-                        <thead>
-                          <tr className="bg-slate-100 border-b border-slate-400">
-                            <th className="p-1 border border-slate-400 text-center">#</th>
-                            <th className="p-1 border border-slate-400">Roll No</th>
-                            <th className="p-1 border border-slate-400">Name</th>
-                            {monthDaysInfo.days.map((d) => (
-                              <th
-                                key={d.dayNumber}
-                                className={`p-0.5 border border-slate-400 text-center font-mono ${
-                                  d.isHoliday ? 'bg-slate-200 text-slate-700' : ''
-                                }`}
-                                title={d.title}
-                              >
-                                {d.dayNumber}
-                              </th>
-                            ))}
-                            <th className="p-1 border border-slate-400 text-center">P</th>
-                            <th className="p-1 border border-slate-400 text-center">L</th>
-                            <th className="p-1 border border-slate-400 text-center">A</th>
-                            <th className="p-1 border border-slate-400 text-center">WD</th>
-                            <th className="p-1 border border-slate-400 text-center">%</th>
-                            <th className="p-1 border border-slate-400 text-center">Result</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {monthlyMatrixData.map((m, i) => (
-                            <tr key={m.trainee.id}>
-                              <td className="p-1 border border-slate-400 text-center font-mono">{i + 1}</td>
-                              <td className="p-1 border border-slate-400 font-mono">{m.trainee.rollNo}</td>
-                              <td className="p-1 border border-slate-400 font-semibold truncate max-w-[110px]">{m.trainee.name}</td>
-                              {monthDaysInfo.days.map((d) => (
-                                <td
-                                  key={d.dayNumber}
-                                  className={`p-0.5 border border-slate-400 text-center font-mono ${
-                                    d.isHoliday ? 'bg-slate-100 font-bold text-slate-600' : ''
-                                  }`}
-                                >
-                                  {m.dailyStatuses[d.dayNumber] || '-'}
+                  </div>
+
+                  {/* Always-visible Close button pinned top-right */}
+                  <button
+                    type="button"
+                    onClick={() => setPrintModalOpen(false)}
+                    aria-label="Close Preview"
+                    className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 sm:px-3 sm:py-1.5 bg-white hover:bg-rose-50 text-slate-700 hover:text-rose-700 border border-slate-300 hover:border-rose-300 rounded-lg text-xs font-bold shadow-2xs transition-colors cursor-pointer whitespace-nowrap active:scale-95"
+                  >
+                    <X className="w-4 h-4 shrink-0" />
+                    <span>Close Preview</span>
+                  </button>
+                </div>
+
+                {/* Responsive Action Controls Row */}
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  {/* Zoom & Fit Controls */}
+                  <div className="inline-flex items-center gap-0.5 bg-white border border-slate-300 rounded-lg p-0.5 shadow-2xs">
+                    <button
+                      type="button"
+                      onClick={handleZoomOut}
+                      disabled={activePreviewScale <= 0.25}
+                      title="Zoom Out"
+                      className="p-1.5 rounded-md text-slate-700 hover:bg-slate-100 disabled:opacity-40 cursor-pointer"
+                    >
+                      <ZoomOut className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleResetFitZoom}
+                      title="Fit Report to Screen Width"
+                      className={`px-2 py-1 rounded-md text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors ${
+                        previewZoomMode === 'fit'
+                          ? 'bg-slate-900 text-white'
+                          : 'text-slate-700 hover:bg-slate-100'
+                      }`}
+                    >
+                      <Maximize2 className="w-3 h-3" />
+                      <span>Fit ({Math.round(activePreviewScale * 100)}%)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleZoomIn}
+                      disabled={activePreviewScale >= 1.5}
+                      title="Zoom In"
+                      className="p-1.5 rounded-md text-slate-700 hover:bg-slate-100 disabled:opacity-40 cursor-pointer"
+                    >
+                      <ZoomIn className="w-3.5 h-3.5" />
+                    </button>
+                    {previewZoomMode === 'custom' && activePreviewScale !== 1 && (
+                      <button
+                        type="button"
+                        onClick={() => setPreviewCustomScale(1)}
+                        className="px-2 py-1 rounded-md text-[11px] font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
+                      >
+                        100%
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Print / Download PDF & Download CSV */}
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 flex-1 sm:flex-initial justify-end">
+                    <button
+                      type="button"
+                      onClick={() => window.print()}
+                      className="flex-1 sm:flex-initial px-3 sm:px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-lg text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap active:scale-95"
+                    >
+                      <Printer className="w-3.5 h-3.5 shrink-0" />
+                      <span>Print / Download PDF</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleExportRegisterCSV}
+                      className="flex-1 sm:flex-initial px-3 sm:px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap active:scale-95"
+                      title="Download clean CSV / Excel formatted spreadsheet for active register"
+                    >
+                      <Download className="w-3.5 h-3.5 shrink-0" />
+                      <span>Download CSV</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Centered Scrollable Paper Preview Stage (fits screen width on mobile, centered on desktop, supports pan/zoom) */}
+              <div
+                id="gov-register-print-stage"
+                ref={previewStageRef}
+                className="flex-1 min-h-0 overflow-auto bg-slate-200/90 p-2.5 sm:p-6 overscroll-contain print:overflow-visible print:bg-white print:p-0"
+              >
+                <div
+                  id="gov-register-print-sheet-wrapper"
+                  className="mx-auto print:w-full print:h-auto print:m-0"
+                  style={{
+                    width: `${Math.round(naturalSheetWidth * activePreviewScale)}px`,
+                    height: `${Math.max(200, Math.round(previewSheetHeight * activePreviewScale))}px`,
+                  }}
+                >
+                  {/* Printable Area with Official Govt ITI Raigarh Letterhead */}
+                  <div
+                    id="gov-register-print-sheet"
+                    ref={previewSheetRef}
+                    style={{
+                      width: `${naturalSheetWidth}px`,
+                      transform: `scale(${activePreviewScale})`,
+                      transformOrigin: 'top left',
+                    }}
+                    className="space-y-5 border border-slate-400 p-6 sm:p-7 rounded-lg bg-white shadow-lg box-border overflow-hidden print:border-none print:shadow-none print:rounded-none print:p-0"
+                  >
+                    {/* Header */}
+                    <div className="text-center border-b-2 border-slate-900 pb-4 space-y-1.5">
+                      <div className="flex items-center justify-center gap-3.5 text-left">
+                        <img
+                          src="/assets/aistudio/iti-logo_b32addc6.png"
+                          alt="Emblem"
+                          className="w-14 h-14 object-contain shrink-0"
+                        />
+                        <div className="text-center">
+                          <h2 className="text-sm font-bold text-amber-900 leading-tight">
+                            शासकीय औद्योगिक प्रशिक्षण संस्था, रायगढ़ (छ.ग.)
+                          </h2>
+                          <h1 className="text-lg font-black tracking-wide text-slate-900 uppercase leading-tight mt-0.5">
+                            GOVERNMENT INDUSTRIAL TRAINING INSTITUTE, RAIGARH (C.G.)
+                          </h1>
+                          <p className="text-[11px] font-medium text-slate-700 leading-tight mt-0.5">
+                            Directorate of Employment &amp; Training, Chhattisgarh · NCVT Code: ITI-RAI-CG-04
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="pt-2">
+                        <div className="inline-block px-3.5 py-1 bg-slate-100 border border-slate-300 rounded font-bold uppercase text-xs tracking-wider text-slate-900 font-mono">
+                          {activeRegister === 'daily_attendance' && `FORM IV: DAILY ATTENDANCE MUSTER ROLL (${dailyDate})`}
+                          {activeRegister === 'monthly_attendance' && `FORM V: MONTHLY ATTENDANCE REGISTER MATRIX (${selectedMonth})`}
+                          {activeRegister === 'leave_register' && 'FORM VII: TRAINEE LEAVE SANCTION & RECORD REGISTER'}
+                          {activeRegister === 'workshop_inventory' && 'FORM VIII: WORKSHOP INVENTORY & CONSUMABLE STOCK REGISTER'}
+                          {activeRegister === 'tools_equipments' && 'FORM IX: DGT TOOLS, MACHINERY & EQUIPMENT REGISTER'}
+                          {activeRegister === 'indent_register' && 'FORM X: WORKSHOP TOOL INDENT & ISSUE-RETURN REGISTER'}
+                          {activeRegister === 'trainee_roster' && 'FORM I: MASTER TRAINEE ADMISSION ROSTER'}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2 text-xs text-slate-700 pt-2 font-mono">
+                        <div className="text-left">
+                          <span className="font-semibold">Trade:</span> {currentTrade?.name} ({currentTrade?.code})
+                        </div>
+                        <div className="text-center">
+                          <span className="font-semibold">Session:</span> {activeSessionObj?.name}
+                        </div>
+                        <div className="text-right">
+                          <span className="font-semibold">Date of Report:</span> {new Date().toLocaleDateString('en-IN', { timeZone: IST_TIMEZONE })} (IST)
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Printable Table Content Preview (Contained strictly inside report page boundaries) */}
+                    <div className="text-xs w-full">
+                      {activeRegister === 'daily_attendance' && (
+                        <table className="w-full border-collapse border border-slate-400 text-left">
+                          <thead>
+                            <tr className="bg-slate-100 border-b border-slate-400">
+                              <th className="p-1.5 border border-slate-400 text-center w-10">S.No</th>
+                              <th className="p-1.5 border border-slate-400">Roll No</th>
+                              <th className="p-1.5 border border-slate-400">Trainee Name</th>
+                              <th className="p-1.5 border border-slate-400 text-center">Category</th>
+                              <th className="p-1.5 border border-slate-400 text-center">Status</th>
+                              <th className="p-1.5 border border-slate-400">Marked Time</th>
+                              <th className="p-1.5 border border-slate-400">GPS Verification</th>
+                              <th className="p-1.5 border border-slate-400 text-right">Remarks</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {dailyAttendanceData.map((d, i) => (
+                              <tr key={d.trainee.id}>
+                                <td className="p-1.5 border border-slate-400 text-center font-mono">{i + 1}</td>
+                                <td className="p-1.5 border border-slate-400 font-mono font-semibold">{d.trainee.rollNo}</td>
+                                <td className="p-1.5 border border-slate-400">{d.trainee.name}</td>
+                                <td className="p-1.5 border border-slate-400 text-center font-mono">{d.trainee.category}</td>
+                                <td className="p-1.5 border border-slate-400 text-center font-bold font-mono">{d.status}</td>
+                                <td className="p-1.5 border border-slate-400 font-mono">{d.record?.timestamp || '—'}</td>
+                                <td className="p-1.5 border border-slate-400">
+                                  {isDailyHolidayLocked ? 'Holiday Locked' : d.record?.geotag ? 'GPS Verified' : 'Manual'}
                                 </td>
+                                <td className="p-1.5 border border-slate-400 text-right text-[10px]">
+                                  {isDailyHolidayLocked ? dailyDayLock.title : (d.record?.remarks || 'NCVT Compliant')}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+
+                      {activeRegister === 'monthly_attendance' && (
+                        <div className="space-y-2 w-full">
+                          <div className="text-[10px] font-mono bg-slate-50 border border-slate-300 px-2.5 py-1.5 rounded flex items-center justify-between gap-2">
+                            <span>
+                              <strong>Working Days Formula:</strong> {monthDaysInfo.totalDays} Calendar Days &minus; {monthDaysInfo.weeklyHolidays} Weekly Holidays (Sun + 2nd/3rd Sat) &minus; {monthDaysInfo.adminDesignatedHolidays} Unique Admin Holidays = <strong>{monthDaysInfo.totalWorkingDays} Working Days</strong>
+                            </span>
+                            <span className="shrink-0">
+                              <strong>H</strong> = Weekly Off / Govt. Holiday (Excluded from P / A / L)
+                            </span>
+                          </div>
+                          <table className="w-full border-collapse border border-slate-400 text-left text-[9.5px]">
+                            <thead>
+                              <tr className="bg-slate-100 border-b border-slate-400">
+                                <th className="p-1 border border-slate-400 text-center">#</th>
+                                <th className="p-1 border border-slate-400">Roll No</th>
+                                <th className="p-1 border border-slate-400">Name</th>
+                                {monthDaysInfo.days.map((d) => (
+                                  <th
+                                    key={d.dayNumber}
+                                    className={`px-0.5 py-1 border border-slate-400 text-center font-mono ${
+                                      d.isHoliday ? 'bg-slate-200 text-slate-700' : ''
+                                    }`}
+                                    title={d.title}
+                                  >
+                                    {d.dayNumber}
+                                  </th>
+                                ))}
+                                <th className="p-1 border border-slate-400 text-center">P</th>
+                                <th className="p-1 border border-slate-400 text-center">L</th>
+                                <th className="p-1 border border-slate-400 text-center">A</th>
+                                <th className="p-1 border border-slate-400 text-center">WD</th>
+                                <th className="p-1 border border-slate-400 text-center">%</th>
+                                <th className="p-1 border border-slate-400 text-center">Result</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {monthlyMatrixData.map((m, i) => (
+                                <tr key={m.trainee.id}>
+                                  <td className="p-1 border border-slate-400 text-center font-mono">{i + 1}</td>
+                                  <td className="p-1 border border-slate-400 font-mono whitespace-nowrap">{m.trainee.rollNo}</td>
+                                  <td className="p-1 border border-slate-400 font-semibold truncate max-w-[115px]">{m.trainee.name}</td>
+                                  {monthDaysInfo.days.map((d) => (
+                                    <td
+                                      key={d.dayNumber}
+                                      className={`px-0.5 py-1 border border-slate-400 text-center font-mono ${
+                                        d.isHoliday ? 'bg-slate-100 font-bold text-slate-600' : ''
+                                      }`}
+                                    >
+                                      {m.dailyStatuses[d.dayNumber] || '-'}
+                                    </td>
+                                  ))}
+                                  <td className="p-1 border border-slate-400 text-center font-bold">{m.presentCount}</td>
+                                  <td className="p-1 border border-slate-400 text-center">{m.leaveCount}</td>
+                                  <td className="p-1 border border-slate-400 text-center font-bold">{m.absentCount}</td>
+                                  <td className="p-1 border border-slate-400 text-center font-mono">{monthDaysInfo.totalWorkingDays}</td>
+                                  <td className="p-1 border border-slate-400 text-center font-bold">{m.monthPct}%</td>
+                                  <td className="p-1 border border-slate-400 text-center">{m.isDeficit ? 'DEFICIT' : 'ELIGIBLE'}</td>
+                                </tr>
                               ))}
-                              <td className="p-1 border border-slate-400 text-center font-bold">{m.presentCount}</td>
-                              <td className="p-1 border border-slate-400 text-center">{m.leaveCount}</td>
-                              <td className="p-1 border border-slate-400 text-center font-bold">{m.absentCount}</td>
-                              <td className="p-1 border border-slate-400 text-center font-mono">{monthDaysInfo.totalWorkingDays}</td>
-                              <td className="p-1 border border-slate-400 text-center font-bold">{m.monthPct}%</td>
-                              <td className="p-1 border border-slate-400 text-center">{m.isDeficit ? 'DEFICIT' : 'ELIGIBLE'}</td>
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+
+                      {activeRegister === 'leave_register' && (
+                        <table className="w-full border-collapse border border-slate-400 text-left">
+                          <thead>
+                            <tr className="bg-slate-100 border-b border-slate-400">
+                              <th className="p-1.5 border border-slate-400 text-center w-10">S.No</th>
+                              <th className="p-1.5 border border-slate-400">Roll No</th>
+                              <th className="p-1.5 border border-slate-400">Trainee Name</th>
+                              <th className="p-1.5 border border-slate-400">Type</th>
+                              <th className="p-1.5 border border-slate-400">Period</th>
+                              <th className="p-1.5 border border-slate-400 text-center">Days</th>
+                              <th className="p-1.5 border border-slate-400">Reason</th>
+                              <th className="p-1.5 border border-slate-400 text-center">Status</th>
+                              <th className="p-1.5 border border-slate-400">Remarks</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {filteredLeaves.map((l, i) => (
+                              <tr key={l.id}>
+                                <td className="p-1.5 border border-slate-400 text-center font-mono">{i + 1}</td>
+                                <td className="p-1.5 border border-slate-400 font-mono">{l.rollNo}</td>
+                                <td className="p-1.5 border border-slate-400 font-semibold">{l.traineeName}</td>
+                                <td className="p-1.5 border border-slate-400">{l.leaveType}</td>
+                                <td className="p-1.5 border border-slate-400 font-mono text-[11px]">{l.fromDate} to {l.toDate}</td>
+                                <td className="p-1.5 border border-slate-400 text-center font-bold">{l.days}</td>
+                                <td className="p-1.5 border border-slate-400">{l.reason}</td>
+                                <td className="p-1.5 border border-slate-400 text-center font-bold">{l.status.toUpperCase()}</td>
+                                <td className="p-1.5 border border-slate-400 text-[11px]">{l.reviewerRemarks || 'Sanctioned'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+
+                      {activeRegister === 'workshop_inventory' && (
+                        <table className="w-full border-collapse border border-slate-400 text-left">
+                          <thead>
+                            <tr className="bg-slate-100 border-b border-slate-400">
+                              <th className="p-1.5 border border-slate-400 text-center w-10">S.No</th>
+                              <th className="p-1.5 border border-slate-400">Code</th>
+                              <th className="p-1.5 border border-slate-400">Item Name &amp; Specification</th>
+                              <th className="p-1.5 border border-slate-400">Category</th>
+                              <th className="p-1.5 border border-slate-400 text-center">Total</th>
+                              <th className="p-1.5 border border-slate-400 text-center">Issued</th>
+                              <th className="p-1.5 border border-slate-400 text-center">Damaged</th>
+                              <th className="p-1.5 border border-slate-400 text-center">Available</th>
+                              <th className="p-1.5 border border-slate-400">Rack Location</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredInventory.map((item, i) => (
+                              <tr key={item.id}>
+                                <td className="p-1.5 border border-slate-400 text-center font-mono">{i + 1}</td>
+                                <td className="p-1.5 border border-slate-400 font-mono font-bold">{item.toolCode}</td>
+                                <td className="p-1.5 border border-slate-400 font-semibold">{item.name} ({item.specification})</td>
+                                <td className="p-1.5 border border-slate-400">{item.category}</td>
+                                <td className="p-1.5 border border-slate-400 text-center font-mono">{item.totalStock}</td>
+                                <td className="p-1.5 border border-slate-400 text-center font-mono">{item.issuedCount}</td>
+                                <td className="p-1.5 border border-slate-400 text-center font-mono">{item.damagedCount}</td>
+                                <td className="p-1.5 border border-slate-400 text-center font-mono font-bold">{item.availableStock}</td>
+                                <td className="p-1.5 border border-slate-400">{item.binLocation}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+
+                      {activeRegister === 'tools_equipments' && (
+                        <table className="w-full border-collapse border border-slate-400 text-left">
+                          <thead>
+                            <tr className="bg-slate-100 border-b border-slate-400">
+                              <th className="p-1.5 border border-slate-400 text-center w-10">S.No</th>
+                              <th className="p-1.5 border border-slate-400">Tool Code</th>
+                              <th className="p-1.5 border border-slate-400">Equipment Description</th>
+                              <th className="p-1.5 border border-slate-400">Category</th>
+                              <th className="p-1.5 border border-slate-400 text-center">Stock Qty</th>
+                              <th className="p-1.5 border border-slate-400 text-center">Operational Condition</th>
+                              <th className="p-1.5 border border-slate-400">Custodian</th>
+                              <th className="p-1.5 border border-slate-400 text-right">Inspection</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredToolsAndEquipments.map((t, i) => (
+                              <tr key={t.id}>
+                                <td className="p-1.5 border border-slate-400 text-center font-mono">{i + 1}</td>
+                                <td className="p-1.5 border border-slate-400 font-mono font-bold">{t.toolCode}</td>
+                                <td className="p-1.5 border border-slate-400 font-semibold">{t.name}</td>
+                                <td className="p-1.5 border border-slate-400">{t.category}</td>
+                                <td className="p-1.5 border border-slate-400 text-center font-mono">{t.totalStock}</td>
+                                <td className="p-1.5 border border-slate-400 text-center">{t.condition}</td>
+                                <td className="p-1.5 border border-slate-400">{t.custodian}</td>
+                                <td className="p-1.5 border border-slate-400 text-right font-mono">{t.lastInspected}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+
+                      {activeRegister === 'indent_register' && (
+                        <table className="w-full border-collapse border border-slate-400 text-left">
+                          <thead>
+                            <tr className="bg-slate-100 border-b border-slate-400">
+                              <th className="p-1.5 border border-slate-400 text-center w-10">S.No</th>
+                              <th className="p-1.5 border border-slate-400">Indent No</th>
+                              <th className="p-1.5 border border-slate-400">Roll No &amp; Trainee</th>
+                              <th className="p-1.5 border border-slate-400">Tool / Item</th>
+                              <th className="p-1.5 border border-slate-400 text-center">Qty</th>
+                              <th className="p-1.5 border border-slate-400">Issue Date</th>
+                              <th className="p-1.5 border border-slate-400">Due Date</th>
+                              <th className="p-1.5 border border-slate-400 text-center">Status</th>
+                              <th className="p-1.5 border border-slate-400">Condition</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredIndents.map((ind, i) => (
+                              <tr key={ind.id}>
+                                <td className="p-1.5 border border-slate-400 text-center font-mono">{i + 1}</td>
+                                <td className="p-1.5 border border-slate-400 font-mono font-bold">{ind.indentNo}</td>
+                                <td className="p-1.5 border border-slate-400">{ind.traineeName} ({ind.rollNo})</td>
+                                <td className="p-1.5 border border-slate-400 font-semibold">{ind.itemName}</td>
+                                <td className="p-1.5 border border-slate-400 text-center font-mono font-bold">{ind.quantity}</td>
+                                <td className="p-1.5 border border-slate-400 font-mono">{ind.issueDate}</td>
+                                <td className="p-1.5 border border-slate-400 font-mono">{ind.expectedReturnDate}</td>
+                                <td className="p-1.5 border border-slate-400 text-center font-bold">{ind.status.toUpperCase()}</td>
+                                <td className="p-1.5 border border-slate-400">{ind.returnCondition || 'Good'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+
+                      {activeRegister === 'trainee_roster' && (
+                        <table className="w-full border-collapse border border-slate-400 text-left">
+                          <thead>
+                            <tr className="bg-slate-100 border-b border-slate-400">
+                              <th className="p-1.5 border border-slate-400 text-center w-10">S.No</th>
+                              <th className="p-1.5 border border-slate-400">Roll No</th>
+                              <th className="p-1.5 border border-slate-400">Registration No</th>
+                              <th className="p-1.5 border border-slate-400">Trainee Name</th>
+                              <th className="p-1.5 border border-slate-400">Father Name</th>
+                              <th className="p-1.5 border border-slate-400 text-center">Cat</th>
+                              <th className="p-1.5 border border-slate-400">Mobile</th>
+                              <th className="p-1.5 border border-slate-400 text-center">Adm Date</th>
+                              <th className="p-1.5 border border-slate-400 text-center">Att %</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredRoster.map((tr, i) => {
+                              const stat = traineeStatsMap.get(tr.id);
+                              return (
+                                <tr key={tr.id}>
+                                  <td className="p-1.5 border border-slate-400 text-center font-mono">{i + 1}</td>
+                                  <td className="p-1.5 border border-slate-400 font-mono font-bold">{tr.rollNo}</td>
+                                  <td className="p-1.5 border border-slate-400 font-mono text-[10px]">{tr.registrationNo}</td>
+                                  <td className="p-1.5 border border-slate-400 font-semibold">{tr.name}</td>
+                                  <td className="p-1.5 border border-slate-400">{tr.fatherName || '—'}</td>
+                                  <td className="p-1.5 border border-slate-400 text-center font-mono">{tr.category}</td>
+                                  <td className="p-1.5 border border-slate-400 font-mono">{tr.mobile}</td>
+                                  <td className="p-1.5 border border-slate-400 text-center font-mono">{tr.admissionDate}</td>
+                                  <td className="p-1.5 border border-slate-400 text-center font-mono font-bold">
+                                    {stat?.percent ?? 100}%
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+
+                    {/* Official 3-Tier Signatory Block for ITI Raigarh */}
+                    <div className="gov-register-signatory-block grid grid-cols-3 gap-4 pt-10 pb-3 text-center text-xs font-serif border-t border-slate-300">
+                      <div className="space-y-1">
+                        <div className="h-10 border-b border-dashed border-slate-400 w-44 mx-auto" />
+                        <div className="font-bold text-slate-900">{officer.name}</div>
+                        <div className="text-[11px] text-slate-600">हस्ताक्षर प्रशिक्षण अधिकारी / Training Officer</div>
+                        <div className="text-[10px] text-slate-400 font-sans">Govt. ITI Raigarh (C.G.)</div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="h-10 border-b border-dashed border-slate-400 w-44 mx-auto" />
+                        <div className="font-bold text-slate-900">कार्यशाला अधीक्षक / Group Instructor</div>
+                        <div className="text-[11px] text-slate-600">Workshop Superintendent</div>
+                        <div className="text-[10px] text-slate-400 font-sans">Govt. ITI Raigarh (C.G.)</div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="h-10 border-b border-dashed border-slate-400 w-44 mx-auto" />
+                        <div className="font-bold text-slate-900">प्राचार्य / Principal</div>
+                        <div className="text-[11px] text-slate-600">Seal &amp; Signature of Head of Institute</div>
+                        <div className="text-[10px] text-slate-400 font-sans">Govt. ITI Raigarh (C.G.)</div>
+                      </div>
                     </div>
                   </div>
-                )}
-
-                {activeRegister === 'leave_register' && (
-                  <div className="overflow-x-auto print:overflow-visible -mx-1 sm:mx-0 max-w-full">
-                    <table className="w-full border-collapse border border-slate-400 text-left min-w-[680px] print:min-w-0">
-                      <thead>
-                        <tr className="bg-slate-100 border-b border-slate-400">
-                          <th className="p-1.5 border border-slate-400 text-center w-10">S.No</th>
-                          <th className="p-1.5 border border-slate-400">Roll No</th>
-                          <th className="p-1.5 border border-slate-400">Trainee Name</th>
-                          <th className="p-1.5 border border-slate-400">Type</th>
-                          <th className="p-1.5 border border-slate-400">Period</th>
-                          <th className="p-1.5 border border-slate-400 text-center">Days</th>
-                          <th className="p-1.5 border border-slate-400">Reason</th>
-                          <th className="p-1.5 border border-slate-400 text-center">Status</th>
-                          <th className="p-1.5 border border-slate-400">Remarks</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredLeaves.map((l, i) => (
-                          <tr key={l.id}>
-                            <td className="p-1.5 border border-slate-400 text-center font-mono">{i + 1}</td>
-                            <td className="p-1.5 border border-slate-400 font-mono">{l.rollNo}</td>
-                            <td className="p-1.5 border border-slate-400 font-semibold">{l.traineeName}</td>
-                            <td className="p-1.5 border border-slate-400">{l.leaveType}</td>
-                            <td className="p-1.5 border border-slate-400 font-mono text-[11px]">{l.fromDate} to {l.toDate}</td>
-                            <td className="p-1.5 border border-slate-400 text-center font-bold">{l.days}</td>
-                            <td className="p-1.5 border border-slate-400">{l.reason}</td>
-                            <td className="p-1.5 border border-slate-400 text-center font-bold">{l.status.toUpperCase()}</td>
-                            <td className="p-1.5 border border-slate-400 text-[11px]">{l.reviewerRemarks || 'Sanctioned'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                {activeRegister === 'workshop_inventory' && (
-                  <div className="overflow-x-auto print:overflow-visible -mx-1 sm:mx-0 max-w-full">
-                    <table className="w-full border-collapse border border-slate-400 text-left min-w-[700px] print:min-w-0">
-                      <thead>
-                        <tr className="bg-slate-100 border-b border-slate-400">
-                          <th className="p-1.5 border border-slate-400 text-center w-10">S.No</th>
-                          <th className="p-1.5 border border-slate-400">Code</th>
-                          <th className="p-1.5 border border-slate-400">Item Name &amp; Specification</th>
-                          <th className="p-1.5 border border-slate-400">Category</th>
-                          <th className="p-1.5 border border-slate-400 text-center">Total</th>
-                          <th className="p-1.5 border border-slate-400 text-center">Issued</th>
-                          <th className="p-1.5 border border-slate-400 text-center">Damaged</th>
-                          <th className="p-1.5 border border-slate-400 text-center">Available</th>
-                          <th className="p-1.5 border border-slate-400">Rack Location</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredInventory.map((item, i) => (
-                          <tr key={item.id}>
-                            <td className="p-1.5 border border-slate-400 text-center font-mono">{i + 1}</td>
-                            <td className="p-1.5 border border-slate-400 font-mono font-bold">{item.toolCode}</td>
-                            <td className="p-1.5 border border-slate-400 font-semibold">{item.name} ({item.specification})</td>
-                            <td className="p-1.5 border border-slate-400">{item.category}</td>
-                            <td className="p-1.5 border border-slate-400 text-center font-mono">{item.totalStock}</td>
-                            <td className="p-1.5 border border-slate-400 text-center font-mono">{item.issuedCount}</td>
-                            <td className="p-1.5 border border-slate-400 text-center font-mono">{item.damagedCount}</td>
-                            <td className="p-1.5 border border-slate-400 text-center font-mono font-bold">{item.availableStock}</td>
-                            <td className="p-1.5 border border-slate-400">{item.binLocation}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                {activeRegister === 'tools_equipments' && (
-                  <div className="overflow-x-auto print:overflow-visible -mx-1 sm:mx-0 max-w-full">
-                    <table className="w-full border-collapse border border-slate-400 text-left min-w-[700px] print:min-w-0">
-                      <thead>
-                        <tr className="bg-slate-100 border-b border-slate-400">
-                          <th className="p-1.5 border border-slate-400 text-center w-10">S.No</th>
-                          <th className="p-1.5 border border-slate-400">Tool Code</th>
-                          <th className="p-1.5 border border-slate-400">Equipment Description</th>
-                          <th className="p-1.5 border border-slate-400">Category</th>
-                          <th className="p-1.5 border border-slate-400 text-center">Stock Qty</th>
-                          <th className="p-1.5 border border-slate-400 text-center">Operational Condition</th>
-                          <th className="p-1.5 border border-slate-400">Custodian</th>
-                          <th className="p-1.5 border border-slate-400 text-right">Inspection</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredToolsAndEquipments.map((t, i) => (
-                          <tr key={t.id}>
-                            <td className="p-1.5 border border-slate-400 text-center font-mono">{i + 1}</td>
-                            <td className="p-1.5 border border-slate-400 font-mono font-bold">{t.toolCode}</td>
-                            <td className="p-1.5 border border-slate-400 font-semibold">{t.name}</td>
-                            <td className="p-1.5 border border-slate-400">{t.category}</td>
-                            <td className="p-1.5 border border-slate-400 text-center font-mono">{t.totalStock}</td>
-                            <td className="p-1.5 border border-slate-400 text-center">{t.condition}</td>
-                            <td className="p-1.5 border border-slate-400">{t.custodian}</td>
-                            <td className="p-1.5 border border-slate-400 text-right font-mono">{t.lastInspected}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                {activeRegister === 'indent_register' && (
-                  <div className="overflow-x-auto print:overflow-visible -mx-1 sm:mx-0 max-w-full">
-                    <table className="w-full border-collapse border border-slate-400 text-left min-w-[720px] print:min-w-0">
-                      <thead>
-                        <tr className="bg-slate-100 border-b border-slate-400">
-                          <th className="p-1.5 border border-slate-400 text-center w-10">S.No</th>
-                          <th className="p-1.5 border border-slate-400">Indent No</th>
-                          <th className="p-1.5 border border-slate-400">Roll No &amp; Trainee</th>
-                          <th className="p-1.5 border border-slate-400">Tool / Item</th>
-                          <th className="p-1.5 border border-slate-400 text-center">Qty</th>
-                          <th className="p-1.5 border border-slate-400">Issue Date</th>
-                          <th className="p-1.5 border border-slate-400">Due Date</th>
-                          <th className="p-1.5 border border-slate-400 text-center">Status</th>
-                          <th className="p-1.5 border border-slate-400">Condition</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredIndents.map((ind, i) => (
-                          <tr key={ind.id}>
-                            <td className="p-1.5 border border-slate-400 text-center font-mono">{i + 1}</td>
-                            <td className="p-1.5 border border-slate-400 font-mono font-bold">{ind.indentNo}</td>
-                            <td className="p-1.5 border border-slate-400">{ind.traineeName} ({ind.rollNo})</td>
-                            <td className="p-1.5 border border-slate-400 font-semibold">{ind.itemName}</td>
-                            <td className="p-1.5 border border-slate-400 text-center font-mono font-bold">{ind.quantity}</td>
-                            <td className="p-1.5 border border-slate-400 font-mono">{ind.issueDate}</td>
-                            <td className="p-1.5 border border-slate-400 font-mono">{ind.expectedReturnDate}</td>
-                            <td className="p-1.5 border border-slate-400 text-center font-bold">{ind.status.toUpperCase()}</td>
-                            <td className="p-1.5 border border-slate-400">{ind.returnCondition || 'Good'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                {activeRegister === 'trainee_roster' && (
-                  <div className="overflow-x-auto print:overflow-visible -mx-1 sm:mx-0 max-w-full">
-                    <table className="w-full border-collapse border border-slate-400 text-left min-w-[750px] print:min-w-0">
-                      <thead>
-                        <tr className="bg-slate-100 border-b border-slate-400">
-                          <th className="p-1.5 border border-slate-400 text-center w-10">S.No</th>
-                          <th className="p-1.5 border border-slate-400">Roll No</th>
-                          <th className="p-1.5 border border-slate-400">Registration No</th>
-                          <th className="p-1.5 border border-slate-400">Trainee Name</th>
-                          <th className="p-1.5 border border-slate-400">Father Name</th>
-                          <th className="p-1.5 border border-slate-400 text-center">Cat</th>
-                          <th className="p-1.5 border border-slate-400">Mobile</th>
-                          <th className="p-1.5 border border-slate-400 text-center">Adm Date</th>
-                          <th className="p-1.5 border border-slate-400 text-center">Att %</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredRoster.map((tr, i) => {
-                          const stat = traineeStatsMap.get(tr.id);
-                          return (
-                            <tr key={tr.id}>
-                              <td className="p-1.5 border border-slate-400 text-center font-mono">{i + 1}</td>
-                              <td className="p-1.5 border border-slate-400 font-mono font-bold">{tr.rollNo}</td>
-                              <td className="p-1.5 border border-slate-400 font-mono text-[10px]">{tr.registrationNo}</td>
-                              <td className="p-1.5 border border-slate-400 font-semibold">{tr.name}</td>
-                              <td className="p-1.5 border border-slate-400">{tr.fatherName || '—'}</td>
-                              <td className="p-1.5 border border-slate-400 text-center font-mono">{tr.category}</td>
-                              <td className="p-1.5 border border-slate-400 font-mono">{tr.mobile}</td>
-                              <td className="p-1.5 border border-slate-400 text-center font-mono">{tr.admissionDate}</td>
-                              <td className="p-1.5 border border-slate-400 text-center font-mono font-bold">
-                                {stat?.percent ?? 100}%
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-
-              {/* Official 3-Tier Signatory Block for ITI Raigarh */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-4 pt-8 sm:pt-12 pb-4 text-center text-xs font-serif border-t border-slate-300 print:grid-cols-3">
-                <div className="space-y-1">
-                  <div className="h-10 border-b border-dashed border-slate-400 w-36 sm:w-48 mx-auto" />
-                  <div className="font-bold text-slate-900">{officer.name}</div>
-                  <div className="text-[11px] text-slate-600">हस्ताक्षर प्रशिक्षण अधिकारी / Training Officer</div>
-                  <div className="text-[10px] text-slate-400 font-sans">Govt. ITI Raigarh (C.G.)</div>
-                </div>
-
-                <div className="space-y-1">
-                  <div className="h-10 border-b border-dashed border-slate-400 w-36 sm:w-48 mx-auto" />
-                  <div className="font-bold text-slate-900">कार्यशाला अधीक्षक / Group Instructor</div>
-                  <div className="text-[11px] text-slate-600">Workshop Superintendent</div>
-                  <div className="text-[10px] text-slate-400 font-sans">Govt. ITI Raigarh (C.G.)</div>
-                </div>
-
-                <div className="space-y-1">
-                  <div className="h-10 border-b border-dashed border-slate-400 w-36 sm:w-48 mx-auto" />
-                  <div className="font-bold text-slate-900">प्राचार्य / Principal</div>
-                  <div className="text-[11px] text-slate-600">Seal &amp; Signature of Head of Institute</div>
-                  <div className="text-[10px] text-slate-400 font-sans">Govt. ITI Raigarh (C.G.)</div>
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
 
       {/* Mobile Quick Action Floating Bar for Download and Print */}
-      <div className="lg:hidden fixed bottom-4 right-4 z-40 flex items-center gap-2 bg-slate-950/95 text-white p-1.5 rounded-2xl shadow-2xl border border-slate-700 backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 duration-200">
+      <div className="lg:hidden fixed bottom-4 right-4 z-40 flex items-center gap-2 bg-slate-950/95 text-white p-1.5 rounded-2xl shadow-2xl border border-slate-700 backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 duration-200 print:hidden">
         <button
           onClick={handleExportRegisterCSV}
           className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap active:scale-95"
