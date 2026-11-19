@@ -173,6 +173,7 @@ export async function fetchBootstrap() {
   return fetchWithOfflineCache<{
     serverTimeMs?: number;
     timeZone?: string;
+    isProduction?: boolean;
     settings: SystemSettings;
     sessions: AcademicSession[];
     trades: Trade[];
@@ -864,9 +865,17 @@ export async function fetchAuditLogs(): Promise<AuditLog[]> {
   return fetchWithOfflineCache<AuditLog[]>('iti_cache_audit_logs', () => fetch('/api/audit-logs'), []);
 }
 
-export async function resetDatabase() {
-  const res = await fetch('/api/reset-data', { method: 'POST' });
-  return res.json();
+export async function resetDatabase(confirmationText: string) {
+  const res = await apiFetch('/api/reset-data', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ confirmationText }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to reset demo data');
+  }
+  return data;
 }
 
 export async function fetchNotifications(traineeId?: string): Promise<AppNotification[]> {

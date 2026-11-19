@@ -19,6 +19,7 @@ import {
   Compass,
   FileText,
   AlertCircle,
+  AlertTriangle,
   Building,
   RefreshCw,
   Sparkles,
@@ -106,6 +107,7 @@ interface AdminDashboardProps {
   userPreferences?: UserPreferences | null;
   onUpdatePreferences?: (partial: Partial<UserPreferences>) => void;
   onSettingsUpdate: (newSettings: SystemSettings) => void;
+  isProductionEnv?: boolean;
 }
 
 type AdminTab = 'overview' | 'sessions' | 'working_days' | 'trades' | 'officers' | 'documents' | 'rules' | 'audit';
@@ -117,7 +119,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   userPreferences,
   onUpdatePreferences,
   onSettingsUpdate,
+  isProductionEnv = false,
 }) => {
+  const isProductionMode = Boolean(import.meta.env.PROD || isProductionEnv);
   // Persistent active tab across page refreshes
   const [activeTab, setActiveTab] = useState<AdminTab>(() => {
     const validTabs: AdminTab[] = ['overview', 'sessions', 'working_days', 'trades', 'officers', 'documents', 'rules', 'audit'];
@@ -185,6 +189,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [newPassword, setNewPassword] = useState('');
   const [successToast, setSuccessToast] = useState('');
   const [calibratingGps, setCalibratingGps] = useState(false);
+
+  // Danger Zone: Demo Data Reset Dialog State (hidden/disabled in production)
+  const [resetModalOpen, setResetModalOpen] = useState(false);
+  const [resetConfirmInput, setResetConfirmInput] = useState('');
+  const [resettingDemoData, setResettingDemoData] = useState(false);
+  const [resetError, setResetError] = useState('');
 
   // Selected session for monthly working days & holiday calendar
   const [selectedSessionId, setSelectedSessionId] = useState(
@@ -889,14 +899,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const handleResetData = async () => {
-    if (!confirm('Reset operational records to a clean slate? All trainees, attendance, marks, and plans will be cleared while retaining institute settings, trades, and officers.')) return;
+  const handleOpenResetDialog = () => {
+    if (isProductionMode) return;
+    setResetConfirmInput('');
+    setResetError('');
+    setResetModalOpen(true);
+  };
+
+  const handleConfirmResetData = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isProductionMode) return;
+    if (resetConfirmInput.trim() !== 'RESET DEMO DATA') {
+      setResetError('Please type RESET DEMO DATA exactly to confirm.');
+      return;
+    }
     try {
-      await resetDatabase();
+      setResettingDemoData(true);
+      setResetError('');
+      await resetDatabase('RESET DEMO DATA');
+      setResetModalOpen(false);
+      setResetConfirmInput('');
       showToast('Database cleared to clean institutional baseline');
       reloadData();
     } catch (err: any) {
-      alert(err.message);
+      setResetError(err?.message || 'Failed to reset demo data.');
+    } finally {
+      setResettingDemoData(false);
     }
   };
 
@@ -999,7 +1027,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={reloadData}
             disabled={loading}
@@ -1008,12 +1036,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             <span>Sync</span>
           </button>
-          <button
-            onClick={handleResetData}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors font-medium"
-          >
-            <span>Reset Demo Data</span>
-          </button>
+          {!isProductionMode && (
+            <button
+              type="button"
+              onClick={handleOpenResetDialog}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-red-600 hover:bg-red-700 border border-red-700 rounded-lg shadow-xs transition-colors cursor-pointer"
+              title="Danger Zone: Permanently delete or reset demo & operational records"
+            >
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+              <span>Reset Demo Data – Danger Zone</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -3754,6 +3787,116 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   className="flex-1 py-2 px-3 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-bold rounded-lg cursor-pointer"
                 >
                   {savingHoliday ? 'Saving...' : editingHoliday ? 'Update Holiday' : 'Designate Holiday'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Danger Zone: Reset Demo Data Confirmation Dialog (Disabled in Production) */}
+      {!isProductionMode && resetModalOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="reset-danger-dialog-title"
+          onClick={() => {
+            if (!resettingDemoData) setResetModalOpen(false);
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-lg w-full border-2 border-red-600 shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="bg-red-600 text-white px-5 py-4 flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-red-800/70 rounded-xl border border-red-400/40 shrink-0">
+                  <AlertTriangle className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-mono uppercase tracking-widest text-red-100 font-bold block">
+                    Danger Zone · Destructive Action
+                  </span>
+                  <h3 id="reset-danger-dialog-title" className="font-extrabold text-base leading-tight">
+                    Confirm Demo &amp; Operational Data Reset
+                  </h3>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={resettingDemoData}
+                onClick={() => setResetModalOpen(false)}
+                className="p-1.5 rounded-lg text-red-100 hover:text-white hover:bg-red-700 transition-colors disabled:opacity-50 cursor-pointer"
+                aria-label="Close confirmation dialog"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmResetData} className="p-5 space-y-4 text-xs text-slate-700">
+              <div className="bg-red-50 border border-red-300 rounded-xl p-4 space-y-2 text-red-950">
+                <p className="font-bold text-sm text-red-800 flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4 shrink-0 text-red-600" />
+                  <span>This action will permanently delete or reset demo records!</span>
+                </p>
+                <p className="leading-relaxed text-red-900">
+                  Confirming this reset will immediately erase and reset all trainees, attendance entries, formative assessments, leave applications, warning notices, tool indents, academic plans, and custom session holidays across both local storage and Cloud Firestore back to the baseline institute configuration. <strong>This cannot be undone.</strong>
+                </p>
+              </div>
+
+              <div>
+                <label htmlFor="reset-demo-confirm-input" className="block font-bold text-slate-900 mb-1.5">
+                  To proceed, manually type <code className="px-1.5 py-0.5 rounded bg-red-100 text-red-800 font-mono font-extrabold border border-red-200">RESET DEMO DATA</code> below:
+                </label>
+                <input
+                  id="reset-demo-confirm-input"
+                  type="text"
+                  autoFocus
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={resetConfirmInput}
+                  onChange={(e) => {
+                    setResetConfirmInput(e.target.value);
+                    if (resetError) setResetError('');
+                  }}
+                  placeholder="Type RESET DEMO DATA"
+                  disabled={resettingDemoData}
+                  className="w-full px-3.5 py-2.5 text-sm font-mono font-bold border-2 border-red-300 focus:border-red-600 focus:outline-none rounded-lg bg-white text-slate-900 placeholder:text-slate-400"
+                />
+                {resetConfirmInput.length > 0 && resetConfirmInput.trim() !== 'RESET DEMO DATA' && (
+                  <p className="mt-1.5 text-[11px] font-medium text-red-600">
+                    Exact uppercase phrase required: RESET DEMO DATA
+                  </p>
+                )}
+              </div>
+
+              {resetError && (
+                <div className="p-2.5 rounded-lg bg-red-100 border border-red-300 text-red-800 font-semibold">
+                  {resetError}
+                </div>
+              )}
+
+              <div className="pt-2 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2.5 border-t border-slate-200">
+                <button
+                  type="button"
+                  disabled={resettingDemoData}
+                  onClick={() => {
+                    setResetModalOpen(false);
+                    setResetConfirmInput('');
+                    setResetError('');
+                  }}
+                  className="px-4 py-2.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg transition-colors disabled:opacity-50 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={resettingDemoData || resetConfirmInput.trim() !== 'RESET DEMO DATA'}
+                  className="px-4 py-2.5 text-xs font-extrabold text-white bg-red-600 hover:bg-red-700 disabled:bg-red-300 disabled:cursor-not-allowed rounded-lg shadow-sm transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Trash2 className="w-4 h-4 shrink-0" />
+                  <span>{resettingDemoData ? 'Resetting Records...' : 'Confirm Reset'}</span>
                 </button>
               </div>
             </form>

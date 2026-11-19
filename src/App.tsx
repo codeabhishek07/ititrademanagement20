@@ -99,6 +99,7 @@ export default function App() {
   const [settings, setSettings] = useState<SystemSettings | null>(null);
   const [trades, setTrades] = useState<Trade[]>([]);
   const [sessions, setSessions] = useState<AcademicSession[]>([]);
+  const [isProductionEnv, setIsProductionEnv] = useState<boolean>(import.meta.env.PROD);
 
   const [traineeActiveTab, setTraineeActiveTab] = useState<
     'mark_attendance' | 'history' | 'leaves' | 'warnings' | 'tools' | 'documents'
@@ -178,6 +179,9 @@ export default function App() {
       setSettings(bootstrapData.settings);
       setSessions(bootstrapData.sessions);
       setTrades(bootstrapData.trades);
+      if (typeof bootstrapData.isProduction === 'boolean') {
+        setIsProductionEnv(Boolean(import.meta.env.PROD || bootstrapData.isProduction));
+      }
 
       if (sessionRes.authenticated && sessionRes.user) {
         const restoredUser = sessionRes.user as CurrentUser;
@@ -448,6 +452,7 @@ export default function App() {
                 userPreferences={userPreferences}
                 onUpdatePreferences={updateUserPreferences}
                 onSettingsUpdate={(newSettings) => setSettings(newSettings)}
+                isProductionEnv={isProductionEnv}
               />
             )}
 

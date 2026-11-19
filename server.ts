@@ -150,6 +150,11 @@ process.on('uncaughtException', (err: any) => {
 async function startServer() {
   const app = express();
   const PORT = resolveServerPort();
+  const distPath = path.resolve(process.cwd(), 'dist');
+  const publicPath = path.resolve(process.cwd(), 'public');
+  const isProduction =
+    process.env.NODE_ENV === 'production' ||
+    (process.env.NODE_ENV !== 'development' && fs.existsSync(path.join(distPath, 'index.html')));
 
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ extended: true, limit: '50mb' }));
@@ -262,6 +267,7 @@ async function startServer() {
     res.json({
       serverTimeMs: nowMs,
       timeZone: IST_TIMEZONE,
+      isProduction,
       settings: data.settings,
       sessions: data.sessions,
       trades: data.trades,
@@ -2779,8 +2785,19 @@ async function startServer() {
     res.json(db.get().auditLogs);
   });
 
-  // Reset to baseline config (preserving empty trainee slate)
-  app.post('/api/reset-data', async (_req: Request, res: Response) => {
+  // Reset to baseline config (disabled completely in production; requires explicit confirmation in non-production)
+  app.post('/api/reset-data', async (req: Request, res: Response) => {
+    if (isProduction) {
+      return res.status(403).json({
+        error: 'Demo data reset is permanently disabled in the live production environment.',
+      });
+    }
+    const confirmationText = String(req.body?.confirmationText || '').trim();
+    if (confirmationText !== 'RESET DEMO DATA') {
+      return res.status(400).json({
+        error: 'Confirmation failed. Type "RESET DEMO DATA" exactly to proceed.',
+      });
+    }
     db.resetToDefault();
     await db.forceFirestoreSync();
     res.json({ success: true, message: 'Database reset to baseline Govt ITI Raigarh configuration.' });
@@ -2789,9 +2806,6 @@ async function startServer() {
   // -------------------------------------------------------------
   // Service Worker and Web App Manifest Handlers
   // -------------------------------------------------------------
-  const distPath = path.resolve(process.cwd(), 'dist');
-  const publicPath = path.resolve(process.cwd(), 'public');
-
   app.get('/sw.js', (_req: Request, res: Response) => {
     const swPath = fs.existsSync(path.join(distPath, 'sw.js'))
       ? path.join(distPath, 'sw.js')
@@ -2814,7 +2828,6 @@ async function startServer() {
   // -------------------------------------------------------------
   // Vite Middleware Mode for Development vs Production Static Serving
   // -------------------------------------------------------------
-  const isProduction = process.env.NODE_ENV === 'production' || (process.env.NODE_ENV !== 'development' && fs.existsSync(path.join(distPath, 'index.html')));
   let viteServer: Awaited<ReturnType<typeof createViteServer>> | null = null;
 
   if (isProduction) {
