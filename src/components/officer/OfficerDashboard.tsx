@@ -30,6 +30,7 @@ import {
   Calendar,
   FolderOpen,
   Cloud,
+  Link2,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import {
@@ -69,6 +70,7 @@ import {
   returnIndent,
   bulkImportTrainees,
   fetchHolidays,
+  getAuthToken,
 } from '../../api.ts';
 import { OfficerRegisters, RegisterType } from './OfficerRegisters.tsx';
 import { LessonPlanManager } from './LessonPlanManager.tsx';
@@ -131,6 +133,14 @@ const VALID_OFFICER_TABS: OfficerTab[] = [
   'documents',
 ];
 
+const COMMON_TRADE_ALLOWED_TABS: OfficerTab[] = [
+  'attendance',
+  'reports',
+  'lesson_plans',
+  'weekly_plans',
+  'documents',
+];
+
 export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
   officer,
   trades,
@@ -173,6 +183,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [autoSavingAttendance, setAutoSavingAttendance] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const pendingAttendanceDirtyRef = useRef(false);
+  const dirtyTraineeIdsRef = useRef<Set<string>>(new Set());
 
   const handleSelectTab = (tab: OfficerTab) => {
     setActiveTab(tab);
@@ -229,18 +240,14 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
   );
 
   const [selectedTradeId, setSelectedTradeId] = useState<string>(() => {
-    if (userPreferences?.selectedTradeId) {
-      if (officerTrades.some((t) => t.id === userPreferences.selectedTradeId) || activeTradePool.some((t) => t.id === userPreferences.selectedTradeId)) {
-        return userPreferences.selectedTradeId;
-      }
+    if (userPreferences?.selectedTradeId && officerTrades.some((t) => t.id === userPreferences.selectedTradeId)) {
+      return userPreferences.selectedTradeId;
     }
     try {
       const saved = localStorage.getItem('iti_officer_selected_trade');
       if (saved && officerTrades.some((t) => t.id === saved)) return saved;
-      if (saved && activeTradePool.some((t) => t.id === saved)) return saved;
     } catch (e) {}
     if (officerTrades.length > 0) return officerTrades[0].id;
-    if (activeTradePool.length > 0) return activeTradePool[0].id;
     return '';
   });
 
@@ -251,6 +258,22 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
       } catch (e) {}
     }
   }, [selectedTradeId]);
+
+  const [selectedPrimaryTradeId, setSelectedPrimaryTradeId] = useState<string>('all');
+
+  useEffect(() => {
+    setSelectedPrimaryTradeId('all');
+  }, [selectedTradeId]);
+
+  const currentTrade = officerTrades.find((t) => t.id === selectedTradeId) || officerTrades[0];
+  const isCommonTradeContext = Boolean(currentTrade?.isCommonTrade);
+
+  useEffect(() => {
+    if (isCommonTradeContext && !COMMON_TRADE_ALLOWED_TABS.includes(activeTab)) {
+      setActiveTab('attendance');
+      onUpdatePreferences?.({ activeTab: 'attendance' });
+    }
+  }, [isCommonTradeContext, activeTab]);
 
   // Re-sync with backend to get latest trade assignments made by admin
   const refreshOfficerAndTrades = async (silent = false) => {
@@ -300,17 +323,17 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
     refreshOfficerAndTrades(true);
   }, [officer.id]);
 
-  // Reactive selection guard: When assigned trades change, auto-switch to a valid assigned trade
+  // Reactive selection guard: strictly scope Officer to assigned trades (primary or common)
   useEffect(() => {
     if (officerTrades.length > 0) {
       const isCurrentValid = officerTrades.some((t) => t.id === selectedTradeId);
       if (!isCurrentValid) {
         setSelectedTradeId(officerTrades[0].id);
       }
-    } else if (activeTradePool.length > 0 && !selectedTradeId) {
-      setSelectedTradeId(activeTradePool[0].id);
+    } else if (selectedTradeId !== '') {
+      setSelectedTradeId('');
     }
-  }, [currentOfficer.assignedTradeIds, officerTrades, selectedTradeId, activeTradePool]);
+  }, [currentOfficer.assignedTradeIds, officerTrades, selectedTradeId]);
 
   const [selectedSessionId, setSelectedSessionId] = useState<string>(() => {
     if (userPreferences?.selectedSessionId && sessions.some((s) => s.id === userPreferences.selectedSessionId)) {
@@ -345,8 +368,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
     }
     if (
       userPreferences.selectedTradeId &&
-      (officerTrades.some((t) => t.id === userPreferences.selectedTradeId) ||
-        activeTradePool.some((t) => t.id === userPreferences.selectedTradeId))
+      officerTrades.some((t) => t.id === userPreferences.selectedTradeId)
     ) {
       setSelectedTradeId(userPreferences.selectedTradeId);
     }
@@ -505,7 +527,8 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
     category: 'OBC' as any,
     gender: 'Male' as any,
     dob: '2005-01-01',
-    status: 'active' as any,
+    status: 'active' as 'active' | 'inactive' | 'passed_out',
+    tradeId: '',
   });
 
   const [inventoryForm, setInventoryForm] = useState({
@@ -575,14 +598,17 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
     if (!selectedTradeId) return;
     setLoading(true);
     try {
+      const tradeForLoad = officerTrades.find((t) => t.id === selectedTradeId) || officerTrades[0];
+      const skipPrimaryOnlyEndpoints = Boolean(tradeForLoad?.isCommonTrade);
+
       const [tList, attDayList, attAllList, lList, wList, invList, indList, holList] = await Promise.all([
         fetchTrainees(selectedTradeId, selectedSessionId),
         fetchAttendance({ date: attendanceDate, tradeId: selectedTradeId }),
         fetchAttendance({ tradeId: selectedTradeId, sessionId: selectedSessionId }),
-        fetchLeaves({ tradeId: selectedTradeId }),
-        fetchWarnings({ tradeId: selectedTradeId }),
-        fetchInventory({ tradeId: selectedTradeId }),
-        fetchIndents({ tradeId: selectedTradeId }),
+        skipPrimaryOnlyEndpoints ? Promise.resolve([]) : fetchLeaves({ tradeId: selectedTradeId }),
+        skipPrimaryOnlyEndpoints ? Promise.resolve([]) : fetchWarnings({ tradeId: selectedTradeId }),
+        skipPrimaryOnlyEndpoints ? Promise.resolve([]) : fetchInventory({ tradeId: selectedTradeId }),
+        skipPrimaryOnlyEndpoints ? Promise.resolve([]) : fetchIndents({ tradeId: selectedTradeId }),
         fetchHolidays(),
       ]);
 
@@ -597,6 +623,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
 
       // Initialize local edits with existing records without triggering dirty auto-save
       pendingAttendanceDirtyRef.current = false;
+      dirtyTraineeIdsRef.current.clear();
       const initialMap: Record<string, AttendanceStatus> = {};
       tList.forEach((tr) => {
         const found = attDayList.find((a) => a.traineeId === tr.id);
@@ -618,31 +645,68 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
     loadData();
   }, [selectedTradeId, selectedSessionId, attendanceDate]);
 
-  const currentTrade = activeTradePool.find((t) => t.id === selectedTradeId) || activeTradePool[0];
   const activeDayLock = getDateHolidayStatus(attendanceDate, holidays, selectedSessionId);
   const activeHoliday = activeDayLock.adminHoliday;
   const isAttendanceLockedDay = activeDayLock.isHoliday;
 
+  const enrolledPrimaryTrades = React.useMemo(() => {
+    const ids = Array.from(
+      new Set(
+        trainees
+          .map((tr) => tr.tradeId)
+          .filter((id): id is string => Boolean(id) && id !== selectedTradeId)
+      )
+    );
+    return ids
+      .map((id) => activeTradePool.find((t) => t.id === id) || ({ id, name: id, code: id } as Trade))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [trainees, selectedTradeId, activeTradePool]);
+
+  useEffect(() => {
+    if (
+      selectedPrimaryTradeId !== 'all' &&
+      !enrolledPrimaryTrades.some((t) => t.id === selectedPrimaryTradeId)
+    ) {
+      setSelectedPrimaryTradeId('all');
+    }
+  }, [enrolledPrimaryTrades, selectedPrimaryTradeId]);
+
+  const filteredDailyTrainees = React.useMemo(() => {
+    if (selectedPrimaryTradeId === 'all') return trainees;
+    return trainees.filter((tr) => tr.tradeId === selectedPrimaryTradeId);
+  }, [trainees, selectedPrimaryTradeId]);
+
+  const filteredDailyTraineeIds = React.useMemo(
+    () => new Set(filteredDailyTrainees.map((tr) => tr.id)),
+    [filteredDailyTrainees]
+  );
+
   // Automatic real-time debounced attendance persistence to Cloud Firestore
   useEffect(() => {
-    if (!pendingAttendanceDirtyRef.current || isAttendanceLockedDay || trainees.length === 0) return;
+    if (!pendingAttendanceDirtyRef.current || isAttendanceLockedDay || trainees.length === 0 || !selectedTradeId) return;
     const timer = setTimeout(async () => {
       try {
         setAutoSavingAttendance('saving');
-        const recordsToSave = Object.entries(attendanceEdits).map(([traineeId, status]) => ({
-          traineeId,
-          status,
-          remarks: `Marked/Authorized by ${officer.name}`,
-        }));
+        const targetIds =
+          dirtyTraineeIdsRef.current.size > 0 ? dirtyTraineeIdsRef.current : filteredDailyTraineeIds;
+        const recordsToSave = Object.entries(attendanceEdits)
+          .filter(([traineeId]) => targetIds.has(traineeId))
+          .map(([traineeId, status]) => ({
+            traineeId,
+            status,
+            remarks: `Marked/Authorized by ${officer.name}`,
+          }));
         if (recordsToSave.length > 0) {
           await batchSaveAttendance({
             date: attendanceDate,
+            tradeId: selectedTradeId,
             officerId: officer.id,
             officerName: officer.name,
             records: recordsToSave,
           });
         }
         pendingAttendanceDirtyRef.current = false;
+        dirtyTraineeIdsRef.current.clear();
         setAutoSavingAttendance('saved');
         const [attDayList, attAllList] = await Promise.all([
           fetchAttendance({ date: attendanceDate, tradeId: selectedTradeId }),
@@ -655,25 +719,34 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
       }
     }, 700);
     return () => clearTimeout(timer);
-  }, [attendanceEdits, attendanceDate, selectedTradeId, selectedSessionId, isAttendanceLockedDay]);
+  }, [attendanceEdits, attendanceDate, selectedTradeId, selectedSessionId, isAttendanceLockedDay, filteredDailyTraineeIds]);
 
   // Flush any pending unsaved attendance changes on tab/window unload using keepalive
   useEffect(() => {
     const handleBeforeUnload = () => {
-      if (!pendingAttendanceDirtyRef.current || isAttendanceLockedDay || trainees.length === 0) return;
-      const recordsToSave = Object.entries(attendanceEdits).map(([traineeId, status]) => ({
-        traineeId,
-        status,
-        remarks: `Marked/Authorized by ${officer.name}`,
-      }));
+      if (!pendingAttendanceDirtyRef.current || isAttendanceLockedDay || trainees.length === 0 || !selectedTradeId) return;
+      const targetIds =
+        dirtyTraineeIdsRef.current.size > 0 ? dirtyTraineeIdsRef.current : filteredDailyTraineeIds;
+      const recordsToSave = Object.entries(attendanceEdits)
+        .filter(([traineeId]) => targetIds.has(traineeId))
+        .map(([traineeId, status]) => ({
+          traineeId,
+          status,
+          remarks: `Marked/Authorized by ${officer.name}`,
+        }));
       if (recordsToSave.length > 0) {
         try {
+          const token = getAuthToken();
+          const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+          if (token) headers['x-iti-session'] = token;
           fetch('/api/attendance/batch-officer', {
             method: 'POST',
             keepalive: true,
-            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            headers,
             body: JSON.stringify({
               date: attendanceDate,
+              tradeId: selectedTradeId,
               officerId: officer.id,
               officerName: officer.name,
               records: recordsToSave,
@@ -686,7 +759,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [attendanceEdits, attendanceDate, officer.id, officer.name, isAttendanceLockedDay, trainees.length]);
+  }, [attendanceEdits, attendanceDate, selectedTradeId, officer.id, officer.name, isAttendanceLockedDay, trainees.length, filteredDailyTraineeIds]);
 
   // Compute attendance stats per trainee strictly excluding Sundays, 2nd/3rd Saturdays & Admin Holidays
   const todayIst = getIstDateStr();
@@ -724,22 +797,36 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
     }
     try {
       setAutoSavingAttendance('saving');
-      const recordsToSave = Object.entries(attendanceEdits).map(([traineeId, status]) => ({
-        traineeId,
-        status,
-        remarks: `Marked/Authorized by ${officer.name}`,
-      }));
+      const recordsToSave = Object.entries(attendanceEdits)
+        .filter(([traineeId]) => filteredDailyTraineeIds.has(traineeId))
+        .map(([traineeId, status]) => ({
+          traineeId,
+          status,
+          remarks: `Marked/Authorized by ${officer.name}`,
+        }));
+
+      if (recordsToSave.length === 0) {
+        setAutoSavingAttendance('idle');
+        showToast('No trainees match the active Primary Trade filter.');
+        return;
+      }
 
       await batchSaveAttendance({
         date: attendanceDate,
+        tradeId: selectedTradeId,
         officerId: officer.id,
         officerName: officer.name,
         records: recordsToSave,
       });
 
       pendingAttendanceDirtyRef.current = false;
+      recordsToSave.forEach((r) => dirtyTraineeIdsRef.current.delete(r.traineeId));
       setAutoSavingAttendance('saved');
-      showToast(`Daily attendance saved to Firestore for ${recordsToSave.length} trainees`);
+      const primaryLabel =
+        selectedPrimaryTradeId !== 'all'
+          ? ` (${enrolledPrimaryTrades.find((t) => t.id === selectedPrimaryTradeId)?.name || 'Selected Primary Trade'})`
+          : '';
+      showToast(`Daily attendance saved to Firestore for ${recordsToSave.length} trainees${primaryLabel}`);
       loadData();
     } catch (err: any) {
       setAutoSavingAttendance('error');
@@ -757,9 +844,13 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
       alert(activeDayLock.lockReason || `Auto-absent is disabled on Holiday ("${activeDayLock.title}" — ${attendanceDate}).`);
       return;
     }
-    if (!confirm(`Run automatic absent recording for any trainees who have not recorded attendance by ${officerCutoff24} (${officerCutoff12})?`)) return;
+    const targetPrimary = selectedPrimaryTradeId !== 'all' ? selectedPrimaryTradeId : undefined;
+    const primaryTradeLabel = targetPrimary
+      ? enrolledPrimaryTrades.find((t) => t.id === targetPrimary)?.name || targetPrimary
+      : 'all enrolled trades';
+    if (!confirm(`Run automatic absent recording for unmarked trainees (${primaryTradeLabel}) who have not recorded attendance by ${officerCutoff24} (${officerCutoff12})?`)) return;
     try {
-      const res = await triggerAutoAbsent(attendanceDate, selectedTradeId);
+      const res = await triggerAutoAbsent(attendanceDate, selectedTradeId, targetPrimary);
       showToast(`Auto-absent executed. ${res.markedCount} unmarked trainees flagged as Absent.`);
       loadData();
     } catch (err: any) {
@@ -781,8 +872,13 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
         gender: tr.gender,
         dob: tr.dob,
         status: tr.status,
+        tradeId: tr.tradeId,
       });
     } else {
+      if (currentTrade?.isCommonTrade) {
+        showToast('Common trade enrollments use existing trainees. Register trainees under their primary trade.');
+        return;
+      }
       setEditingTrainee(null);
       const nextRollNum = trainees.length + 1;
       setTraineeForm({
@@ -795,6 +891,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
         gender: 'Male',
         dob: '2005-01-01',
         status: 'active',
+        tradeId: selectedTradeId,
       });
     }
     setTraineeModalOpen(true);
@@ -927,6 +1024,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
     try {
       await issueWarning({
         traineeId: warningTrainee.id,
+        tradeId: selectedTradeId,
         officerId: officer.id,
         officerName: officer.name,
         attendancePercent: warningTrainee.percent,
@@ -1208,6 +1306,18 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                       }`}
                     >
                       <span>{t.name}</span>
+                      {t.isCommonTrade && (
+                        <span
+                          className={`inline-flex items-center gap-0.5 text-[9px] uppercase px-1.5 py-0.5 rounded font-bold ${
+                            isSelected
+                              ? 'bg-indigo-500/40 text-white border border-indigo-300/40'
+                              : 'bg-indigo-100 text-indigo-800 border border-indigo-200'
+                          }`}
+                        >
+                          <Link2 className="w-2.5 h-2.5" />
+                          Common
+                        </span>
+                      )}
                       <span
                         className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
                           isSelected ? 'bg-emerald-800 text-emerald-100' : 'bg-slate-200 text-slate-700'
@@ -1222,24 +1332,9 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
               </div>
             ) : (
               <div className="flex items-center gap-2">
-                <span className="italic text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                  No trade assigned yet by Admin
+                <span className="italic text-amber-800 bg-amber-50 px-2.5 py-1 rounded border border-amber-200 font-medium">
+                  No trade or common subject assigned yet — Contact Admin for assignment
                 </span>
-                <select
-                  value={selectedTradeId}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setSelectedTradeId(val);
-                    onUpdatePreferences?.({ selectedTradeId: val });
-                  }}
-                  className="bg-white border border-slate-300 rounded px-2 py-1 font-medium text-slate-800 cursor-pointer"
-                >
-                  {activeTradePool.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} ({t.code})
-                    </option>
-                  ))}
-                </select>
               </div>
             )}
           </div>
@@ -1247,7 +1342,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
           <div className="text-[11px] text-slate-500 flex items-center gap-1">
             <span>Active Workshop:</span>
             <span className="font-semibold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-              {currentTrade?.workshopLocation || 'Main Campus Workshop'}
+              {currentTrade?.workshopLocation || 'Unassigned'}
             </span>
           </div>
         </div>
@@ -1341,7 +1436,9 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                   badge: leaves.filter((l) => l.status === 'pending').length,
                   badgeType: 'warning',
                 },
-              ].map((item) => {
+              ]
+                .filter((item) => !isCommonTradeContext || COMMON_TRADE_ALLOWED_TABS.includes(item.id as OfficerTab))
+                .map((item) => {
                 const Icon = item.icon;
                 const isActive = activeTab === item.id;
                 return (
@@ -1391,7 +1488,9 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                 },
                 { id: 'inventory', label: 'Workshop Inventory', hindi: 'सामग्री स्टॉक', icon: Wrench },
                 { id: 'indents', label: 'Indent Register', hindi: 'टूल निर्गमन', icon: BookOpen },
-              ].map((item) => {
+              ]
+                .filter((item) => !isCommonTradeContext || COMMON_TRADE_ALLOWED_TABS.includes(item.id as OfficerTab))
+                .map((item) => {
                 const Icon = item.icon;
                 const isActive = activeTab === item.id;
                 return (
@@ -1435,7 +1534,9 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                 { id: 'weekly_plans', label: 'Weekly Teaching Plan', hindi: 'साप्ताहिक शिक्षण', icon: CalendarCheck2 },
                 { id: 'assessments', label: 'Digital Progress Card', hindi: 'डिजिटल प्रगति पत्रक', icon: BarChart3 },
                 { id: 'documents', label: 'Circulars & Study Files', hindi: 'दस्तावेज़ व अध्ययन सामग्री', icon: FolderOpen },
-              ].map((item) => {
+              ]
+                .filter((item) => !isCommonTradeContext || COMMON_TRADE_ALLOWED_TABS.includes(item.id as OfficerTab))
+                .map((item) => {
                 const Icon = item.icon;
                 const isActive = activeTab === item.id;
                 return (
@@ -1462,6 +1563,12 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                 );
               })}
             </div>
+            {isCommonTradeContext && (
+              <div className="mt-2 px-3 py-2 rounded-xl bg-indigo-950/70 border border-indigo-700/60 text-[10px] text-indigo-200 leading-relaxed">
+                <span className="font-bold text-indigo-100 block">Common Trade Mode</span>
+                Primary trade modules (Leaves, Roster CRUD, Warnings, Inventory, Indents, Demo Plans &amp; Progress Card) are restricted.
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1497,7 +1604,9 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                   badge: leaves.filter((l) => l.status === 'pending').length,
                   badgeType: 'warning',
                 },
-              ].map((item) => {
+              ]
+                .filter((item) => !isCommonTradeContext || COMMON_TRADE_ALLOWED_TABS.includes(item.id as OfficerTab))
+                .map((item) => {
                 const Icon = item.icon;
                 const isActive = activeTab === item.id;
                 return (
@@ -1545,7 +1654,9 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                 },
                 { id: 'inventory', label: 'Workshop Inventory', hindi: 'सामग्री स्टॉक', icon: Wrench },
                 { id: 'indents', label: 'Indent Register', hindi: 'टूल निर्गमन', icon: BookOpen },
-              ].map((item) => {
+              ]
+                .filter((item) => !isCommonTradeContext || COMMON_TRADE_ALLOWED_TABS.includes(item.id as OfficerTab))
+                .map((item) => {
                 const Icon = item.icon;
                 const isActive = activeTab === item.id;
                 return (
@@ -1587,7 +1698,9 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                 { id: 'weekly_plans', label: 'Weekly Teaching Plan', hindi: 'साप्ताहिक शिक्षण', icon: CalendarCheck2 },
                 { id: 'assessments', label: 'Digital Progress Card', hindi: 'डिजिटल प्रगति पत्रक', icon: BarChart3 },
                 { id: 'documents', label: 'Circulars & Study Files', hindi: 'दस्तावेज़ व अध्ययन सामग्री', icon: FolderOpen },
-              ].map((item) => {
+              ]
+                .filter((item) => !isCommonTradeContext || COMMON_TRADE_ALLOWED_TABS.includes(item.id as OfficerTab))
+                .map((item) => {
                 const Icon = item.icon;
                 const isActive = activeTab === item.id;
                 return (
@@ -1612,20 +1725,45 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                 );
               })}
             </div>
+
+            {isCommonTradeContext && (
+              <div className="p-3 rounded-xl bg-indigo-950/70 border border-indigo-700/60 text-[10px] text-indigo-200 leading-relaxed">
+                <span className="font-bold text-indigo-100 block mb-0.5">Common Trade Subject Mode</span>
+                Restricted to Attendance, Form IV/V Registers, Lesson Plans, Weekly Plans &amp; Study Files. Primary trade operations remain isolated.
+              </div>
+            )}
           </div>
         </aside>
 
         {/* Right Main Content Area (lg:col-span-9) */}
         <div id="officer-content-viewport" className="lg:col-span-9 space-y-6 scroll-mt-28 sm:scroll-mt-32">
+      {officerTrades.length === 0 ? (
+        <div className="bg-white rounded-xl border border-amber-200 p-8 text-center space-y-3 shadow-xs">
+          <ShieldAlert className="w-10 h-10 text-amber-600 mx-auto" />
+          <h3 className="font-bold text-base text-slate-900">No Trade or Common Subject Assigned</h3>
+          <p className="text-xs text-slate-600 max-w-md mx-auto">
+            Your Training Officer account is restricted strictly to trades or shared common subjects assigned by Administration. Ask Admin to assign your trade and click <strong>Sync Assignments</strong> above.
+          </p>
+        </div>
+      ) : (
+        <>
 
       {/* TAB 1: DAILY ATTENDANCE */}
       {activeTab === 'attendance' && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-5 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-4">
             <div>
-              <h3 className="font-bold text-sm text-slate-900">
-                Daily Attendance Register — {currentTrade?.name}
-              </h3>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-bold text-sm text-slate-900">
+                  Daily Attendance Register — {currentTrade?.name}
+                </h3>
+                {currentTrade?.isCommonTrade && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">
+                    <Link2 className="w-3 h-3" />
+                    Shared Common Subject
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-slate-500">
                 Record or adjust attendance: Present (P), Absent (A), Casual Leave (CL), Medical Leave (ML), or Half-Day (HD).
               </p>
@@ -1753,6 +1891,57 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
             </div>
           )}
 
+          {(isCommonTradeContext || enrolledPrimaryTrades.length > 1) && (
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-indigo-50/70 border border-indigo-200 rounded-xl px-3.5 py-2.5 text-xs">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <label
+                  htmlFor="daily-primary-trade-filter"
+                  className="font-bold text-indigo-950 flex items-center gap-1.5"
+                >
+                  <Filter className="w-3.5 h-3.5 text-indigo-700" />
+                  <span>Select Primary Trade:</span>
+                </label>
+                <select
+                  id="daily-primary-trade-filter"
+                  value={selectedPrimaryTradeId}
+                  onChange={(e) => setSelectedPrimaryTradeId(e.target.value)}
+                  className="px-3 py-1.5 bg-white border border-indigo-300 rounded-lg font-semibold text-slate-900 text-xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                >
+                  <option value="all">All Trades ({trainees.length})</option>
+                  {enrolledPrimaryTrades.map((pt) => (
+                    <option key={pt.id} value={pt.id}>
+                      {pt.name} ({trainees.filter((t) => t.tradeId === pt.id).length})
+                    </option>
+                  ))}
+                </select>
+                {selectedPrimaryTradeId !== 'all' && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPrimaryTradeId('all')}
+                    className="px-2 py-1 text-[11px] font-semibold text-indigo-700 hover:bg-indigo-100 rounded-md cursor-pointer"
+                  >
+                    Show All
+                  </button>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono">
+                <span className="px-2 py-0.5 rounded bg-white border border-indigo-200 text-slate-700 font-semibold">
+                  Showing {filteredDailyTrainees.length} of {trainees.length} trainees
+                </span>
+                <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold">
+                  P: {filteredDailyTrainees.filter((t) => (attendanceEdits[t.id] || 'Present') === 'Present').length}
+                </span>
+                <span className="px-2 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-200 font-bold">
+                  A: {filteredDailyTrainees.filter((t) => attendanceEdits[t.id] === 'Absent').length}
+                </span>
+                <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 font-bold">
+                  L: {filteredDailyTrainees.filter((t) => ['CL', 'Medical Leave', 'Half-Day Leave'].includes(attendanceEdits[t.id] || '')).length}
+                </span>
+              </div>
+            </div>
+          )}
+
           <div className="overflow-x-auto max-w-full border border-slate-200 rounded-lg">
             <div className="sm:hidden flex items-center justify-between text-[11px] text-slate-500 bg-slate-50 px-3 py-1.5 border-b border-slate-200">
               <span>← Scroll table horizontally to view trainee records →</span>
@@ -1769,14 +1958,30 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {trainees.map((tr) => {
+                {filteredDailyTrainees.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-8 px-4 text-center text-xs text-slate-500">
+                      No trainees found for the selected Primary Trade filter.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredDailyTrainees.map((tr) => {
                   const currentStatus = attendanceEdits[tr.id] || 'Present';
                   const record = dayAttendance.find((a) => a.traineeId === tr.id);
+                  const primaryTradeName =
+                    activeTradePool.find((t) => t.id === tr.tradeId)?.name || tr.tradeId;
 
                   return (
                     <tr key={tr.id} className={`transition-colors ${isAttendanceLockedDay ? 'bg-rose-50/20' : 'hover:bg-slate-50/80'}`}>
                       <td className="py-3 px-4">
-                        <div className="font-semibold text-slate-900">{tr.name}</div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-semibold text-slate-900">{tr.name}</span>
+                          {currentTrade?.isCommonTrade && (
+                            <span className="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-800 border border-indigo-200 text-[10px] font-semibold">
+                              {primaryTradeName}
+                            </span>
+                          )}
+                        </div>
                         <div className="font-mono text-[11px] text-slate-500">{tr.rollNo}</div>
                       </td>
 
@@ -1798,6 +2003,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                                   disabled={isAttendanceLockedDay}
                                   onClick={() => {
                                     pendingAttendanceDirtyRef.current = true;
+                                    dirtyTraineeIdsRef.current.add(tr.id);
                                     setAutoSavingAttendance('saving');
                                     setAttendanceEdits({ ...attendanceEdits, [tr.id]: st });
                                   }}
@@ -1865,7 +2071,8 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                       </td>
                     </tr>
                   );
-                })}
+                })
+                )}
               </tbody>
             </table>
           </div>
@@ -1873,19 +2080,29 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
       )}
 
       {/* TAB 2: TRAINEES ROSTER */}
-      {activeTab === 'trainees' && (
+      {activeTab === 'trainees' && !isCommonTradeContext && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
           <div className="p-5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h3 className="font-bold text-sm text-slate-900">
-                Trainees Roster — {currentTrade?.name} ({trainees.length} Enrolled)
-              </h3>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-bold text-sm text-slate-900">
+                  Trainees Roster — {currentTrade?.name} ({trainees.length} Enrolled)
+                </h3>
+                {currentTrade?.isCommonTrade && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">
+                    <Link2 className="w-3 h-3" />
+                    Shared Common Subject
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-slate-500">
-                Manage trainee admissions, roll numbers, and personal details within your trade.
+                {currentTrade?.isCommonTrade
+                  ? 'Linked existing trainees from eligible trades without duplicate registration.'
+                  : 'Manage trainee admissions, roll numbers, and personal details within your trade.'}
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <button
                 onClick={() => {
                   setSelectedRegister('trainee_roster');
@@ -1907,30 +2124,47 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                   className="pl-8 pr-3 py-1.5 text-xs border border-slate-300 rounded-lg w-48 sm:w-60"
                 />
               </div>
-              <button
-                onClick={() => setBulkModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg transition-colors shadow-xs"
-                title="Bulk Import Trainees via Excel / CSV"
-              >
-                <Upload className="w-3.5 h-3.5" />
-                <span>Bulk Excel Upload</span>
-              </button>
-              <button
-                onClick={() => handleOpenTraineeModal()}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add Trainee</span>
-              </button>
+              {currentTrade?.isCommonTrade ? (
+                <span className="px-3 py-1.5 text-[11px] font-semibold text-indigo-800 bg-indigo-50 border border-indigo-200 rounded-lg">
+                  Enrollment synced by Admin
+                </span>
+              ) : (
+                <>
+                  <button
+                    onClick={() => setBulkModalOpen(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg transition-colors shadow-xs"
+                    title="Bulk Import Trainees via Excel / CSV"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Bulk Excel Upload</span>
+                  </button>
+                  <button
+                    onClick={() => handleOpenTraineeModal()}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Trainee</span>
+                  </button>
+                </>
+              )}
             </div>
           </div>
+
+          {currentTrade?.isCommonTrade && (
+            <div className="px-5 py-2.5 bg-indigo-50/70 border-b border-indigo-200 text-[11px] text-indigo-900 flex items-center gap-2">
+              <Link2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+              <span>
+                <strong>Shared Common Subject Roster:</strong> Trainees below remain registered in their original Primary Trades and are automatically linked here using their unique Trainee IDs.
+              </span>
+            </div>
+          )}
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-slate-600">
                   <th className="py-3 px-4 font-semibold">Roll No &amp; Reg No</th>
-                  <th className="py-3 px-4 font-semibold">Trainee Name &amp; Father's Name</th>
+                  <th className="py-3 px-4 font-semibold">Trainee Name &amp; Primary Trade</th>
                   <th className="py-3 px-4 font-semibold">Contact Details</th>
                   <th className="py-3 px-4 font-semibold text-center">Category / Gender</th>
                   <th className="py-3 px-4 font-semibold text-center">Attendance %</th>
@@ -1944,14 +2178,24 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                       st.trainee.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                       st.trainee.rollNo.toLowerCase().includes(searchQuery.toLowerCase())
                   )
-                  .map((st) => (
+                  .map((st) => {
+                    const primaryTradeName =
+                      activeTradePool.find((t) => t.id === st.trainee.tradeId)?.name || st.trainee.tradeId;
+                    return (
                     <tr key={st.trainee.id} className="hover:bg-slate-50/80 transition-colors">
                       <td className="py-3 px-4">
                         <div className="font-mono font-semibold text-slate-900">{st.trainee.rollNo}</div>
                         <div className="font-mono text-[10px] text-slate-500">{st.trainee.registrationNo}</div>
                       </td>
                       <td className="py-3 px-4">
-                        <div className="font-semibold text-slate-900">{st.trainee.name}</div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-semibold text-slate-900">{st.trainee.name}</span>
+                          {currentTrade?.isCommonTrade && (
+                            <span className="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-800 border border-indigo-200 text-[10px] font-semibold">
+                              {primaryTradeName}
+                            </span>
+                          )}
+                        </div>
                         <div className="text-[11px] text-slate-500">S/o: {st.trainee.fatherName}</div>
                       </td>
                       <td className="py-3 px-4">
@@ -1999,17 +2243,19 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
-                          <button
-                            onClick={() => handleDeleteTrainee(st.trainee.id)}
-                            className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded"
-                            title="Delete Trainee"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          {!currentTrade?.isCommonTrade && (
+                            <button
+                              onClick={() => handleDeleteTrainee(st.trainee.id)}
+                              className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded"
+                              title="Delete Trainee"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
-                  ))}
+                  );})}
               </tbody>
             </table>
           </div>
@@ -2017,7 +2263,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
       )}
 
       {/* TAB 3: LEAVE APPROVALS */}
-      {activeTab === 'leaves' && (
+      {activeTab === 'leaves' && !isCommonTradeContext && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
           <div className="p-5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4">
             <div>
@@ -2139,6 +2385,9 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
         <OfficerRegisters
           officer={currentOfficer}
           currentTrade={currentTrade}
+          trades={activeTradePool}
+          selectedPrimaryTradeId={selectedPrimaryTradeId}
+          onPrimaryTradeChange={setSelectedPrimaryTradeId}
           selectedSessionId={selectedSessionId}
           sessions={sessions}
           trainees={trainees}
@@ -2153,7 +2402,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
       )}
 
       {/* TAB 5: WARNINGS & ALERTS - BILINGUAL HINDI & ENGLISH */}
-      {activeTab === 'warnings' && (
+      {activeTab === 'warnings' && !isCommonTradeContext && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-5 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-4">
             <div>
@@ -2294,7 +2543,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
       )}
 
       {/* TAB 6: WORKSHOP INVENTORY */}
-      {activeTab === 'inventory' && (
+      {activeTab === 'inventory' && !isCommonTradeContext && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
           <div className="p-5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4">
             <div>
@@ -2405,7 +2654,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
       )}
 
       {/* TAB 7: INDENT REGISTERS */}
-      {activeTab === 'indents' && (
+      {activeTab === 'indents' && !isCommonTradeContext && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
           <div className="p-5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4">
             <div>
@@ -2512,7 +2761,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
       )}
 
       {/* TAB: DEMONSTRATION PLAN SCHEDULER */}
-      {activeTab === 'demonstration_plans' && (
+      {activeTab === 'demonstration_plans' && !isCommonTradeContext && (
         <DemonstrationPlanManager tradeId={selectedTradeId} tradeName={currentTrade?.name || 'Trade'} officerName={currentOfficer.name} />
       )}
 
@@ -2522,11 +2771,13 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
       )}
 
       {/* TAB: DIGITAL PROGRESS CARD */}
-      {activeTab === 'assessments' && (
+      {activeTab === 'assessments' && !isCommonTradeContext && (
         <DigitalProgressCardTracker
           tradeId={selectedTradeId}
           tradeName={currentTrade?.name || 'Trade'}
           tradeCode={currentTrade?.code}
+          isCommonTrade={Boolean(currentTrade?.isCommonTrade)}
+          trades={activeTradePool}
           officerName={currentOfficer.name}
           sessions={sessions}
           settings={settings}
@@ -2656,6 +2907,44 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                   />
                 </div>
               </div>
+
+              {editingTrainee && (
+                <div className="grid grid-cols-2 gap-3 pt-1 border-t border-slate-100">
+                  <div>
+                    <label className="block font-medium mb-1">Primary Trade</label>
+                    <select
+                      value={traineeForm.tradeId}
+                      onChange={(e) => setTraineeForm({ ...traineeForm, tradeId: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded bg-white"
+                    >
+                      {activeTradePool
+                        .filter((t) => !t.isCommonTrade)
+                        .map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.name}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block font-medium mb-1">Enrollment Status</label>
+                    <select
+                      value={traineeForm.status}
+                      onChange={(e) =>
+                        setTraineeForm({
+                          ...traineeForm,
+                          status: e.target.value as 'active' | 'inactive' | 'passed_out',
+                        })
+                      }
+                      className="w-full px-3 py-2 border border-slate-300 rounded bg-white"
+                    >
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                      <option value="passed_out">Passed Out</option>
+                    </select>
+                  </div>
+                </div>
+              )}
 
               <div className="pt-3 flex gap-2">
                 <button
@@ -3514,6 +3803,8 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
             </form>
           </div>
         </div>
+      )}
+        </>
       )}
         </div>
       </div>

@@ -33,6 +33,7 @@ import type {
   StoredDocumentRecord,
   UserPreferences,
   AuthSessionRecord,
+  TradeEnrollment,
 } from '../types.ts';
 
 export interface DatabaseSchema {
@@ -41,6 +42,7 @@ export interface DatabaseSchema {
   monthlyWorkingDays: MonthlyWorkingDay[];
   holidays: HolidayRecord[];
   trades: Trade[];
+  tradeEnrollments: TradeEnrollment[];
   officers: TrainingOfficer[];
   trainees: Trainee[];
   attendance: AttendanceRecord[];
@@ -358,6 +360,7 @@ function getInitialDatabase(): DatabaseSchema {
     monthlyWorkingDays,
     holidays: [],
     trades,
+    tradeEnrollments: [],
     officers,
     trainees: [],
     attendance: [],
@@ -422,11 +425,15 @@ class Database {
         const cleanWeeklyPlans = (Array.isArray(parsed.weeklyPlans) ? parsed.weeklyPlans : []).filter((p: any) => !isDemoIdOrName(p));
         const cleanAuditLogs = (Array.isArray(parsed.auditLogs) ? parsed.auditLogs : []).filter((log: any) => !isDemoIdOrName(log));
         const cleanHolidays = (Array.isArray(parsed.holidays) ? parsed.holidays : []).filter((h: any) => !isDemoIdOrName(h));
+        const cleanTradeEnrollments = (Array.isArray(parsed.tradeEnrollments) ? parsed.tradeEnrollments : []).filter(
+          (e: any) => validTraineeIds.has(e.traineeId) && !isDemoIdOrName(e)
+        );
 
         const merged: DatabaseSchema = {
           ...initial,
           ...parsed,
           holidays: cleanHolidays,
+          tradeEnrollments: cleanTradeEnrollments,
           trainees: cleanTrainees,
           attendance: cleanAttendance,
           assessments: cleanAssessments,
@@ -524,6 +531,9 @@ class Database {
           },
           sessions: Array.isArray(cloudData.sessions) && cloudData.sessions.length > 0 ? cloudData.sessions : this.data.sessions,
           trades: Array.isArray(cloudData.trades) && cloudData.trades.length > 0 ? cloudData.trades : this.data.trades,
+          tradeEnrollments: (Array.isArray(cloudData.tradeEnrollments) ? cloudData.tradeEnrollments : []).filter(
+            (e: any) => validTraineeIds.has(e.traineeId) && !isDemoIdOrName(e)
+          ),
           officers: Array.isArray(cloudData.officers) && cloudData.officers.length > 0 ? cloudData.officers : this.data.officers,
           trainees: cleanTrainees,
           attendance: (Array.isArray(cloudData.attendance) ? cloudData.attendance : []).filter(
@@ -663,6 +673,7 @@ class Database {
 
   public get(): DatabaseSchema {
     if (!Array.isArray(this.data.holidays)) this.data.holidays = [];
+    if (!Array.isArray(this.data.tradeEnrollments)) this.data.tradeEnrollments = [];
     if (!Array.isArray(this.data.assessments)) this.data.assessments = [];
     if (!Array.isArray(this.data.lessonPlans)) this.data.lessonPlans = [];
     if (!Array.isArray(this.data.demonstrationPlans)) this.data.demonstrationPlans = [];
@@ -709,6 +720,9 @@ class Database {
     const cleanDemoPlans = (Array.isArray(rawData.demonstrationPlans) ? rawData.demonstrationPlans : []).filter((p: any) => !isDemoIdOrName(p));
     const cleanWeeklyPlans = (Array.isArray(rawData.weeklyPlans) ? rawData.weeklyPlans : []).filter((p: any) => !isDemoIdOrName(p));
     const cleanAuditLogs = (Array.isArray(rawData.auditLogs) ? rawData.auditLogs : []).filter((log: any) => !isDemoIdOrName(log));
+    const cleanTradeEnrollments = (Array.isArray(rawData.tradeEnrollments) ? rawData.tradeEnrollments : []).filter(
+      (e: any) => validTraineeIds.has(e.traineeId) && !isDemoIdOrName(e)
+    );
 
     const merged: DatabaseSchema = {
       ...initial,
@@ -716,6 +730,7 @@ class Database {
       settings: rawData.settings ? { ...initial.settings, ...rawData.settings } : initial.settings,
       sessions: Array.isArray(rawData.sessions) && rawData.sessions.length > 0 ? rawData.sessions : initial.sessions,
       trades: Array.isArray(rawData.trades) && rawData.trades.length > 0 ? rawData.trades : initial.trades,
+      tradeEnrollments: cleanTradeEnrollments,
       officers: Array.isArray(rawData.officers) && rawData.officers.length > 0 ? rawData.officers : initial.officers,
       trainees: cleanTrainees,
       monthlyWorkingDays: Array.isArray(rawData.monthlyWorkingDays) ? rawData.monthlyWorkingDays : initial.monthlyWorkingDays,

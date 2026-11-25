@@ -71,6 +71,9 @@ interface OfficerRegistersProps {
     employeeId?: string;
   };
   currentTrade?: Trade;
+  trades?: Trade[];
+  selectedPrimaryTradeId?: string;
+  onPrimaryTradeChange?: (tradeId: string) => void;
   selectedSessionId: string;
   sessions: AcademicSession[];
   trainees: Trainee[];
@@ -86,6 +89,9 @@ interface OfficerRegistersProps {
 export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
   officer,
   currentTrade,
+  trades = [],
+  selectedPrimaryTradeId,
+  onPrimaryTradeChange,
   selectedSessionId,
   sessions,
   trainees,
@@ -97,7 +103,38 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
   holidays = [],
   initialRegister = 'monthly_attendance',
 }) => {
-  const [activeRegister, setActiveRegister] = useState<RegisterType>(initialRegister);
+  const isCommonTrade = Boolean(currentTrade?.isCommonTrade);
+  const [activeRegister, setActiveRegister] = useState<RegisterType>(() => {
+    if (
+      Boolean(currentTrade?.isCommonTrade) &&
+      initialRegister !== 'daily_attendance' &&
+      initialRegister !== 'monthly_attendance'
+    ) {
+      return 'daily_attendance';
+    }
+    return initialRegister;
+  });
+
+  const [internalPrimaryTradeId, setInternalPrimaryTradeId] = useState<string>('all');
+  const effectivePrimaryTradeId = selectedPrimaryTradeId ?? internalPrimaryTradeId;
+  const handlePrimaryTradeChange = (val: string) => {
+    setInternalPrimaryTradeId(val);
+    onPrimaryTradeChange?.(val);
+  };
+
+  useEffect(() => {
+    setInternalPrimaryTradeId('all');
+  }, [currentTrade?.id]);
+
+  useEffect(() => {
+    if (
+      isCommonTrade &&
+      activeRegister !== 'daily_attendance' &&
+      activeRegister !== 'monthly_attendance'
+    ) {
+      setActiveRegister('daily_attendance');
+    }
+  }, [isCommonTrade, activeRegister]);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -164,7 +201,7 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
       window.removeEventListener('resize', measure);
       if (observer) observer.disconnect();
     };
-  }, [printModalOpen, activeRegister, dailyDate, selectedMonth, searchQuery]);
+  }, [printModalOpen, activeRegister, dailyDate, selectedMonth, searchQuery, effectivePrimaryTradeId]);
 
   const availableStageInnerWidth = Math.max(240, previewStageWidth - (previewStageWidth < 640 ? 20 : 48));
   const fitScale = Math.min(1, Math.max(0.24, availableStageInnerWidth / naturalSheetWidth));
@@ -243,6 +280,37 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
     setSelectedMonth((prev) => stepMonthKey(prev, 1));
   };
 
+  const enrolledPrimaryTrades = useMemo(() => {
+    const ids = Array.from(
+      new Set(
+        trainees
+          .map((tr) => tr.tradeId)
+          .filter((id): id is string => Boolean(id) && id !== currentTrade?.id)
+      )
+    );
+    return ids
+      .map((id) => trades.find((t) => t.id === id) || ({ id, name: id, code: id } as Trade))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [trainees, currentTrade?.id, trades]);
+
+  const selectedPrimaryTradeObj = useMemo(
+    () =>
+      effectivePrimaryTradeId === 'all'
+        ? null
+        : enrolledPrimaryTrades.find((t) => t.id === effectivePrimaryTradeId) || null,
+    [effectivePrimaryTradeId, enrolledPrimaryTrades]
+  );
+
+  const primaryFilteredTrainees = useMemo(() => {
+    if (effectivePrimaryTradeId === 'all') return trainees;
+    return trainees.filter((tr) => tr.tradeId === effectivePrimaryTradeId);
+  }, [trainees, effectivePrimaryTradeId]);
+
+  const getPrimaryTradeLabel = (tradeId: string) => {
+    const found = trades.find((t) => t.id === tradeId);
+    return found ? found.name : tradeId;
+  };
+
   // Trainee stats for overall Form I roster & CSV using exact working-day formula
   const traineeStatsMap = useMemo(() => {
     const map = new Map<
@@ -259,7 +327,7 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
       }
     >();
 
-    trainees.forEach((tr) => {
+    primaryFilteredTrainees.forEach((tr) => {
       const records = allAttendance.filter((a) => a.traineeId === tr.id);
       const trSession = sessions.find((s) => s.id === (tr.sessionId || selectedSessionId));
       const metrics = calculateTraineeAttendanceMetrics({
@@ -285,11 +353,11 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
     });
 
     return map;
-  }, [trainees, allAttendance, holidays, selectedSessionId, sessions, todayIst, settings.minimumAttendancePercent]);
+  }, [primaryFilteredTrainees, allAttendance, holidays, selectedSessionId, sessions, todayIst, settings.minimumAttendancePercent]);
 
   // 1. Daily Attendance Data
   const dailyAttendanceData = useMemo(() => {
-    return trainees
+    return primaryFilteredTrainees
       .map((tr) => {
         const record = isDailyHolidayLocked
           ? undefined
@@ -314,7 +382,7 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
           item.trainee.rollNo.toLowerCase().includes(q)
         );
       });
-  }, [trainees, allAttendance, dailyDate, searchQuery, isDailyHolidayLocked]);
+  }, [primaryFilteredTrainees, allAttendance, dailyDate, searchQuery, isDailyHolidayLocked]);
 
   // 2. Monthly Attendance Matrix Data (Excludes Sundays, 2nd/3rd Saturdays, Admin Holidays; Formula: Present / Total Working Days * 100)
   const monthlyMatrixData = useMemo(() => {
@@ -322,7 +390,7 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
     const lastDayStr =
       monthDaysInfo.days[monthDaysInfo.days.length - 1]?.dateStr || `${selectedMonth}-28`;
 
-    return trainees
+    return primaryFilteredTrainees
       .map((tr) => {
         const records = allAttendance.filter((a) => a.traineeId === tr.id);
         const metrics = calculateTraineeAttendanceMetrics({
@@ -389,7 +457,7 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
         );
       });
   }, [
-    trainees,
+    primaryFilteredTrainees,
     allAttendance,
     monthDaysInfo,
     selectedMonth,
@@ -510,22 +578,34 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
     let filename = '';
     let csvContent = '\uFEFF'; // UTF-8 BOM
 
+    const primaryFilterSuffix = selectedPrimaryTradeObj ? `_Primary_${selectedPrimaryTradeObj.code}` : '';
+    const primaryFilterHeaderLine =
+      isCommonTrade || selectedPrimaryTradeObj
+        ? `"Primary Trade Filter: ${
+            selectedPrimaryTradeObj
+              ? `${selectedPrimaryTradeObj.name} (${selectedPrimaryTradeObj.code})`
+              : 'All Enrolled Primary Trades'
+          }"`
+        : null;
+
     // Standard Header for all exports
     const govHeader = [
       `"GOVERNMENT INDUSTRIAL TRAINING INSTITUTE, RAIGARH (CHHATTISGARH)"`,
       `"DIRECTORATE OF EMPLOYMENT & TRAINING, GOVT. OF CHHATTISGARH"`,
       `"Trade: ${currentTrade?.name || 'Trade'} (${currentTrade?.code || 'TRD'}) | Session: ${activeSessionObj?.name || '2025-2026'}"`,
+      ...(primaryFilterHeaderLine ? [primaryFilterHeaderLine] : []),
       `"Training Officer: ${officer.name} (${officer.employeeId || 'CG-ITI-TO-1042'})"`,
       `"Generated On: ${formatIstDateTime()} (IST)"`,
       `""`,
     ].join('\n');
 
     if (activeRegister === 'daily_attendance') {
-      filename = `ITI_Raigarh_${currentTrade?.code}_Daily_Attendance_Register_${dailyDate}.csv`;
+      filename = `ITI_Raigarh_${currentTrade?.code}${primaryFilterSuffix}_Daily_Attendance_Register_${dailyDate}.csv`;
       const header = [
         'S.No.',
         'Roll No',
         'Trainee Name',
+        ...(isCommonTrade ? ['Primary Trade'] : []),
         'Father Name',
         'Gender',
         'Category',
@@ -539,6 +619,7 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
         idx + 1,
         d.trainee.rollNo,
         d.trainee.name,
+        ...(isCommonTrade ? [getPrimaryTradeLabel(d.trainee.tradeId)] : []),
         d.trainee.fatherName || '-',
         d.trainee.gender,
         d.trainee.category,
@@ -553,12 +634,13 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
         `"FORM IV - DAILY MUSTER ROLL & GPS ATTENDANCE REGISTER - Date: ${dailyDate}"\n` +
         [header.join(','), ...rows.map((r) => r.map((c) => `"${c}"`).join(','))].join('\n');
     } else if (activeRegister === 'monthly_attendance') {
-      filename = `ITI_Raigarh_${currentTrade?.code}_Monthly_Attendance_Register_${selectedMonth}.csv`;
+      filename = `ITI_Raigarh_${currentTrade?.code}${primaryFilterSuffix}_Monthly_Attendance_Register_${selectedMonth}.csv`;
       const dayHeaders = monthDaysInfo.days.map((d) => `Day ${d.dayNumber} (${d.dayName})`);
       const header = [
         'S.No.',
         'Roll No',
         'Trainee Name',
+        ...(isCommonTrade ? ['Primary Trade'] : []),
         ...dayHeaders,
         'Present (P)',
         'Leaves (L)',
@@ -571,6 +653,7 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
         idx + 1,
         m.trainee.rollNo,
         m.trainee.name,
+        ...(isCommonTrade ? [getPrimaryTradeLabel(m.trainee.tradeId)] : []),
         ...monthDaysInfo.days.map((d) => m.dailyStatuses[d.dayNumber] || '-'),
         m.presentCount,
         m.leaveCount,
@@ -818,6 +901,10 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
     },
   ];
 
+  const visibleRegisterTabs = isCommonTrade
+    ? registerTabs.filter((t) => t.id === 'daily_attendance' || t.id === 'monthly_attendance')
+    : registerTabs;
+
   return (
     <div className="space-y-6">
       {/* Top Registers Control Banner */}
@@ -860,9 +947,13 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
           </div>
         </div>
 
-        {/* 7-Segment Register Switcher Bar - Bold High-Contrast Menu */}
-        <div className="pt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2 sm:gap-2.5">
-          {registerTabs.map((tab) => {
+        {/* Register Switcher Bar - Bold High-Contrast Menu */}
+        <div
+          className={`pt-4 grid grid-cols-2 gap-2 sm:gap-2.5 ${
+            isCommonTrade ? 'sm:grid-cols-2 max-w-2xl' : 'sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7'
+          }`}
+        >
+          {visibleRegisterTabs.map((tab) => {
             const Icon = tab.icon;
             const isCurrent = activeRegister === tab.id;
             return (
@@ -968,7 +1059,30 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
                 </p>
               </div>
 
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 text-xs w-full sm:w-auto">
+              <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 text-xs w-full sm:w-auto">
+                {(isCommonTrade || enrolledPrimaryTrades.length > 1) && (
+                  <div className="flex items-center justify-between sm:justify-start gap-1.5 bg-indigo-50 border border-indigo-300 rounded-lg px-2.5 py-1.5">
+                    <label
+                      htmlFor="form4-primary-trade-filter"
+                      className="text-indigo-900 font-bold whitespace-nowrap"
+                    >
+                      Select Primary Trade:
+                    </label>
+                    <select
+                      id="form4-primary-trade-filter"
+                      value={effectivePrimaryTradeId}
+                      onChange={(e) => handlePrimaryTradeChange(e.target.value)}
+                      className="bg-transparent font-semibold text-slate-900 focus:outline-hidden cursor-pointer"
+                    >
+                      <option value="all">All Trades ({trainees.length})</option>
+                      {enrolledPrimaryTrades.map((pt) => (
+                        <option key={pt.id} value={pt.id}>
+                          {pt.name} ({trainees.filter((t) => t.tradeId === pt.id).length})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div className="flex items-center justify-between sm:justify-start gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5">
                   <span className="text-slate-500 font-medium">Select Date:</span>
                   <input
@@ -1009,7 +1123,7 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
               <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
                 <span className="text-slate-500 text-[11px]">Enrolled Strength</span>
                 <div className="text-lg font-bold text-slate-900 font-mono mt-0.5">
-                  {trainees.length} Trainees
+                  {primaryFilteredTrainees.length} Trainees
                 </div>
               </div>
               <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-200">
@@ -1040,7 +1154,7 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
               <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 col-span-2 sm:col-span-1">
                 <span className="text-blue-800 text-[11px]">Day Turnout Ratio</span>
                 <div className="text-lg font-bold text-blue-700 font-mono mt-0.5">
-                  {trainees.length > 0
+                  {primaryFilteredTrainees.length > 0
                     ? Math.round(
                         (dailyAttendanceData.filter(
                           (d) =>
@@ -1048,7 +1162,7 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
                             d.status === 'CL' ||
                             d.status === 'Medical Leave'
                         ).length /
-                          trainees.length) *
+                          primaryFilteredTrainees.length) *
                           100
                       )
                     : 0}
@@ -1085,7 +1199,14 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
                         {d.trainee.rollNo}
                       </td>
                       <td className="py-2.5 px-3">
-                        <div className="font-semibold text-slate-900">{d.trainee.name}</div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-semibold text-slate-900">{d.trainee.name}</span>
+                          {isCommonTrade && (
+                            <span className="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-800 border border-indigo-200 text-[10px] font-semibold">
+                              {getPrimaryTradeLabel(d.trainee.tradeId)}
+                            </span>
+                          )}
+                        </div>
                         <div className="text-[11px] text-slate-500">
                           S/O: {d.trainee.fatherName || 'Shri Lalit Kumar'}
                         </div>
@@ -1170,7 +1291,31 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
                 </p>
               </div>
 
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 text-xs w-full sm:w-auto">
+              <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 text-xs w-full sm:w-auto">
+                {(isCommonTrade || enrolledPrimaryTrades.length > 1) && (
+                  <div className="flex items-center justify-between sm:justify-start gap-1.5 bg-indigo-50 border border-indigo-300 rounded-lg px-2.5 py-1.5">
+                    <label
+                      htmlFor="form5-primary-trade-filter"
+                      className="text-indigo-900 font-bold whitespace-nowrap"
+                    >
+                      Select Primary Trade:
+                    </label>
+                    <select
+                      id="form5-primary-trade-filter"
+                      value={effectivePrimaryTradeId}
+                      onChange={(e) => handlePrimaryTradeChange(e.target.value)}
+                      className="bg-transparent font-semibold text-slate-900 focus:outline-hidden cursor-pointer"
+                    >
+                      <option value="all">All Trades ({trainees.length})</option>
+                      {enrolledPrimaryTrades.map((pt) => (
+                        <option key={pt.id} value={pt.id}>
+                          {pt.name} ({trainees.filter((t) => t.tradeId === pt.id).length})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
                 {/* Month Navigator */}
                 <div className="flex items-center justify-between sm:justify-start gap-1 bg-slate-100 rounded-lg p-1 border border-slate-200">
                   <button
@@ -1313,12 +1458,17 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
                         {idx + 1}
                       </td>
                       <td className="py-2 px-2.5 sticky left-10 bg-white z-10 shadow-xs">
-                        <div className="font-semibold text-slate-900 truncate max-w-[130px]">
+                        <div className="font-semibold text-slate-900 truncate max-w-[140px]">
                           {m.trainee.name}
                         </div>
-                        <div className="font-mono text-[10px] text-slate-500 truncate max-w-[130px]">
+                        <div className="font-mono text-[10px] text-slate-500 truncate max-w-[140px]">
                           {m.trainee.rollNo}
                         </div>
+                        {isCommonTrade && (
+                          <div className="text-[9px] font-semibold text-indigo-700 truncate max-w-[140px]">
+                            {getPrimaryTradeLabel(m.trainee.tradeId)}
+                          </div>
+                        )}
                       </td>
                       {monthDaysInfo.days.map((d) => {
                         const val = m.dailyStatuses[d.dayNumber] || '-';
@@ -1395,7 +1545,7 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
         )}
 
         {/* ---------------- REGISTER 3: LEAVE REGISTER ---------------- */}
-        {activeRegister === 'leave_register' && (
+        {activeRegister === 'leave_register' && !isCommonTrade && (
           <div className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200 pb-3">
               <div>
@@ -1529,7 +1679,7 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
         )}
 
         {/* ---------------- REGISTER 4: WORKSHOP INVENTORY REGISTER ---------------- */}
-        {activeRegister === 'workshop_inventory' && (
+        {activeRegister === 'workshop_inventory' && !isCommonTrade && (
           <div className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200 pb-3">
               <div>
@@ -1658,7 +1808,7 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
         )}
 
         {/* ---------------- REGISTER 5: TOOLS & EQUIPMENTS REGISTER (DGT COMPLIANCE) ---------------- */}
-        {activeRegister === 'tools_equipments' && (
+        {activeRegister === 'tools_equipments' && !isCommonTrade && (
           <div className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200 pb-3">
               <div>
@@ -1748,7 +1898,7 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
         )}
 
         {/* ---------------- REGISTER 6: INDENT REGISTER (ISSUE & RETURN) ---------------- */}
-        {activeRegister === 'indent_register' && (
+        {activeRegister === 'indent_register' && !isCommonTrade && (
           <div className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200 pb-3">
               <div>
@@ -1858,7 +2008,7 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
         )}
 
         {/* ---------------- REGISTER 7: TRAINEE ROSTER / ADMISSION REGISTER ---------------- */}
-        {activeRegister === 'trainee_roster' && (
+        {activeRegister === 'trainee_roster' && !isCommonTrade && (
           <div className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200 pb-3">
               <div>
@@ -2195,6 +2345,14 @@ export const OfficerRegisters: React.FC<OfficerRegistersProps> = ({
                           <span className="font-semibold">Date of Report:</span> {new Date().toLocaleDateString('en-IN', { timeZone: IST_TIMEZONE })} (IST)
                         </div>
                       </div>
+                      {(isCommonTrade || selectedPrimaryTradeObj) && (
+                        <div className="text-xs font-mono text-indigo-900 bg-indigo-50 border border-indigo-200 rounded px-2.5 py-1 inline-block mt-1">
+                          <span className="font-semibold">Primary Trade Filter:</span>{' '}
+                          {selectedPrimaryTradeObj
+                            ? `${selectedPrimaryTradeObj.name} (${selectedPrimaryTradeObj.code})`
+                            : 'All Enrolled Primary Trades'}
+                        </div>
+                      )}
                     </div>
 
                     {/* Printable Table Content Preview (Contained strictly inside report page boundaries) */}

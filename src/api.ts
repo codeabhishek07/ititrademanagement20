@@ -23,6 +23,7 @@ import {
   DocumentCategory,
   UserPreferences,
   UserRole,
+  TradeEnrollment,
 } from './types.ts';
 import {
   getCachedData,
@@ -177,11 +178,14 @@ export async function fetchBootstrap() {
     settings: SystemSettings;
     sessions: AcademicSession[];
     trades: Trade[];
+    tradeEnrollments?: TradeEnrollment[];
     holidays?: HolidayRecord[];
     stats: {
       totalTrades: number;
+      totalCommonTrades?: number;
       totalOfficers: number;
       totalTrainees: number;
+      totalCommonEnrollments?: number;
       totalInventoryItems: number;
     };
   }>('iti_cache_bootstrap', () => fetch('/api/bootstrap', { cache: 'no-store' }));
@@ -394,77 +398,135 @@ export async function deleteHoliday(id: string) {
 }
 
 export async function fetchTrades(): Promise<Trade[]> {
-  return fetchWithOfflineCache<Trade[]>('iti_cache_trades', () => fetch('/api/trades'), []);
+  return fetchWithOfflineCache<Trade[]>('iti_cache_trades', () => apiFetch('/api/trades'), []);
 }
 
 export async function createTrade(trade: Partial<Trade>) {
-  const res = await fetch('/api/trades', {
+  const res = await apiFetch('/api/trades', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(trade),
   });
-  if (!res.ok) throw new Error('Failed to create trade');
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Failed to create trade');
+  return data;
 }
 
 export async function updateTrade(id: string, trade: Partial<Trade>) {
-  const res = await fetch(`/api/trades/${id}`, {
+  const res = await apiFetch(`/api/trades/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(trade),
   });
-  if (!res.ok) throw new Error('Failed to update trade');
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Failed to update trade');
+  return data;
 }
 
 export async function deleteTrade(id: string) {
-  const res = await fetch(`/api/trades/${id}`, { method: 'DELETE' });
-  if (!res.ok) throw new Error('Failed to delete trade');
-  return res.json();
+  const res = await apiFetch(`/api/trades/${id}`, { method: 'DELETE' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Failed to delete trade');
+  return data;
+}
+
+export async function fetchTradeEnrollments(params?: {
+  tradeId?: string;
+  traineeId?: string;
+  includeRemoved?: boolean;
+}): Promise<TradeEnrollment[]> {
+  const sp = new URLSearchParams();
+  if (params?.tradeId) sp.append('tradeId', params.tradeId);
+  if (params?.traineeId) sp.append('traineeId', params.traineeId);
+  if (params?.includeRemoved) sp.append('includeRemoved', 'true');
+  const qs = sp.toString();
+  const url = qs ? `/api/trade-enrollments?${qs}` : '/api/trade-enrollments';
+  return fetchWithOfflineCache<TradeEnrollment[]>(
+    `iti_cache_trade_enrollments_${qs || 'all'}`,
+    () => apiFetch(url, { cache: 'no-store' }),
+    []
+  );
+}
+
+export async function enrollTraineeInCommonTrade(tradeId: string, traineeId: string) {
+  const res = await apiFetch('/api/trade-enrollments/enroll', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tradeId, traineeId }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Failed to enroll trainee in common trade');
+  return data;
+}
+
+export async function removeTraineeFromCommonTrade(tradeId: string, traineeId: string) {
+  const res = await apiFetch('/api/trade-enrollments/remove', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tradeId, traineeId }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Failed to remove trainee from common trade');
+  return data;
+}
+
+export async function syncCommonTradeEnrollments(tradeId?: string) {
+  const res = await apiFetch('/api/trade-enrollments/sync', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tradeId }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Failed to sync common trade enrollments');
+  return data;
 }
 
 export async function fetchOfficers(): Promise<TrainingOfficer[]> {
-  return fetchWithOfflineCache<TrainingOfficer[]>('iti_cache_officers', () => fetch('/api/officers'), []);
+  return fetchWithOfflineCache<TrainingOfficer[]>('iti_cache_officers', () => apiFetch('/api/officers'), []);
 }
 
 export async function fetchOfficer(id: string): Promise<TrainingOfficer> {
-  return fetchWithOfflineCache<TrainingOfficer>(`iti_cache_officer_${id}`, () => fetch(`/api/officers/${id}`));
+  return fetchWithOfflineCache<TrainingOfficer>(`iti_cache_officer_${id}`, () => apiFetch(`/api/officers/${id}`));
 }
 
 export async function createOfficer(officer: Partial<TrainingOfficer>) {
-  const res = await fetch('/api/officers', {
+  const res = await apiFetch('/api/officers', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(officer),
   });
-  if (!res.ok) throw new Error('Failed to create officer');
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Failed to create officer');
+  return data;
 }
 
 export async function updateOfficer(id: string, officer: Partial<TrainingOfficer>) {
-  const res = await fetch(`/api/officers/${id}`, {
+  const res = await apiFetch(`/api/officers/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(officer),
   });
-  if (!res.ok) throw new Error('Failed to update officer');
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Failed to update officer');
+  return data;
 }
 
 export async function resetOfficerPassword(id: string, newPassword?: string) {
-  const res = await fetch(`/api/officers/${id}/reset-password`, {
+  const res = await apiFetch(`/api/officers/${id}/reset-password`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ newPassword }),
   });
-  if (!res.ok) throw new Error('Failed to reset password');
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Failed to reset password');
+  return data;
 }
 
 export async function deleteOfficer(id: string) {
-  const res = await fetch(`/api/officers/${id}`, { method: 'DELETE' });
-  if (!res.ok) throw new Error('Failed to delete officer');
-  return res.json();
+  const res = await apiFetch(`/api/officers/${id}`, { method: 'DELETE' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Failed to delete officer');
+  return data;
 }
 
 export async function fetchTrainees(tradeId?: string, sessionId?: string): Promise<Trainee[]> {
@@ -474,36 +536,39 @@ export async function fetchTrainees(tradeId?: string, sessionId?: string): Promi
   const qs = params.toString();
   return fetchWithOfflineCache<Trainee[]>(
     `iti_cache_trainees_${qs || 'all'}`,
-    () => fetch(`/api/trainees?${qs}`),
+    () => apiFetch(`/api/trainees?${qs}`),
     []
   );
 }
 
 export async function createTrainee(trainee: Partial<Trainee> & { officerId?: string; officerName?: string }) {
-  const res = await fetch('/api/trainees', {
+  const res = await apiFetch('/api/trainees', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(trainee),
   });
-  if (!res.ok) throw new Error('Failed to create trainee');
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Failed to create trainee');
+  return data;
 }
 
 export async function updateTrainee(id: string, trainee: Partial<Trainee>) {
-  const res = await fetch(`/api/trainees/${id}`, {
+  const res = await apiFetch(`/api/trainees/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(trainee),
   });
-  if (!res.ok) throw new Error('Failed to update trainee');
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Failed to update trainee');
+  return data;
 }
 
 export async function deleteTrainee(id: string, officerInfo?: { officerId?: string; officerName?: string }) {
   const params = new URLSearchParams(officerInfo as any);
-  const res = await fetch(`/api/trainees/${id}?${params.toString()}`, { method: 'DELETE' });
-  if (!res.ok) throw new Error('Failed to delete trainee');
-  return res.json();
+  const res = await apiFetch(`/api/trainees/${id}?${params.toString()}`, { method: 'DELETE' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Failed to delete trainee');
+  return data;
 }
 
 export async function fetchAttendance(params?: {
@@ -516,18 +581,32 @@ export async function fetchAttendance(params?: {
   const qs = new URLSearchParams(params as any).toString();
   return fetchWithOfflineCache<AttendanceRecord[]>(
     `iti_cache_attendance_${qs || 'all'}`,
-    () => fetch(`/api/attendance?${qs}`),
+    () => apiFetch(`/api/attendance?${qs}`),
     []
   );
 }
 
 export async function markTraineeAttendance(payload: {
   traineeId: string;
+  tradeId?: string;
   userLat: number;
   userLng: number;
   accuracy?: number;
   forceSimulation?: boolean;
 }) {
+  if (
+    !payload.forceSimulation &&
+    (!Number.isFinite(payload.userLat) ||
+      !Number.isFinite(payload.userLng) ||
+      payload.userLat < -90 ||
+      payload.userLat > 90 ||
+      payload.userLng < -180 ||
+      payload.userLng > 180 ||
+      (Math.abs(payload.userLat) < 0.0001 && Math.abs(payload.userLng) < 0.0001))
+  ) {
+    throw new Error('Valid client-side device GPS coordinates are required to mark attendance.');
+  }
+
   // 1. If explicitly offline, enqueue in IndexedDB and return optimistic record
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
     const istNow = getIstClockParts();
@@ -557,12 +636,11 @@ export async function markTraineeAttendance(payload: {
 
   // 2. Try network call
   try {
-    const res = await fetch('/api/attendance/mark-trainee', {
+    const res = await apiFetch('/api/attendance/mark-trainee', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    syncClockFromResponse(res);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed to mark attendance');
     return data;
@@ -599,6 +677,7 @@ export async function markTraineeAttendance(payload: {
 
 export async function batchSaveAttendance(payload: {
   date: string;
+  tradeId?: string;
   officerId: string;
   officerName: string;
   records: Array<{ traineeId: string; status: AttendanceStatus; remarks?: string }>;
@@ -619,7 +698,7 @@ export async function batchSaveAttendance(payload: {
   }
 
   try {
-    const res = await fetch('/api/attendance/batch-officer', {
+    const res = await apiFetch('/api/attendance/batch-officer', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -646,11 +725,15 @@ export async function batchSaveAttendance(payload: {
   }
 }
 
-export async function triggerAutoAbsent(date?: string, tradeId?: string) {
-  const res = await fetch('/api/attendance/auto-absent', {
+export async function triggerAutoAbsent(date?: string, tradeId?: string, primaryTradeId?: string) {
+  const res = await apiFetch('/api/attendance/auto-absent', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ date, tradeId }),
+    body: JSON.stringify({
+      date,
+      tradeId,
+      ...(primaryTradeId && primaryTradeId !== 'all' ? { primaryTradeId } : {}),
+    }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || 'Failed to trigger auto-absent');
@@ -661,7 +744,7 @@ export async function fetchLeaves(params?: { traineeId?: string; tradeId?: strin
   const qs = new URLSearchParams(params as any).toString();
   return fetchWithOfflineCache<LeaveRequest[]>(
     `iti_cache_leaves_${qs || 'all'}`,
-    () => fetch(`/api/leaves?${qs}`),
+    () => apiFetch(`/api/leaves?${qs}`),
     []
   );
 }
@@ -704,7 +787,7 @@ export async function applyLeave(payload: {
   }
 
   try {
-    const res = await fetch('/api/leaves/apply', {
+    const res = await apiFetch('/api/leaves/apply', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -749,26 +832,28 @@ export async function reviewLeave(id: string, payload: {
   officerName: string;
   reviewerRemarks?: string;
 }) {
-  const res = await fetch(`/api/leaves/${id}/review`, {
+  const res = await apiFetch(`/api/leaves/${id}/review`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  if (!res.ok) throw new Error('Failed to review leave application');
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Failed to review leave application');
+  return data;
 }
 
 export async function fetchWarnings(params?: { traineeId?: string; tradeId?: string }): Promise<WarningNotice[]> {
   const qs = new URLSearchParams(params as any).toString();
   return fetchWithOfflineCache<WarningNotice[]>(
     `iti_cache_warnings_${qs || 'all'}`,
-    () => fetch(`/api/warnings?${qs}`),
+    () => apiFetch(`/api/warnings?${qs}`),
     []
   );
 }
 
 export async function issueWarning(payload: {
   traineeId: string;
+  tradeId?: string;
   officerId: string;
   officerName: string;
   attendancePercent: number;
@@ -777,25 +862,28 @@ export async function issueWarning(payload: {
   message: string;
   messageHindi?: string;
 }) {
-  const res = await fetch('/api/warnings', {
+  const res = await apiFetch('/api/warnings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  if (!res.ok) throw new Error('Failed to issue warning');
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Failed to issue warning');
+  return data;
 }
 
 export async function acknowledgeWarning(id: string) {
-  const res = await fetch(`/api/warnings/${id}/acknowledge`, { method: 'PUT' });
-  return res.json();
+  const res = await apiFetch(`/api/warnings/${id}/acknowledge`, { method: 'PUT' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Failed to acknowledge warning');
+  return data;
 }
 
 export async function fetchInventory(params?: { tradeId?: string; category?: string }): Promise<InventoryItem[]> {
   const qs = new URLSearchParams(params as any).toString();
   return fetchWithOfflineCache<InventoryItem[]>(
     `iti_cache_inventory_${qs || 'all'}`,
-    () => fetch(`/api/inventory?${qs}`),
+    () => apiFetch(`/api/inventory?${qs}`),
     []
   );
 }
@@ -803,26 +891,28 @@ export async function fetchInventory(params?: { tradeId?: string; category?: str
 export async function saveInventoryItem(item: Partial<InventoryItem> & { officerId?: string; officerName?: string }) {
   const method = item.id ? 'PUT' : 'POST';
   const url = item.id ? `/api/inventory/${item.id}` : '/api/inventory';
-  const res = await fetch(url, {
+  const res = await apiFetch(url, {
     method,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(item),
   });
-  if (!res.ok) throw new Error('Failed to save inventory item');
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Failed to save inventory item');
+  return data;
 }
 
 export async function deleteInventoryItem(id: string) {
-  const res = await fetch(`/api/inventory/${id}`, { method: 'DELETE' });
-  if (!res.ok) throw new Error('Failed to delete inventory item');
-  return res.json();
+  const res = await apiFetch(`/api/inventory/${id}`, { method: 'DELETE' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Failed to delete inventory item');
+  return data;
 }
 
 export async function fetchIndents(params?: { tradeId?: string; traineeId?: string; status?: string }): Promise<IndentRecord[]> {
   const qs = new URLSearchParams(params as any).toString();
   return fetchWithOfflineCache<IndentRecord[]>(
     `iti_cache_indents_${qs || 'all'}`,
-    () => fetch(`/api/indent?${qs}`),
+    () => apiFetch(`/api/indent?${qs}`),
     []
   );
 }
@@ -837,12 +927,12 @@ export async function issueIndent(payload: {
   expectedReturnDate: string;
   remarks?: string;
 }) {
-  const res = await fetch('/api/indent/issue', {
+  const res = await apiFetch('/api/indent/issue', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  const data = await res.json();
+  const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || 'Failed to issue indent');
   return data;
 }
@@ -852,17 +942,18 @@ export async function returnIndent(id: string, payload: {
   remarks?: string;
   officerName: string;
 }) {
-  const res = await fetch(`/api/indent/${id}/return`, {
+  const res = await apiFetch(`/api/indent/${id}/return`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  if (!res.ok) throw new Error('Failed to record indent return');
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Failed to record indent return');
+  return data;
 }
 
 export async function fetchAuditLogs(): Promise<AuditLog[]> {
-  return fetchWithOfflineCache<AuditLog[]>('iti_cache_audit_logs', () => fetch('/api/audit-logs'), []);
+  return fetchWithOfflineCache<AuditLog[]>('iti_cache_audit_logs', () => apiFetch('/api/audit-logs'), []);
 }
 
 export async function resetDatabase(confirmationText: string) {
@@ -964,82 +1055,100 @@ export async function resetPasswordWithToken(params: {
 // -------------------------------------------------------------
 export async function fetchLessonPlans(tradeId?: string): Promise<LessonPlan[]> {
   const qs = tradeId ? `?tradeId=${encodeURIComponent(tradeId)}` : '';
-  return fetchWithOfflineCache<LessonPlan[]>(`iti_cache_lesson_plans_${tradeId || 'all'}`, () => fetch(`/api/lesson-plans${qs}`), []);
+  return fetchWithOfflineCache<LessonPlan[]>(`iti_cache_lesson_plans_${tradeId || 'all'}`, () => apiFetch(`/api/lesson-plans${qs}`), []);
 }
 
 export async function saveLessonPlan(payload: Partial<LessonPlan>) {
   const method = payload.id ? 'PUT' : 'POST';
   const url = payload.id ? `/api/lesson-plans/${payload.id}` : '/api/lesson-plans';
-  const res = await fetch(url, {
+  const res = await apiFetch(url, {
     method,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  if (!res.ok) throw new Error('Failed to save lesson plan');
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Failed to save lesson plan');
+  return data;
 }
 
 export async function deleteLessonPlan(id: string) {
-  const res = await fetch(`/api/lesson-plans/${id}`, { method: 'DELETE' });
-  if (!res.ok) throw new Error('Failed to delete lesson plan');
-  return res.json();
+  const res = await apiFetch(`/api/lesson-plans/${id}`, { method: 'DELETE' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Failed to delete lesson plan');
+  return data;
 }
 
 export async function fetchDemonstrationPlans(tradeId?: string): Promise<DemonstrationPlan[]> {
   const qs = tradeId ? `?tradeId=${encodeURIComponent(tradeId)}` : '';
-  return fetchWithOfflineCache<DemonstrationPlan[]>(`iti_cache_demo_plans_${tradeId || 'all'}`, () => fetch(`/api/demonstration-plans${qs}`), []);
+  return fetchWithOfflineCache<DemonstrationPlan[]>(`iti_cache_demo_plans_${tradeId || 'all'}`, () => apiFetch(`/api/demonstration-plans${qs}`), []);
 }
 
 export async function saveDemonstrationPlan(payload: Partial<DemonstrationPlan>) {
   const method = payload.id ? 'PUT' : 'POST';
   const url = payload.id ? `/api/demonstration-plans/${payload.id}` : '/api/demonstration-plans';
-  const res = await fetch(url, {
+  const res = await apiFetch(url, {
     method,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  if (!res.ok) throw new Error('Failed to save demonstration plan');
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Failed to save demonstration plan');
+  return data;
 }
 
 export async function deleteDemonstrationPlan(id: string) {
-  const res = await fetch(`/api/demonstration-plans/${id}`, { method: 'DELETE' });
-  if (!res.ok) throw new Error('Failed to delete demonstration plan');
-  return res.json();
+  const res = await apiFetch(`/api/demonstration-plans/${id}`, { method: 'DELETE' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Failed to delete demonstration plan');
+  return data;
 }
 
 export async function fetchWeeklyPlans(tradeId?: string): Promise<WeeklyPlan[]> {
   const qs = tradeId ? `?tradeId=${encodeURIComponent(tradeId)}` : '';
-  return fetchWithOfflineCache<WeeklyPlan[]>(`iti_cache_weekly_plans_${tradeId || 'all'}`, () => fetch(`/api/weekly-plans${qs}`), []);
+  return fetchWithOfflineCache<WeeklyPlan[]>(`iti_cache_weekly_plans_${tradeId || 'all'}`, () => apiFetch(`/api/weekly-plans${qs}`), []);
 }
 
 export async function saveWeeklyPlan(payload: Partial<WeeklyPlan>) {
   const method = payload.id ? 'PUT' : 'POST';
   const url = payload.id ? `/api/weekly-plans/${payload.id}` : '/api/weekly-plans';
-  const res = await fetch(url, {
+  const res = await apiFetch(url, {
     method,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  if (!res.ok) throw new Error('Failed to save weekly plan');
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Failed to save weekly plan');
+  return data;
 }
 
 export async function deleteWeeklyPlan(id: string) {
-  const res = await fetch(`/api/weekly-plans/${id}`, { method: 'DELETE' });
-  if (!res.ok) throw new Error('Failed to delete weekly plan');
-  return res.json();
+  const res = await apiFetch(`/api/weekly-plans/${id}`, { method: 'DELETE' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Failed to delete weekly plan');
+  return data;
 }
 
-export async function fetchAssessments(traineeId?: string): Promise<TraineeAssessment[]> {
-  const qs = traineeId ? `?traineeId=${encodeURIComponent(traineeId)}` : '';
-  return fetchWithOfflineCache<TraineeAssessment[]>(`iti_cache_assessments_${traineeId || 'all'}`, () => fetch(`/api/assessments${qs}`), []);
+export async function fetchAssessments(traineeId?: string, tradeId?: string): Promise<TraineeAssessment[]> {
+  const params = new URLSearchParams();
+  if (traineeId) params.append('traineeId', traineeId);
+  if (tradeId) params.append('tradeId', tradeId);
+  const qs = params.toString();
+  const url = qs ? `/api/assessments?${qs}` : '/api/assessments';
+  return fetchWithOfflineCache<TraineeAssessment[]>(
+    `iti_cache_assessments_${qs || 'all'}`,
+    () => apiFetch(url, { cache: 'no-store' }),
+    []
+  );
 }
 
-export async function saveAssessment(payload: Partial<TraineeAssessment>) {
+export async function saveAssessment(payload: Partial<TraineeAssessment>): Promise<{
+  success: boolean;
+  assessment: TraineeAssessment;
+  assessments?: TraineeAssessment[];
+}> {
   const method = payload.id ? 'PUT' : 'POST';
   const url = payload.id ? `/api/assessments/${payload.id}` : '/api/assessments';
-  const res = await fetch(url, {
+  const res = await apiFetch(url, {
     method,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -1048,11 +1157,18 @@ export async function saveAssessment(payload: Partial<TraineeAssessment>) {
     const errData = await res.json().catch(() => ({}));
     throw new Error(errData.error || 'Failed to save assessment');
   }
-  return res.json();
+  const data = await res.json();
+  if (payload.traineeId && Array.isArray(data?.assessments)) {
+    const cacheKey = payload.tradeId
+      ? `iti_cache_assessments_traineeId=${encodeURIComponent(payload.traineeId)}&tradeId=${encodeURIComponent(payload.tradeId)}`
+      : `iti_cache_assessments_traineeId=${encodeURIComponent(payload.traineeId)}`;
+    setCachedData(cacheKey, data.assessments).catch(() => {});
+  }
+  return data;
 }
 
 export async function deleteAssessment(id: string) {
-  const res = await fetch(`/api/assessments/${id}`, { method: 'DELETE' });
+  const res = await apiFetch(`/api/assessments/${id}`, { method: 'DELETE' });
   if (!res.ok) throw new Error('Failed to delete assessment');
   return res.json();
 }

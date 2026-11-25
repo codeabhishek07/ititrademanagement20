@@ -32,7 +32,7 @@
     },
     "trade": {
       "title": "Trade",
-      "description": "Vocational trades offered at the institute",
+      "description": "Vocational trades and shared common subjects offered at the institute",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
@@ -41,9 +41,29 @@
         "durationYears": { "type": "number" },
         "totalIntake": { "type": "number" },
         "workshopLocation": { "type": "string" },
-        "status": { "type": "string", "enum": ["active", "inactive"] }
+        "status": { "type": "string", "enum": ["active", "inactive"] },
+        "isCommonTrade": { "type": "boolean" },
+        "sourceTradeIds": { "type": "array" }
       },
       "required": ["id", "name", "code", "status"]
+    },
+    "tradeEnrollment": {
+      "title": "TradeEnrollment",
+      "description": "Many-to-many mapping linking existing trainees to shared common subjects without duplicating trainee records",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "traineeId": { "type": "string" },
+        "tradeId": { "type": "string" },
+        "sourceTradeId": { "type": "string" },
+        "sessionId": { "type": "string" },
+        "enrollmentType": { "type": "string", "enum": ["auto", "manual"] },
+        "status": { "type": "string", "enum": ["enrolled", "removed"] },
+        "removedByAdmin": { "type": "boolean" },
+        "enrolledAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "traineeId", "tradeId", "sourceTradeId", "status"]
     },
     "officer": {
       "title": "TrainingOfficer",
@@ -96,6 +116,7 @@
       "properties": {
         "id": { "type": "string" },
         "traineeId": { "type": "string" },
+        "tradeId": { "type": "string" },
         "sessionId": { "type": "string" },
         "month": { "type": "string" },
         "testMarks": { "type": "number" },
@@ -241,7 +262,11 @@
     },
     "/trades/{tradeId}": {
       "schema": "trade",
-      "description": "Vocational trades offered by the ITI"
+      "description": "Vocational trades and common subjects offered by the ITI"
+    },
+    "/tradeEnrollments/{enrollmentId}": {
+      "schema": "tradeEnrollment",
+      "description": "Shared subject enrollment links between existing trainees and common trades"
     },
     "/officers/{officerId}": {
       "schema": "officer",

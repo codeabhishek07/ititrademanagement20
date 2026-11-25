@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   Clock,
   Compass,
@@ -36,6 +36,8 @@ import {
   LeaveType,
   HolidayRecord,
   UserPreferences,
+  Trade,
+  TradeEnrollment,
 } from '../../types.ts';
 import {
   fetchAttendance,
@@ -49,6 +51,8 @@ import {
   uploadDocument,
   fetchSettings,
   syncServerTime,
+  fetchTrades,
+  fetchTradeEnrollments,
 } from '../../api.ts';
 import { DocumentVaultPanel } from '../DocumentVaultPanel.tsx';
 import {
@@ -63,6 +67,13 @@ import {
   formatClock12,
   formatClock24,
 } from '../../utils/attendanceCalendar.ts';
+import {
+  acquireExactDeviceGps,
+  computeHaversineMeters,
+  classifyGpsAccuracy,
+  getGeolocationPermissionState,
+  DeviceGpsFix,
+} from '../../utils/deviceGps.ts';
 
 interface TraineeDashboardProps {
   trainee: {
@@ -142,12 +153,15 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
     return () => clearInterval(timer);
   }, []);
 
-  // GPS State
+  // Device GPS State (strictly client-side navigator.geolocation, zero server/IP estimation)
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsError, setGpsError] = useState('');
-  const [currentCoords, setCurrentCoords] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
-  const [distanceToCampus, setDistanceToCampus] = useState<number | null>(null);
+  const [gpsStatusText, setGpsStatusText] = useState('');
+  const [gpsPermission, setGpsPermission] = useState<'granted' | 'prompt' | 'denied' | 'unsupported'>('prompt');
+  const [attendanceError, setAttendanceError] = useState('');
+  const [currentCoords, setCurrentCoords] = useState<DeviceGpsFix | null>(null);
   const [simulateOnCampus, setSimulateOnCampus] = useState(false);
+  const gpsAbortRef = useRef<AbortController | null>(null);
 
   // Entities
   const [attendanceList, setAttendanceList] = useState<AttendanceRecord[]>([]);
@@ -155,6 +169,9 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
   const [warningsList, setWarningsList] = useState<WarningNotice[]>([]);
   const [indentsList, setIndentsList] = useState<IndentRecord[]>([]);
   const [holidays, setHolidays] = useState<HolidayRecord[]>([]);
+  const [trades, setTrades] = useState<Trade[]>([]);
+  const [enrollments, setEnrollments] = useState<TradeEnrollment[]>([]);
+  const [selectedAttendanceTradeId, setSelectedAttendanceTradeId] = useState<string>(trainee.tradeId);
   const [historyMonth, setHistoryMonth] = useState<string>(() => {
     if (userPreferences?.historyMonth) return userPreferences.historyMonth;
     return getIstYearMonth();
@@ -189,6 +206,41 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
   const [leaveSubmitError, setLeaveSubmitError] = useState('');
   const [leaveSubmitting, setLeaveSubmitting] = useState(false);
 
+  // Build trainee's enrolled subjects (Primary Trade + any enrolled Common Subjects)
+  const enrolledSubjects = useMemo(() => {
+    const primaryTradeObj = trades.find((t) => t.id === trainee.tradeId);
+    const list: Array<{ id: string; name: string; code: string; isCommonTrade: boolean }> = [
+      {
+        id: trainee.tradeId,
+        name: primaryTradeObj?.name || trainee.tradeName || 'Primary Trade',
+        code: primaryTradeObj?.code || '',
+        isCommonTrade: false,
+      },
+    ];
+    enrollments.forEach((enr) => {
+      if (enr.status !== 'enrolled' || enr.tradeId === trainee.tradeId) return;
+      const tObj = trades.find((t) => t.id === enr.tradeId);
+      if (tObj && !list.some((item) => item.id === tObj.id)) {
+        list.push({
+          id: tObj.id,
+          name: tObj.name,
+          code: tObj.code,
+          isCommonTrade: Boolean(tObj.isCommonTrade),
+        });
+      }
+    });
+    return list;
+  }, [trades, enrollments, trainee.tradeId, trainee.tradeName]);
+
+  useEffect(() => {
+    if (!enrolledSubjects.some((s) => s.id === selectedAttendanceTradeId)) {
+      setSelectedAttendanceTradeId(trainee.tradeId);
+    }
+  }, [enrolledSubjects, selectedAttendanceTradeId, trainee.tradeId]);
+
+  const selectedSubject =
+    enrolledSubjects.find((s) => s.id === selectedAttendanceTradeId) || enrolledSubjects[0];
+
   // Unified synchronized IST evaluation (updates dynamically across midnight and server window changes)
   const windowEval = evaluateAttendanceWindow(liveSettings.attendanceWindow, liveNow);
   const isTimeWithinWindow = windowEval.isWithinWindow;
@@ -199,7 +251,9 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
   const todayHoliday = todayDayLock.adminHoliday;
   const todayRecord = isTodayHolidayLocked
     ? undefined
-    : attendanceList.find((a) => a.date === todayStr);
+    : attendanceList.find(
+        (a) => a.date === todayStr && (a.tradeId || trainee.tradeId) === selectedAttendanceTradeId
+      );
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -209,19 +263,23 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
   const loadTraineeData = async () => {
     setLoading(true);
     try {
-      const [att, lvs, wrns, inds, hols, freshSettings] = await Promise.all([
+      const [att, lvs, wrns, inds, hols, freshSettings, tradesRes, enrollmentsRes] = await Promise.all([
         fetchAttendance({ traineeId: trainee.id }),
         fetchLeaves({ traineeId: trainee.id }),
         fetchWarnings({ traineeId: trainee.id }),
         fetchIndents({ traineeId: trainee.id }),
         fetchHolidays(),
         fetchSettings().catch(() => null),
+        fetchTrades().catch(() => []),
+        fetchTradeEnrollments({ traineeId: trainee.id }).catch(() => []),
       ]);
       setAttendanceList(att);
       setLeavesList(lvs);
       setWarningsList(wrns);
       setIndentsList(inds);
       setHolidays(hols);
+      setTrades(tradesRes);
+      setEnrollments(enrollmentsRes);
       if (freshSettings && freshSettings.attendanceWindow) {
         setLiveSettings(freshSettings);
         onSettingsChange?.(freshSettings);
@@ -234,12 +292,89 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
     }
   };
 
+  // Progressive Client-Side Device GPS Acquisition (watchPosition satellite lock)
+  const requestLocation = useCallback(async (): Promise<DeviceGpsFix | null> => {
+    if (gpsAbortRef.current) {
+      gpsAbortRef.current.abort();
+      gpsAbortRef.current = null;
+    }
+
+    setGpsLoading(true);
+    setGpsError('');
+    setAttendanceError('');
+
+    if (simulateOnCampus) {
+      const simLat = parseFloat((liveSettings.campusLocation.lat + 0.0002).toFixed(6));
+      const simLng = parseFloat((liveSettings.campusLocation.lng + 0.0001).toFixed(6));
+      const simFix: DeviceGpsFix = {
+        lat: simLat,
+        lng: simLng,
+        accuracy: 8,
+        altitude: null,
+        heading: null,
+        speed: null,
+        capturedAtMs: Date.now(),
+        sampleCount: 1,
+        providerQuality: 'device_gps',
+      };
+      setCurrentCoords(simFix);
+      setGpsStatusText('Simulated On-Campus Coordinates (±8m)');
+      setGpsLoading(false);
+      return simFix;
+    }
+
+    const perm = await getGeolocationPermissionState();
+    setGpsPermission(perm);
+
+    const controller = new AbortController();
+    gpsAbortRef.current = controller;
+    setGpsStatusText('Requesting exact GPS coordinates from your device...');
+
+    try {
+      const fix = await acquireExactDeviceGps({
+        targetAccuracyMeters: 30,
+        minListenMs: 1000,
+        maxListenMs: 8500,
+        signal: controller.signal,
+        onProgress: (interimFix, statusText) => {
+          setCurrentCoords(interimFix);
+          setGpsStatusText(statusText);
+        },
+      });
+      setCurrentCoords(fix);
+      setGpsPermission('granted');
+      setGpsStatusText(
+        fix.providerQuality === 'device_gps'
+          ? `Exact device GPS locked (±${fix.accuracy}m)`
+          : fix.providerQuality === 'wifi_assisted'
+          ? `Device location locked (±${fix.accuracy}m)`
+          : `Coarse network estimate received (±${fix.accuracy}m) — device GPS chip did not lock`
+      );
+      return fix;
+    } catch (err: any) {
+      if (controller.signal.aborted) {
+        return null;
+      }
+      const message = err?.message || 'Unable to obtain GPS location from your device.';
+      if (message.toLowerCase().includes('denied')) {
+        setGpsPermission('denied');
+      }
+      setGpsError(`GPS Status: ${message}`);
+      setGpsStatusText('');
+      return null;
+    } finally {
+      if (gpsAbortRef.current === controller) {
+        gpsAbortRef.current = null;
+        setGpsLoading(false);
+      }
+    }
+  }, [simulateOnCampus, liveSettings.campusLocation.lat, liveSettings.campusLocation.lng]);
+
   useEffect(() => {
     syncServerTime()
       .then(() => setLiveNow(getSynchronizedNow()))
       .catch(() => {});
     loadTraineeData();
-    requestLocation();
     const settingsPoll = setInterval(() => {
       Promise.all([syncServerTime().catch(() => null), fetchSettings().catch(() => null)])
         .then(([, fresh]) => {
@@ -254,98 +389,63 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
     return () => clearInterval(settingsPoll);
   }, [trainee.id]);
 
-  // Haversine distance calculator
-  function computeMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
-    const R = 6371000;
-    const dLat = (lat2 - lat1) * (Math.PI / 180);
-    const dLon = (lon2 - lon1) * (Math.PI / 180);
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
-      Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return Math.round(R * c);
-  }
-
-  // GPS Geolocation Handler
-  const requestLocation = () => {
-    setGpsLoading(true);
-    setGpsError('');
-
-    if (simulateOnCampus) {
-      // Simulate exact coordinates inside Govt ITI Raigarh campus
-      const simLat = liveSettings.campusLocation.lat + 0.0002;
-      const simLng = liveSettings.campusLocation.lng + 0.0001;
-      setCurrentCoords({ lat: simLat, lng: simLng, accuracy: 8 });
-      const dist = computeMeters(simLat, simLng, liveSettings.campusLocation.lat, liveSettings.campusLocation.lng);
-      setDistanceToCampus(dist);
-      setGpsLoading(false);
-      return;
-    }
-
-    if (!navigator.geolocation) {
-      setGpsError('Geolocation is not supported by your browser or device.');
-      setGpsLoading(false);
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const { latitude, longitude, accuracy } = pos.coords;
-        setCurrentCoords({
-          lat: parseFloat(latitude.toFixed(6)),
-          lng: parseFloat(longitude.toFixed(6)),
-          accuracy: Math.round(accuracy),
-        });
-        const dist = computeMeters(latitude, longitude, liveSettings.campusLocation.lat, liveSettings.campusLocation.lng);
-        setDistanceToCampus(dist);
-        setGpsLoading(false);
-      },
-      (err) => {
-        let msg = err.message;
-        if (err.code === 1) {
-          msg = 'Location permission denied. Please allow Location access in your browser settings to mark attendance.';
-        } else if (err.code === 2) {
-          msg = 'GPS signal unavailable. Please ensure GPS/Location is enabled on your device and move near an open window.';
-        } else if (err.code === 3) {
-          msg = 'GPS satellite lock timed out. Click "Refresh GPS" to re-acquire.';
-        }
-        setGpsError(`GPS Status: ${msg}`);
-        setGpsLoading(false);
-      },
-      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
-    );
-  };
-
   useEffect(() => {
     requestLocation();
-  }, [simulateOnCampus]);
+    return () => {
+      if (gpsAbortRef.current) {
+        gpsAbortRef.current.abort();
+        gpsAbortRef.current = null;
+      }
+    };
+  }, [trainee.id, simulateOnCampus]);
 
-  // Mark Attendance via GPS
+  // Mark Attendance via exact Client-Side Device GPS
   const handleMarkAttendance = async () => {
+    setAttendanceError('');
     if (isTodayHolidayLocked) {
-      alert(todayDayLock.lockReason || `Attendance is disabled today (${todayStr}): ${todayDayLock.title}.`);
-      return;
-    }
-    if (!currentCoords && !simulateOnCampus) {
-      alert('Please wait for GPS coordinates or enable Test Simulator mode.');
+      setAttendanceError(todayDayLock.lockReason || `Attendance is disabled today (${todayStr}): ${todayDayLock.title}.`);
       return;
     }
 
     try {
       setGpsLoading(true);
+      let fixToSubmit = currentCoords;
+
+      if (!simulateOnCampus) {
+        const isStale = !fixToSubmit || Date.now() - fixToSubmit.capturedAtMs > 60000;
+        const isCoarse = !fixToSubmit || fixToSubmit.providerQuality === 'coarse_network';
+        if (isStale || isCoarse) {
+          fixToSubmit = await requestLocation();
+        }
+        if (!fixToSubmit) {
+          setAttendanceError(
+            'Could not read exact GPS coordinates from your device. Enable Device Location/GPS and tap "Refresh GPS".'
+          );
+          return;
+        }
+      }
+
+      const submitLat = simulateOnCampus
+        ? parseFloat((liveSettings.campusLocation.lat + 0.0002).toFixed(6))
+        : fixToSubmit!.lat;
+      const submitLng = simulateOnCampus
+        ? parseFloat((liveSettings.campusLocation.lng + 0.0001).toFixed(6))
+        : fixToSubmit!.lng;
+      const submitAccuracy = simulateOnCampus ? 8 : fixToSubmit!.accuracy;
+
       const res = await markTraineeAttendance({
         traineeId: trainee.id,
-        userLat: currentCoords?.lat || liveSettings.campusLocation.lat,
-        userLng: currentCoords?.lng || liveSettings.campusLocation.lng,
-        accuracy: currentCoords?.accuracy || 10,
+        tradeId: selectedAttendanceTradeId,
+        userLat: submitLat,
+        userLng: submitLng,
+        accuracy: submitAccuracy,
         forceSimulation: simulateOnCampus,
       });
 
-      showToast(res.message || 'Attendance recorded successfully!');
+      showToast(res.message || `Attendance recorded for ${selectedSubject?.name || 'Primary Trade'}!`);
       loadTraineeData();
     } catch (err: any) {
-      alert(err.message);
+      setAttendanceError(err.message || 'Failed to record attendance.');
     } finally {
       setGpsLoading(false);
     }
@@ -433,33 +533,86 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
     }
   };
 
-  // Calculate Personal Stats strictly excluding Sundays, 2nd/3rd Saturdays, and Admin Holidays
-  const validWorkingAttendanceList = attendanceList.filter(
-    (a) => getDateHolidayStatus(a.date, holidays, trainee.sessionId).isWorkingDay
+  // Primary Trade Attendance Stats (Profile Strip & Leave Quotas remain anchored to Primary Trade)
+  const primaryAttendanceList = useMemo(
+    () => attendanceList.filter((a) => (a.tradeId || trainee.tradeId) === trainee.tradeId),
+    [attendanceList, trainee.tradeId]
   );
+
   const personalMetrics = calculateTraineeAttendanceMetrics({
-    records: attendanceList,
+    records: primaryAttendanceList,
     holidays,
     sessionId: trainee.sessionId,
     referenceDate: todayStr,
     minimumAttendancePercent: liveSettings.minimumAttendancePercent,
   });
-  const totalMarked = personalMetrics.totalWorkingDays;
-  const presentCount = personalMetrics.presentDays;
   const clCount = personalMetrics.clDays;
   const mlCount = personalMetrics.mlDays;
   const halfDayCount = personalMetrics.halfDays;
-  const absentCount = personalMetrics.absentDays;
   const attendancePercent = personalMetrics.attendancePercent;
   const isBelowThreshold = personalMetrics.isBelowThreshold;
 
-  // Account for mobile GPS accuracy tolerance in workshop buildings (up to 150m buffer)
-  const accuracyBuffer = currentCoords ? Math.min(currentCoords.accuracy, 150) : 0;
+  // Subject-scoped metrics for Attendance History & Charts tab
+  const subjectAttendanceList = useMemo(
+    () =>
+      attendanceList.filter(
+        (a) => (a.tradeId || trainee.tradeId) === selectedAttendanceTradeId
+      ),
+    [attendanceList, selectedAttendanceTradeId, trainee.tradeId]
+  );
+  const validWorkingAttendanceList = subjectAttendanceList.filter(
+    (a) => getDateHolidayStatus(a.date, holidays, trainee.sessionId).isWorkingDay
+  );
+  const subjectMetrics = calculateTraineeAttendanceMetrics({
+    records: subjectAttendanceList,
+    holidays,
+    sessionId: trainee.sessionId,
+    referenceDate: todayStr,
+    minimumAttendancePercent: liveSettings.minimumAttendancePercent,
+  });
+  const totalMarked = subjectMetrics.totalWorkingDays;
+  const presentCount = subjectMetrics.presentDays;
+  const subjectClCount = subjectMetrics.clDays;
+  const subjectMlCount = subjectMetrics.mlDays;
+  const subjectHalfDayCount = subjectMetrics.halfDays;
+  const absentCount = subjectMetrics.absentDays;
+  const subjectAttendancePercent = subjectMetrics.attendancePercent;
+  const isSubjectBelowThreshold = subjectMetrics.isBelowThreshold;
+
+  // Reactive distance computation: always stays synced with both latest device GPS and latest campus settings
+  const distanceToCampus = useMemo(() => {
+    if (simulateOnCampus) {
+      const simLat = liveSettings.campusLocation.lat + 0.0002;
+      const simLng = liveSettings.campusLocation.lng + 0.0001;
+      return computeHaversineMeters(
+        simLat,
+        simLng,
+        liveSettings.campusLocation.lat,
+        liveSettings.campusLocation.lng
+      );
+    }
+    if (!currentCoords) return null;
+    return computeHaversineMeters(
+      currentCoords.lat,
+      currentCoords.lng,
+      liveSettings.campusLocation.lat,
+      liveSettings.campusLocation.lng
+    );
+  }, [
+    simulateOnCampus,
+    currentCoords,
+    liveSettings.campusLocation.lat,
+    liveSettings.campusLocation.lng,
+  ]);
+
+  // Account for realistic mobile GPS accuracy tolerance inside steel-roofed workshop buildings (up to 250m buffer)
+  const accuracyBuffer = currentCoords ? Math.min(Math.max(0, currentCoords.accuracy), 250) : 0;
   const effectiveDistance = distanceToCampus !== null ? Math.max(0, distanceToCampus - accuracyBuffer) : null;
   const isWithinCampusPerimeter =
     distanceToCampus !== null &&
     (distanceToCampus <= liveSettings.campusLocation.radiusMeters ||
       (effectiveDistance !== null && effectiveDistance <= liveSettings.campusLocation.radiusMeters));
+  const coordsQuality = currentCoords ? classifyGpsAccuracy(currentCoords.accuracy) : null;
 
   return (
     <div className="space-y-6">
@@ -503,14 +656,29 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
                 <span>·</span>
                 <span className="font-mono text-slate-600">{trainee.mobile}</span>
               </p>
+              {enrolledSubjects.length > 1 && (
+                <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                  <span className="text-[10px] font-semibold text-slate-500">Shared Subjects:</span>
+                  {enrolledSubjects
+                    .filter((s) => s.isCommonTrade)
+                    .map((s) => (
+                      <span
+                        key={s.id}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-50 text-indigo-800 border border-indigo-200 text-[10px] font-semibold"
+                      >
+                        {s.name}
+                      </span>
+                    ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Overall Attendance Stat Pill */}
+        {/* Overall Attendance Stat Pill (Primary Trade) */}
         <div className="flex items-center gap-4">
           <div className="text-right">
-            <div className="text-[11px] text-slate-500 font-medium">Recorded Attendance</div>
+            <div className="text-[11px] text-slate-500 font-medium">Primary Trade Attendance</div>
             <div
               className={`text-xl font-extrabold font-mono ${
                 isBelowThreshold ? 'text-rose-600' : 'text-emerald-700'
@@ -769,6 +937,40 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
               </p>
             </div>
 
+            {enrolledSubjects.length > 1 && (
+              <div className="p-3 rounded-xl border border-indigo-200 bg-indigo-50/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                <div>
+                  <span className="font-bold text-indigo-950">Select Trade / Common Subject to Mark:</span>
+                  <p className="text-[11px] text-indigo-800/80">
+                    Each subject records its own independent daily attendance against your profile.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {enrolledSubjects.map((sub) => {
+                    const active = sub.id === selectedAttendanceTradeId;
+                    return (
+                      <button
+                        key={sub.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedAttendanceTradeId(sub.id);
+                          setAttendanceError('');
+                        }}
+                        className={`px-3 py-1.5 rounded-lg font-semibold text-xs border transition-colors cursor-pointer ${
+                          active
+                            ? 'bg-indigo-700 text-white border-indigo-800 shadow-xs'
+                            : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                        }`}
+                      >
+                        {sub.name}
+                        {sub.isCommonTrade ? ' (Common)' : ' (Primary)'}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Attendance Window Notice Bar */}
             <div className="p-3 rounded-lg border bg-slate-50 border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs">
               <div className="flex flex-wrap items-center gap-2">
@@ -835,9 +1037,14 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
               </div>
             ) : todayRecord ? (
               <div className="p-5 rounded-xl border border-emerald-200 bg-emerald-50/60 text-xs space-y-3">
-                <div className="flex items-center gap-2 text-emerald-800 font-bold text-sm">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                  <span>Today's Attendance Recorded Successfully!</span>
+                <div className="flex items-center justify-between flex-wrap gap-2 text-emerald-800 font-bold text-sm">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                    <span>Today's Attendance Recorded Successfully!</span>
+                  </div>
+                  <span className="px-2 py-0.5 rounded bg-white border border-emerald-200 text-emerald-800 text-[11px] font-semibold">
+                    {selectedSubject?.name}
+                  </span>
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 text-slate-700">
@@ -872,35 +1079,43 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
               <div className="space-y-4">
                 {/* Live Distance & Campus Status Radar */}
                 <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 text-xs space-y-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
                     <span className="font-semibold text-slate-800 flex items-center gap-1.5">
                       <MapPin className="w-4 h-4 text-amber-600" />
-                      <span>Live Geotag Telemetry</span>
+                      <span>Device GPS Geotag Telemetry</span>
+                      {gpsStatusText && (
+                        <span className="text-[10px] font-normal text-slate-500 ml-1">
+                          · {gpsStatusText}
+                        </span>
+                      )}
                     </span>
                     <button
-                      onClick={requestLocation}
+                      type="button"
+                      onClick={() => requestLocation()}
                       disabled={gpsLoading}
-                      className="text-blue-600 hover:text-blue-800 text-[11px] flex items-center gap-1"
+                      className="text-blue-600 hover:text-blue-800 text-[11px] font-semibold flex items-center gap-1 cursor-pointer disabled:opacity-50"
                     >
                       <RefreshCw className={`w-3 h-3 ${gpsLoading ? 'animate-spin' : ''}`} />
-                      <span>Refresh GPS</span>
+                      <span>{gpsLoading ? 'Acquiring Device GPS...' : 'Refresh Device GPS'}</span>
                     </button>
                   </div>
 
                   {gpsError ? (
-                    <div className="p-3 bg-amber-50 border border-amber-200 rounded text-amber-800 text-xs space-y-1">
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded text-amber-800 text-xs space-y-1.5">
                       <div className="font-semibold">{gpsError}</div>
                       <p className="text-[11px] text-amber-700">
-                        Tip: Open browser location permissions or click "Refresh GPS" near an open doorway or window.
+                        {gpsPermission === 'denied'
+                          ? 'Browser Location permission is currently blocked. Tap the lock/site-settings icon in your browser address bar, set Location to "Allow" (with Precise Location enabled), then tap "Refresh Device GPS".'
+                          : 'Ensure Device GPS / High-Accuracy Location is turned ON in phone settings, step near an open window or doorway, and tap "Refresh Device GPS".'}
                       </p>
                     </div>
                   ) : (
                     <div className="space-y-3">
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div className="p-3 bg-white rounded border border-slate-200">
-                          <span className="text-slate-500 text-[10px]">Your Distance from ITI Raigarh</span>
+                          <span className="text-slate-500 text-[10px]">Your Distance from Campus Center</span>
                           <div className="text-lg font-bold font-mono text-slate-900 mt-1">
-                            {distanceToCampus !== null ? `${distanceToCampus} meters` : 'Calculating...'}
+                            {distanceToCampus !== null ? `${distanceToCampus} meters` : 'Acquiring GPS...'}
                           </div>
                           <span className="text-[10px] text-slate-400">
                             Allowed: ≤ {liveSettings.campusLocation.radiusMeters}m
@@ -908,19 +1123,41 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
                         </div>
 
                         <div className="p-3 bg-white rounded border border-slate-200">
-                          <span className="text-slate-500 text-[10px]">GPS Accuracy / Precision</span>
+                          <span className="text-slate-500 text-[10px]">Device GPS Accuracy</span>
                           <div className="text-lg font-bold font-mono text-slate-900 mt-1">
-                            {currentCoords ? `±${currentCoords.accuracy}m` : 'Acquiring...'}
+                            {currentCoords ? `±${currentCoords.accuracy}m` : 'Locking...'}
                           </div>
-                          <span className="text-[10px] text-emerald-600 font-medium">
-                            {accuracyBuffer > 0 ? `+${accuracyBuffer}m indoor tolerance` : 'High Precision'}
+                          <span
+                            className={`text-[10px] font-medium ${
+                              coordsQuality === 'coarse_network'
+                                ? 'text-amber-600'
+                                : 'text-emerald-600'
+                            }`}
+                          >
+                            {!currentCoords
+                              ? 'Reading device GPS chip'
+                              : coordsQuality === 'device_gps'
+                              ? `True Device GPS (+${accuracyBuffer}m buffer)`
+                              : coordsQuality === 'wifi_assisted'
+                              ? `Indoor GPS/Wi-Fi (+${accuracyBuffer}m buffer)`
+                              : 'Coarse Network/IP Fix — step outside for GPS'}
                           </span>
                         </div>
 
                         <div className="p-3 bg-white rounded border border-slate-200">
                           <span className="text-slate-500 text-[10px]">Perimeter Check</span>
                           <div className="text-lg font-bold mt-1">
-                            {isWithinCampusPerimeter || simulateOnCampus ? (
+                            {simulateOnCampus ? (
+                              <span className="text-emerald-700 flex items-center gap-1">
+                                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                                <span>INSIDE CAMPUS</span>
+                              </span>
+                            ) : gpsLoading && !currentCoords ? (
+                              <span className="text-blue-600 flex items-center gap-1 text-sm">
+                                <RefreshCw className="w-4 h-4 animate-spin text-blue-600" />
+                                <span>ACQUIRING GPS...</span>
+                              </span>
+                            ) : isWithinCampusPerimeter ? (
                               <span className="text-emerald-700 flex items-center gap-1">
                                 <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                                 <span>INSIDE CAMPUS</span>
@@ -932,7 +1169,7 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
                               </span>
                             )}
                           </div>
-                          <span className="text-[10px] text-slate-400">Geofence Boundary</span>
+                          <span className="text-[10px] text-slate-400">Client Device GPS Geofence</span>
                         </div>
                       </div>
 
@@ -940,7 +1177,7 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
                       {currentCoords && (
                         <div className="px-3 py-2 bg-white rounded border border-slate-200/80 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-600 font-mono">
                           <div>
-                            <span className="text-slate-400 font-sans">Your Position:</span>{' '}
+                            <span className="text-slate-400 font-sans">Device GPS Position:</span>{' '}
                             <span className="text-slate-800 font-semibold">{currentCoords.lat}°N, {currentCoords.lng}°E</span>
                           </div>
                           <div>
@@ -950,15 +1187,28 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
                         </div>
                       )}
 
-                      {!isWithinCampusPerimeter && !simulateOnCampus && distanceToCampus !== null && (
+                      {!simulateOnCampus && coordsQuality === 'coarse_network' && currentCoords && (
+                        <div className="p-2.5 bg-amber-50 rounded-lg border border-amber-300 text-amber-900 text-[11px] space-y-1">
+                          <div className="font-semibold flex items-center gap-1">
+                            <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                            <span>Coarse Network/IP Location Detected (±{currentCoords.accuracy}m)</span>
+                          </div>
+                          <p className="text-amber-800 leading-relaxed">
+                            Your browser currently returned an approximate ISP/Wi-Fi network location instead of exact hardware GPS coordinates.
+                            On a smartphone/tablet, enable <strong>Precise Location / GPS</strong> in browser and OS settings, move near an open doorway or outdoors, and tap <strong>"Refresh Device GPS"</strong>.
+                          </p>
+                        </div>
+                      )}
+
+                      {!isWithinCampusPerimeter && !simulateOnCampus && distanceToCampus !== null && coordsQuality !== 'coarse_network' && (
                         <div className="p-2.5 bg-amber-50 rounded-lg border border-amber-200 text-amber-900 text-[11px] space-y-1">
                           <div className="font-semibold flex items-center gap-1">
                             <Compass className="w-3.5 h-3.5 text-amber-600" />
-                            <span>GPS Positioning Tip for ITI Workshop Buildings:</span>
+                            <span>On-Site GPS Verification Tip:</span>
                           </div>
                           <p className="text-amber-800 leading-relaxed">
-                            Heavy metal roofs and workshop machinery can attenuate satellite signals, causing temporary GPS drift.
-                            Please step near a workshop window or entrance door, tap <strong>"Refresh GPS"</strong>, and wait 3–5 seconds for the location to refine.
+                            Your device reported <strong>{currentCoords?.lat}°N, {currentCoords?.lng}°E</strong>, which is <strong>{distanceToCampus}m</strong> from configured Campus Center ({liveSettings.campusLocation.lat}°N, {liveSettings.campusLocation.lng}°E).
+                            If you are physically inside the ITI workshop, step near a doorway and tap <strong>"Refresh Device GPS"</strong>, or ask Admin to verify the configured Campus Center coordinates in Settings.
                           </p>
                         </div>
                       )}
@@ -982,6 +1232,13 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
                   </div>
                 </div>
 
+                {attendanceError && (
+                  <div className="p-3 rounded-lg border border-rose-300 bg-rose-50 text-rose-900 text-xs flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                    <div className="flex-1">{attendanceError}</div>
+                  </div>
+                )}
+
                 {!isTimeWithinWindow && !simulateOnCampus && (
                   <div className="p-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 text-xs flex items-start gap-2">
                     <Clock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
@@ -998,16 +1255,18 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
                   disabled={gpsLoading || (!isWithinCampusPerimeter && !simulateOnCampus) || (!isTimeWithinWindow && !simulateOnCampus)}
                   className={`w-full py-3.5 px-6 font-bold rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md transition-all ${
                     (isWithinCampusPerimeter || simulateOnCampus) && (isTimeWithinWindow || simulateOnCampus)
-                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer'
                       : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                   }`}
                 >
                   <CheckCircle2 className="w-5 h-5" />
                   <span>
-                    {!isTimeWithinWindow && !simulateOnCampus
+                    {gpsLoading && !currentCoords && !simulateOnCampus
+                      ? 'Acquiring Exact Device GPS...'
+                      : !isTimeWithinWindow && !simulateOnCampus
                       ? `Attendance Window Closed (${windowEval.start12} – ${windowEval.end12} IST)`
                       : isWithinCampusPerimeter || simulateOnCampus
-                      ? 'Mark Present Now (Verified GPS Geotag)'
+                      ? 'Mark Present Now (Verified Device GPS Geotag)'
                       : 'Cannot Mark: Outside ITI Raigarh Campus Boundary'}
                   </span>
                 </button>
@@ -1055,11 +1314,38 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
       {/* TAB 2: ATTENDANCE HISTORY & CHARTS */}
       {activeTab === 'history' && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-5 space-y-6 text-xs">
-          <div>
-            <h3 className="font-bold text-sm text-slate-900">Personal Attendance History &amp; Breakdown</h3>
-            <p className="text-slate-500 text-xs">
-              Complete log of recorded dates, leave sanctions, and geotag timestamps.
-            </p>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="font-bold text-sm text-slate-900">
+                Personal Attendance History &amp; Breakdown
+                {selectedSubject ? ` — ${selectedSubject.name}` : ''}
+              </h3>
+              <p className="text-slate-500 text-xs">
+                Complete log of recorded dates, leave sanctions, and geotag timestamps.
+              </p>
+            </div>
+            {enrolledSubjects.length > 1 && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                {enrolledSubjects.map((sub) => {
+                  const active = sub.id === selectedAttendanceTradeId;
+                  return (
+                    <button
+                      key={sub.id}
+                      type="button"
+                      onClick={() => setSelectedAttendanceTradeId(sub.id)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors cursor-pointer ${
+                        active
+                          ? 'bg-slate-900 text-white border-slate-900'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {sub.name}
+                      {sub.isCommonTrade ? ' · Common' : ''}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Graphical Summary Cards */}
@@ -1074,11 +1360,11 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
             </div>
             <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 text-center">
               <span className="text-amber-700 text-[10px]">Casual Leave (CL)</span>
-              <div className="text-lg font-bold font-mono text-amber-800 mt-0.5">{clCount}</div>
+              <div className="text-lg font-bold font-mono text-amber-800 mt-0.5">{subjectClCount}</div>
             </div>
             <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 text-center">
               <span className="text-blue-700 text-[10px]">Medical / Half-Day</span>
-              <div className="text-lg font-bold font-mono text-blue-800 mt-0.5">{mlCount + halfDayCount}</div>
+              <div className="text-lg font-bold font-mono text-blue-800 mt-0.5">{subjectMlCount + subjectHalfDayCount}</div>
             </div>
             <div className="p-3 bg-rose-50 rounded-lg border border-rose-200 text-center">
               <span className="text-rose-700 text-[10px]">Absent (Working Days)</span>
@@ -1090,18 +1376,18 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
           <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-2">
             <div className="flex justify-between items-center text-xs">
               <span className="font-semibold text-slate-800">
-                Semester Attendance Progress ({attendancePercent}% of Required 80% · Formula: Present / Working Days × 100)
+                Semester Attendance Progress ({subjectAttendancePercent}% of Required 80% · Formula: Present / Working Days × 100)
               </span>
               <span className="font-mono text-slate-600">
-                {isBelowThreshold ? 'Deficit Warning Active' : 'Compliant with NCVT'}
+                {isSubjectBelowThreshold ? 'Deficit Warning Active' : 'Compliant with NCVT'}
               </span>
             </div>
             <div className="w-full bg-slate-200 h-3 rounded-full overflow-hidden flex">
               <div
                 className={`h-full transition-all duration-500 ${
-                  isBelowThreshold ? 'bg-rose-500' : 'bg-emerald-600'
+                  isSubjectBelowThreshold ? 'bg-rose-500' : 'bg-emerald-600'
                 }`}
-                style={{ width: `${Math.min(100, attendancePercent)}%` }}
+                style={{ width: `${Math.min(100, subjectAttendancePercent)}%` }}
               />
             </div>
           </div>
@@ -1279,6 +1565,7 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-slate-600">
                   <th className="py-2.5 px-3 font-semibold">Date</th>
+                  <th className="py-2.5 px-3 font-semibold">Subject / Trade</th>
                   <th className="py-2.5 px-3 font-semibold text-center">Status</th>
                   <th className="py-2.5 px-3 font-semibold">Time Recorded</th>
                   <th className="py-2.5 px-3 font-semibold">Marking Mode</th>
@@ -1287,34 +1574,42 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-mono text-[11px]">
-                {validWorkingAttendanceList.map((rec) => (
-                  <tr key={rec.id} className="hover:bg-slate-50/80 transition-colors font-sans">
-                    <td className="py-2.5 px-3 font-mono text-slate-900 font-semibold">{rec.date}</td>
-                    <td className="py-2.5 px-3 text-center">
-                      <span
-                        className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold ${
-                          rec.status === 'Present'
-                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                            : rec.status === 'Absent'
-                            ? 'bg-rose-100 text-rose-800 border border-rose-200'
-                            : 'bg-amber-100 text-amber-800 border border-amber-200'
-                        }`}
-                      >
-                        {rec.status}
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-3 font-mono text-slate-800">{rec.timestamp}</td>
-                    <td className="py-2.5 px-3 text-slate-600 text-xs">
-                      {rec.markedBy === 'trainee_gps' && 'Student GPS Geotag'}
-                      {rec.markedBy === 'officer_manual' && 'Officer Manual'}
-                      {rec.markedBy === 'system_auto_absent' && '17:00 Cutoff Auto-Absent'}
-                    </td>
-                    <td className="py-2.5 px-3 font-mono text-slate-700">
-                      {rec.geotag ? `${rec.geotag.distanceFromCampusMeters}m (Campus)` : '—'}
-                    </td>
-                    <td className="py-2.5 px-3 text-slate-500 text-xs">{rec.remarks || 'Regular workshop'}</td>
-                  </tr>
-                ))}
+                {validWorkingAttendanceList.map((rec) => {
+                  const recTradeObj = trades.find((t) => t.id === (rec.tradeId || trainee.tradeId));
+                  return (
+                    <tr key={rec.id} className="hover:bg-slate-50/80 transition-colors font-sans">
+                      <td className="py-2.5 px-3 font-mono text-slate-900 font-semibold">{rec.date}</td>
+                      <td className="py-2.5 px-3 text-xs">
+                        <span className="inline-block px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200 font-semibold">
+                          {recTradeObj?.name || trainee.tradeName || 'Primary Trade'}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 text-center">
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold ${
+                            rec.status === 'Present'
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                              : rec.status === 'Absent'
+                              ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                              : 'bg-amber-100 text-amber-800 border border-amber-200'
+                          }`}
+                        >
+                          {rec.status}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 font-mono text-slate-800">{rec.timestamp}</td>
+                      <td className="py-2.5 px-3 text-slate-600 text-xs">
+                        {rec.markedBy === 'trainee_gps' && 'Student GPS Geotag'}
+                        {rec.markedBy === 'officer_manual' && 'Officer Manual'}
+                        {rec.markedBy === 'system_auto_absent' && '17:00 Cutoff Auto-Absent'}
+                      </td>
+                      <td className="py-2.5 px-3 font-mono text-slate-700">
+                        {rec.geotag ? `${rec.geotag.distanceFromCampusMeters}m (Campus)` : '—'}
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-500 text-xs">{rec.remarks || 'Regular workshop'}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -1486,10 +1781,15 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
                 <div key={w.id} className="p-4 sm:p-5 rounded-2xl border-2 border-rose-200 bg-rose-50/40 space-y-3.5 shadow-xs">
                   {/* Notice Title Header */}
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-rose-200 pb-3">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center flex-wrap gap-2">
                       <span className="px-2.5 py-1 rounded bg-rose-700 text-white font-mono font-bold text-xs shadow-xs">
                         {w.refNumber}
                       </span>
+                      {w.tradeName && (
+                        <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-800 border border-indigo-200 text-[11px] font-semibold">
+                          {w.tradeName}
+                        </span>
+                      )}
                       <span className="text-slate-500 text-xs font-medium hidden sm:inline">
                         शासकीय औद्योगिक प्रशिक्षण संस्था, रायगढ़ (छ.ग.)
                       </span>

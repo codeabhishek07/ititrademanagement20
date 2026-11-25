@@ -38,6 +38,10 @@ import {
   CloudUpload,
   ArrowUpCircle,
   FolderOpen,
+  Link2,
+  UserPlus,
+  UserMinus,
+  ArrowLeftRight,
 } from 'lucide-react';
 import {
   triggerAutoBackup,
@@ -46,11 +50,17 @@ import {
   getLatestSystemBackup,
 } from '../../services/backupService.ts';
 import {
+  acquireExactDeviceGps,
+  DEFAULT_ITI_CAMPUS_COORDS,
+} from '../../utils/deviceGps.ts';
+import {
   AcademicSession,
   MonthlyWorkingDay,
   HolidayRecord,
   HolidayCategory,
   Trade,
+  TradeEnrollment,
+  Trainee,
   TrainingOfficer,
   SystemSettings,
   AuditLog,
@@ -89,6 +99,12 @@ import {
   createTrade,
   updateTrade,
   deleteTrade,
+  fetchTradeEnrollments,
+  enrollTraineeInCommonTrade,
+  removeTraineeFromCommonTrade,
+  syncCommonTradeEnrollments,
+  fetchTrainees,
+  updateTrainee,
   fetchOfficers,
   createOfficer,
   updateOfficer,
@@ -110,7 +126,7 @@ interface AdminDashboardProps {
   isProductionEnv?: boolean;
 }
 
-type AdminTab = 'overview' | 'sessions' | 'working_days' | 'trades' | 'officers' | 'documents' | 'rules' | 'audit';
+type AdminTab = 'overview' | 'sessions' | 'working_days' | 'trades' | 'trainees' | 'officers' | 'documents' | 'rules' | 'audit';
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   settings,
@@ -124,7 +140,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const isProductionMode = Boolean(import.meta.env.PROD || isProductionEnv);
   // Persistent active tab across page refreshes
   const [activeTab, setActiveTab] = useState<AdminTab>(() => {
-    const validTabs: AdminTab[] = ['overview', 'sessions', 'working_days', 'trades', 'officers', 'documents', 'rules', 'audit'];
+    const validTabs: AdminTab[] = ['overview', 'sessions', 'working_days', 'trades', 'trainees', 'officers', 'documents', 'rules', 'audit'];
     if (userPreferences?.activeTab && validTabs.includes(userPreferences.activeTab as AdminTab)) {
       return userPreferences.activeTab as AdminTab;
     }
@@ -174,6 +190,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [monthlyDays, setMonthlyDays] = useState<MonthlyWorkingDay[]>([]);
   const [holidays, setHolidays] = useState<HolidayRecord[]>([]);
   const [trades, setTrades] = useState<Trade[]>([]);
+  const [allTrainees, setAllTrainees] = useState<Trainee[]>([]);
+  const [tradeEnrollments, setTradeEnrollments] = useState<TradeEnrollment[]>([]);
   const [officers, setOfficers] = useState<TrainingOfficer[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
 
@@ -182,6 +200,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [editingSession, setEditingSession] = useState<AcademicSession | null>(null);
   const [tradeModalOpen, setTradeModalOpen] = useState(false);
   const [editingTrade, setEditingTrade] = useState<Trade | null>(null);
+  const [tradeFormError, setTradeFormError] = useState('');
+  const [enrollmentModalTrade, setEnrollmentModalTrade] = useState<Trade | null>(null);
+  const [manualEnrollTraineeId, setManualEnrollTraineeId] = useState('');
+  const [enrollmentActionLoading, setEnrollmentActionLoading] = useState(false);
+  const [enrollmentActionError, setEnrollmentActionError] = useState('');
+  const [traineeSearch, setTraineeSearch] = useState('');
+  const [traineeTradeFilter, setTraineeTradeFilter] = useState('all');
+  const [transferModalTrainee, setTransferModalTrainee] = useState<Trainee | null>(null);
+  const [transferForm, setTransferForm] = useState<{
+    tradeId: string;
+    status: 'active' | 'inactive' | 'passed_out';
+  }>({ tradeId: '', status: 'active' });
+  const [transferringTrainee, setTransferringTrainee] = useState(false);
+  const [transferError, setTransferError] = useState('');
   const [officerModalOpen, setOfficerModalOpen] = useState(false);
   const [editingOfficer, setEditingOfficer] = useState<TrainingOfficer | null>(null);
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
@@ -220,7 +252,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Restore saved Admin preferences when Firestore session loads
   useEffect(() => {
     if (!userPreferences) return;
-    const validTabs: AdminTab[] = ['overview', 'sessions', 'working_days', 'trades', 'officers', 'documents', 'rules', 'audit'];
+    const validTabs: AdminTab[] = ['overview', 'sessions', 'working_days', 'trades', 'trainees', 'officers', 'documents', 'rules', 'audit'];
     if (userPreferences.activeTab && validTabs.includes(userPreferences.activeTab as AdminTab)) {
       setActiveTab(userPreferences.activeTab as AdminTab);
     }
@@ -267,6 +299,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     workshopLocation: '',
     description: '',
     status: 'active' as 'active' | 'inactive',
+    isCommonTrade: false,
+    sourceTradeIds: [] as string[],
   });
 
   const [officerForm, setOfficerForm] = useState({
@@ -292,42 +326,58 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setTimeout(() => setSuccessToast(''), 4000);
   };
 
-  const handleCaptureAdminLocation = () => {
-    if (!navigator.geolocation) {
-      alert('Geolocation is not supported by your browser or device.');
-      return;
-    }
+  const [gpsCalibrationNote, setGpsCalibrationNote] = useState<{
+    type: 'success' | 'warning' | 'error';
+    message: string;
+  } | null>(null);
+
+  const handleCaptureAdminLocation = async () => {
     setCalibratingGps(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setCalibratingGps(false);
-        const lat = parseFloat(pos.coords.latitude.toFixed(6));
-        const lng = parseFloat(pos.coords.longitude.toFixed(6));
-        const acc = Math.round(pos.coords.accuracy);
-        setSettingsForm((prev) => ({
-          ...prev,
-          campusLocation: {
-            ...prev.campusLocation,
-            lat,
-            lng,
-          },
-        }));
-        showToast(`Captured precise GPS position: ${lat}°N, ${lng}°E (±${acc}m accuracy)`);
-      },
-      (err) => {
-        setCalibratingGps(false);
-        alert(`Could not acquire GPS position: ${err.message}. Please allow Location access in browser.`);
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-    );
+    setGpsCalibrationNote(null);
+    try {
+      const fix = await acquireExactDeviceGps({
+        targetAccuracyMeters: 25,
+        minListenMs: 1000,
+        maxListenMs: 8500,
+      });
+      setSettingsForm((prev) => ({
+        ...prev,
+        campusLocation: {
+          ...prev.campusLocation,
+          lat: fix.lat,
+          lng: fix.lng,
+        },
+      }));
+      if (fix.providerQuality === 'coarse_network') {
+        setGpsCalibrationNote({
+          type: 'warning',
+          message: `Captured coarse network/IP estimate: ${fix.lat}°N, ${fix.lng}°E (±${fix.accuracy}m). If calibrating from a desktop without GPS, prefer calibrating from a smartphone standing inside campus before clicking Save.`,
+        });
+      } else {
+        setGpsCalibrationNote({
+          type: 'success',
+          message: `Locked exact device GPS: ${fix.lat}°N, ${fix.lng}°E (±${fix.accuracy}m accuracy). Click "Save Institute Settings" below to apply.`,
+        });
+      }
+      showToast(`Captured device GPS position: ${fix.lat}°N, ${fix.lng}°E (±${fix.accuracy}m)`);
+    } catch (err: any) {
+      setGpsCalibrationNote({
+        type: 'error',
+        message: err?.message || 'Could not acquire device GPS position. Please allow Location access in your browser.',
+      });
+    } finally {
+      setCalibratingGps(false);
+    }
   };
 
   const reloadData = async () => {
     setLoading(true);
     try {
-      const [sList, tList, oList, aList, hList, cStatus] = await Promise.all([
+      const [sList, tList, trnList, enrList, oList, aList, hList, cStatus] = await Promise.all([
         fetchSessions(),
         fetchTrades(),
+        fetchTrainees().catch(() => []),
+        fetchTradeEnrollments({ includeRemoved: true }).catch(() => []),
         fetchOfficers(),
         fetchAuditLogs(),
         fetchHolidays(),
@@ -335,6 +385,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       ]);
       setSessions(sList);
       setTrades(tList);
+      setAllTrainees(trnList);
+      setTradeEnrollments(enrList);
       setOfficers(oList);
       setAuditLogs(aList);
       setHolidays(hList);
@@ -627,6 +679,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Trade Handlers
   const handleOpenTradeModal = (trade?: Trade) => {
+    setTradeFormError('');
     if (trade) {
       setEditingTrade(trade);
       setTradeForm({
@@ -638,6 +691,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         workshopLocation: trade.workshopLocation,
         description: trade.description,
         status: trade.status,
+        isCommonTrade: Boolean(trade.isCommonTrade),
+        sourceTradeIds: Array.isArray(trade.sourceTradeIds) ? [...trade.sourceTradeIds] : [],
       });
     } else {
       setEditingTrade(null);
@@ -650,6 +705,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         workshopLocation: 'Workshop Bay 1',
         description: '',
         status: 'active',
+        isCommonTrade: false,
+        sourceTradeIds: [],
       });
     }
     setTradeModalOpen(true);
@@ -657,18 +714,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleSaveTrade = async (e: React.FormEvent) => {
     e.preventDefault();
+    setTradeFormError('');
     try {
+      if (tradeForm.isCommonTrade && tradeForm.sourceTradeIds.length === 0) {
+        setTradeFormError('Select at least one eligible source trade for automatic trainee enrollment.');
+        return;
+      }
+      const payload = {
+        ...tradeForm,
+        sourceTradeIds: tradeForm.isCommonTrade ? tradeForm.sourceTradeIds : [],
+      };
       if (editingTrade) {
-        await updateTrade(editingTrade.id, tradeForm);
-        showToast(`Trade ${tradeForm.name} updated successfully`);
+        const res = await updateTrade(editingTrade.id, payload);
+        const synced = res?.syncSummary;
+        showToast(
+          synced && tradeForm.isCommonTrade
+            ? `Common trade ${tradeForm.name} updated (${synced.enrolledCount} linked trainees)`
+            : `Trade ${tradeForm.name} updated successfully`
+        );
       } else {
-        await createTrade(tradeForm);
-        showToast(`Trade ${tradeForm.name} added successfully`);
+        const res = await createTrade(payload);
+        const synced = res?.syncSummary;
+        showToast(
+          synced && tradeForm.isCommonTrade
+            ? `Common trade ${tradeForm.name} created & auto-enrolled ${synced.enrolledCount} trainees`
+            : `Trade ${tradeForm.name} added successfully`
+        );
       }
       setTradeModalOpen(false);
       reloadData();
     } catch (err: any) {
-      alert(err.message);
+      setTradeFormError(err.message || 'Failed to save trade');
     }
   };
 
@@ -680,6 +756,90 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       reloadData();
     } catch (err: any) {
       alert(err.message);
+    }
+  };
+
+  // Common Trade Enrollment Manager Handlers
+  const handleOpenEnrollmentModal = (trade: Trade) => {
+    setEnrollmentModalTrade(trade);
+    setManualEnrollTraineeId('');
+    setEnrollmentActionError('');
+  };
+
+  const handleManualEnrollTrainee = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!enrollmentModalTrade || !manualEnrollTraineeId) return;
+    setEnrollmentActionLoading(true);
+    setEnrollmentActionError('');
+    try {
+      await enrollTraineeInCommonTrade(enrollmentModalTrade.id, manualEnrollTraineeId);
+      setManualEnrollTraineeId('');
+      showToast(`Enrolled existing trainee into ${enrollmentModalTrade.name} without duplication`);
+      await reloadData();
+    } catch (err: any) {
+      setEnrollmentActionError(err.message || 'Failed to enroll trainee');
+    } finally {
+      setEnrollmentActionLoading(false);
+    }
+  };
+
+  const handleRemoveEnrollment = async (tradeId: string, traineeId: string, traineeName: string) => {
+    setEnrollmentActionLoading(true);
+    setEnrollmentActionError('');
+    try {
+      await removeTraineeFromCommonTrade(tradeId, traineeId);
+      showToast(`Removed ${traineeName} from common subject enrollment (primary record preserved)`);
+      await reloadData();
+    } catch (err: any) {
+      setEnrollmentActionError(err.message || 'Failed to remove enrollment');
+    } finally {
+      setEnrollmentActionLoading(false);
+    }
+  };
+
+  const handleSyncTradeEnrollments = async (tradeId: string, tradeName: string) => {
+    setEnrollmentActionLoading(true);
+    setEnrollmentActionError('');
+    try {
+      const res = await syncCommonTradeEnrollments(tradeId);
+      showToast(
+        `Synchronized ${tradeName}: ${res?.enrolledCount ?? 0} active enrollments (${res?.added ?? 0} added, ${res?.updated ?? 0} updated)`
+      );
+      await reloadData();
+    } catch (err: any) {
+      setEnrollmentActionError(err.message || 'Failed to sync enrollments');
+    } finally {
+      setEnrollmentActionLoading(false);
+    }
+  };
+
+  // Trainee Transfer & Status Handlers
+  const handleOpenTransferModal = (tr: Trainee) => {
+    setTransferModalTrainee(tr);
+    setTransferForm({
+      tradeId: tr.tradeId,
+      status: tr.status || 'active',
+    });
+    setTransferError('');
+  };
+
+  const handleSaveTransfer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!transferModalTrainee) return;
+    setTransferringTrainee(true);
+    setTransferError('');
+    try {
+      await updateTrainee(transferModalTrainee.id, {
+        tradeId: transferForm.tradeId,
+        status: transferForm.status,
+      });
+      showToast(`Updated ${transferModalTrainee.name} & synced common subject enrollments`);
+      setTransferModalTrainee(null);
+      await reloadData();
+    } catch (err: any) {
+      setTransferError(err.message || 'Failed to transfer trainee');
+    } finally {
+      setTransferringTrainee(false);
     }
   };
 
@@ -1060,6 +1220,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {activeTab === 'sessions' && <Calendar className="w-4 h-4" />}
               {activeTab === 'working_days' && <CalendarDays className="w-4 h-4" />}
               {activeTab === 'trades' && <Layers className="w-4 h-4" />}
+              {activeTab === 'trainees' && <ArrowLeftRight className="w-4 h-4" />}
               {activeTab === 'officers' && <Users className="w-4 h-4" />}
               {activeTab === 'documents' && <FolderOpen className="w-4 h-4" />}
               {activeTab === 'rules' && <Settings className="w-4 h-4" />}
@@ -1077,7 +1238,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 {activeTab === 'overview' && 'System Overview'}
                 {activeTab === 'sessions' && 'Academic Sessions'}
                 {activeTab === 'working_days' && 'Session Calendar & Holidays'}
-                {activeTab === 'trades' && 'Trade Management'}
+                {activeTab === 'trades' && 'Trade & Common Subjects'}
+                {activeTab === 'trainees' && 'Trainees & Transfers'}
                 {activeTab === 'officers' && 'Officers & Accounts'}
                 {activeTab === 'documents' && 'Documents & Circulars'}
                 {activeTab === 'rules' && 'Campus Geofence & Rules'}
@@ -1166,7 +1328,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <span className="text-slate-500 font-normal">स्टाफ व ट्रेड</span>
               </div>
               {[
-                { id: 'trades', label: 'Trade Management', hindi: 'ट्रेड प्रबंधन', icon: Layers, badge: trades.length },
+                { id: 'trades', label: 'Trade & Common Subjects', hindi: 'ट्रेड व साझा विषय', icon: Layers, badge: trades.length },
+                { id: 'trainees', label: 'Trainees & Transfers', hindi: 'प्रशिक्षु व स्थानांतरण', icon: ArrowLeftRight, badge: allTrainees.length },
                 { id: 'officers', label: 'Officers & Accounts', hindi: 'प्रशिक्षण अधिकारी व खाते', icon: Users, badge: officers.length },
               ].map((item) => {
                 const Icon = item.icon;
@@ -1356,10 +1519,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {[
                 {
                   id: 'trades',
-                  label: 'Trade Management',
-                  hindi: 'ट्रेड प्रबंधन',
+                  label: 'Trade & Common Subjects',
+                  hindi: 'ट्रेड व साझा विषय',
                   icon: Layers,
                   badge: trades.length,
+                },
+                {
+                  id: 'trainees',
+                  label: 'Trainees & Transfers',
+                  hindi: 'प्रशिक्षु व स्थानांतरण',
+                  icon: ArrowLeftRight,
+                  badge: allTrainees.length,
                 },
                 {
                   id: 'officers',
@@ -1486,18 +1656,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {/* KPI Metrics */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-              <span className="text-slate-500 font-medium">Active Academic Session</span>
-              <div className="text-lg font-bold text-slate-900 mt-1">
-                {sessions.find((s) => s.status === 'active')?.name || '2025-2026'}
+              <span className="text-slate-500 font-medium">Unique Enrolled Trainees</span>
+              <div className="text-lg font-bold text-slate-900 mt-1 font-mono">
+                {allTrainees.filter((t) => t.status === 'active').length}
               </div>
-              <span className="text-[11px] text-emerald-600 font-medium">Session in progress</span>
+              <span className="text-[11px] text-emerald-600 font-medium">
+                {allTrainees.length} total unique · 0 duplicate IDs
+              </span>
             </div>
 
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-              <span className="text-slate-500 font-medium">Configured Trades</span>
-              <div className="text-lg font-bold text-slate-900 mt-1 font-mono">{trades.length}</div>
+              <span className="text-slate-500 font-medium">Trades &amp; Common Subjects</span>
+              <div className="text-lg font-bold text-slate-900 mt-1 font-mono">
+                {trades.filter((t) => !t.isCommonTrade).length}{' '}
+                <span className="text-xs font-semibold text-indigo-700">
+                  + {trades.filter((t) => t.isCommonTrade).length} Common
+                </span>
+              </div>
               <span className="text-[11px] text-slate-500">
-                {trades.reduce((acc, t) => acc + t.totalIntake, 0)} Total Sanctioned Seats
+                {tradeEnrollments.filter((e) => e.status === 'enrolled').length} common subject links
               </span>
             </div>
 
@@ -2623,22 +2800,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         );
       })()}
 
-      {/* TAB 4: TRADES MANAGEMENT */}
+      {/* TAB 4: TRADES & COMMON SUBJECTS MANAGEMENT */}
       {activeTab === 'trades' && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
           <div className="p-5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h3 className="font-bold text-sm text-slate-900">Trade Management</h3>
+              <h3 className="font-bold text-sm text-slate-900">Trade &amp; Common Subject Management</h3>
               <p className="text-xs text-slate-500">
-                Add, alter, or delete technical trades, workshop locations, and intake capacities.
+                Configure core trades and Shared Common Subjects (e.g., WCS, English &amp; Communication Skills) linked to existing trainees without duplicate registration.
               </p>
             </div>
             <button
               onClick={() => handleOpenTradeModal()}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-blue-700 hover:bg-blue-800 rounded-lg transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-blue-700 hover:bg-blue-800 rounded-lg transition-colors cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>Add New Trade</span>
+              <span>Add New Trade / Common Subject</span>
             </button>
           </div>
 
@@ -2646,61 +2823,247 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-slate-600">
-                  <th className="py-3 px-4 font-semibold">Trade Name &amp; Code</th>
-                  <th className="py-3 px-4 font-semibold">Duration</th>
-                  <th className="py-3 px-4 font-semibold text-center">Sanctioned Units</th>
-                  <th className="py-3 px-4 font-semibold text-center">Intake Capacity</th>
-                  <th className="py-3 px-4 font-semibold">Workshop Location</th>
+                  <th className="py-3 px-4 font-semibold">Trade / Subject &amp; Code</th>
+                  <th className="py-3 px-4 font-semibold">Type &amp; Source Trades</th>
+                  <th className="py-3 px-4 font-semibold text-center">Enrolled Trainees</th>
+                  <th className="py-3 px-4 font-semibold">Workshop / Room</th>
                   <th className="py-3 px-4 font-semibold text-center">Status</th>
                   <th className="py-3 px-4 font-semibold text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {trades.map((tr) => (
-                  <tr key={tr.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-3 px-4">
-                      <div className="font-semibold text-slate-900">{tr.name}</div>
-                      <div className="font-mono text-[11px] text-slate-500">{tr.code}</div>
-                    </td>
-                    <td className="py-3 px-4 text-slate-700">{tr.durationYears} Year(s)</td>
-                    <td className="py-3 px-4 text-center font-mono font-medium text-slate-800">
-                      {tr.sanctionedUnits} Units
-                    </td>
-                    <td className="py-3 px-4 text-center font-mono font-medium text-slate-800">
-                      {tr.totalIntake} Seats
-                    </td>
-                    <td className="py-3 px-4 text-slate-600">{tr.workshopLocation}</td>
-                    <td className="py-3 px-4 text-center">
-                      <span
-                        className={`inline-block px-2 py-0.5 text-[10px] font-semibold rounded ${
-                          tr.status === 'active'
-                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                            : 'bg-slate-100 text-slate-600 border border-slate-200'
-                        }`}
-                      >
-                        {tr.status.toUpperCase()}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => handleOpenTradeModal(tr)}
-                          className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded"
-                          title="Edit Trade"
+                {trades.map((tr) => {
+                  const isCommon = Boolean(tr.isCommonTrade);
+                  const commonEnrollCount = tradeEnrollments.filter(
+                    (e) => e.tradeId === tr.id && e.status === 'enrolled'
+                  ).length;
+                  const directCount = allTrainees.filter((t) => t.tradeId === tr.id).length;
+                  const sourceTradeNames = (tr.sourceTradeIds || []).map(
+                    (sid) => trades.find((t) => t.id === sid)?.name || sid
+                  );
+
+                  return (
+                    <tr key={tr.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-slate-900">{tr.name}</span>
+                          {isCommon ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">
+                              <Link2 className="w-3 h-3" />
+                              Common Subject
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                              {tr.durationYears} Yr Primary
+                            </span>
+                          )}
+                        </div>
+                        <div className="font-mono text-[11px] text-slate-500 mt-0.5">{tr.code}</div>
+                      </td>
+                      <td className="py-3 px-4">
+                        {isCommon ? (
+                          <div className="flex flex-wrap gap-1">
+                            {sourceTradeNames.length > 0 ? (
+                              sourceTradeNames.map((sname) => (
+                                <span
+                                  key={sname}
+                                  className="px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 text-[10px] font-medium"
+                                >
+                                  {sname}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-[11px] text-amber-700 italic">No source trades selected</span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-slate-600">
+                            {tr.sanctionedUnits} Units · {tr.totalIntake} Seats
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        {isCommon ? (
+                          <span className="inline-flex items-center gap-1 font-mono font-bold text-indigo-800 bg-indigo-50 px-2.5 py-0.5 rounded border border-indigo-200">
+                            {commonEnrollCount} Linked
+                          </span>
+                        ) : (
+                          <span className="font-mono font-semibold text-slate-800">{directCount} Direct</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-slate-600">{tr.workshopLocation}</td>
+                      <td className="py-3 px-4 text-center">
+                        <span
+                          className={`inline-block px-2 py-0.5 text-[10px] font-semibold rounded ${
+                            tr.status === 'active'
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                              : 'bg-slate-100 text-slate-600 border border-slate-200'
+                          }`}
                         >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteTrade(tr.id)}
-                          className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded"
-                          title="Delete Trade"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                          {tr.status.toUpperCase()}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          {isCommon && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEnrollmentModal(tr)}
+                              className="px-2.5 py-1 text-[11px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors cursor-pointer mr-1"
+                              title="Manage Enrolled Trainees & Sync Source Trades"
+                            >
+                              Manage Enrollments
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleOpenTradeModal(tr)}
+                            className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded cursor-pointer"
+                            title="Edit Trade"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteTrade(tr.id)}
+                            className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded cursor-pointer"
+                            title="Delete Trade"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 4B: UNIQUE TRAINEES & TRANSFERS */}
+      {activeTab === 'trainees' && (
+        <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+          <div className="p-5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h3 className="font-bold text-sm text-slate-900">
+                Unique Institute Trainees &amp; Trade Transfers ({allTrainees.length} Unique Trainees)
+              </h3>
+              <p className="text-xs text-slate-500">
+                Single source of truth for trainees. Transferring a trainee's primary trade or updating active status automatically synchronizes their Common Trade enrollments.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <select
+                value={traineeTradeFilter}
+                onChange={(e) => setTraineeTradeFilter(e.target.value)}
+                className="px-3 py-1.5 border border-slate-300 rounded-lg bg-white text-slate-800"
+              >
+                <option value="all">All Primary Trades ({allTrainees.length})</option>
+                {trades
+                  .filter((t) => !t.isCommonTrade)
+                  .map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({allTrainees.filter((tr) => tr.tradeId === t.id).length})
+                    </option>
+                  ))}
+              </select>
+              <input
+                type="text"
+                value={traineeSearch}
+                onChange={(e) => setTraineeSearch(e.target.value)}
+                placeholder="Search trainee or roll no..."
+                className="px-3 py-1.5 border border-slate-300 rounded-lg w-48 sm:w-56"
+              />
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-slate-600">
+                  <th className="py-3 px-4 font-semibold">Roll No &amp; Name</th>
+                  <th className="py-3 px-4 font-semibold">Primary Trade</th>
+                  <th className="py-3 px-4 font-semibold">Enrolled Common Subjects</th>
+                  <th className="py-3 px-4 font-semibold text-center">Status</th>
+                  <th className="py-3 px-4 font-semibold text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {allTrainees
+                  .filter((tr) => traineeTradeFilter === 'all' || tr.tradeId === traineeTradeFilter)
+                  .filter(
+                    (tr) =>
+                      !traineeSearch.trim() ||
+                      tr.name.toLowerCase().includes(traineeSearch.toLowerCase()) ||
+                      tr.rollNo.toLowerCase().includes(traineeSearch.toLowerCase())
+                  )
+                  .map((tr) => {
+                    const primaryTrade = trades.find((t) => t.id === tr.tradeId);
+                    const linkedSubjects = tradeEnrollments
+                      .filter((e) => e.traineeId === tr.id && e.status === 'enrolled')
+                      .map((e) => ({
+                        enrollment: e,
+                        trade: trades.find((t) => t.id === e.tradeId),
+                      }))
+                      .filter((item) => Boolean(item.trade));
+
+                    return (
+                      <tr key={tr.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="py-3 px-4">
+                          <div className="font-semibold text-slate-900">{tr.name}</div>
+                          <div className="font-mono text-[11px] text-slate-500">{tr.rollNo}</div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-200 font-medium text-[11px]">
+                            {primaryTrade?.name || tr.tradeId}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          {linkedSubjects.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {linkedSubjects.map(({ enrollment, trade }) => (
+                                <span
+                                  key={enrollment.id}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-50 text-indigo-800 border border-indigo-200 text-[10px] font-semibold"
+                                >
+                                  <Link2 className="w-2.5 h-2.5" />
+                                  {trade?.name}
+                                  <span className="text-[9px] text-indigo-500 uppercase">
+                                    ({enrollment.enrollmentType})
+                                  </span>
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-[11px] text-slate-400 italic">None</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span
+                            className={`inline-block px-2 py-0.5 text-[10px] font-semibold rounded ${
+                              tr.status === 'active'
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                : tr.status === 'passed_out'
+                                ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                                : 'bg-rose-100 text-rose-800 border border-rose-200'
+                            }`}
+                          >
+                            {(tr.status || 'active').toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenTransferModal(tr)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <ArrowLeftRight className="w-3 h-3" />
+                            <span>Transfer / Status</span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
               </tbody>
             </table>
           </div>
@@ -2820,22 +3183,59 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Campus Geofence */}
             <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 space-y-3">
-              <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-2">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2">
                 <div className="flex items-center gap-2 font-semibold text-slate-900">
                   <Compass className="w-4 h-4 text-blue-600" />
                   <span>Campus Location &amp; Geofence Coordinates</span>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleCaptureAdminLocation}
-                  disabled={calibratingGps}
-                  className="px-2.5 py-1 text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-md flex items-center gap-1 cursor-pointer transition-colors shadow-xs disabled:opacity-50"
-                  title="Click to automatically capture your current GPS location as the campus center"
-                >
-                  <MapPin className={`w-3.5 h-3.5 text-blue-600 ${calibratingGps ? 'animate-bounce' : ''}`} />
-                  <span>{calibratingGps ? 'Acquiring GPS...' : '📍 Capture Current GPS'}</span>
-                </button>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSettingsForm((prev) => ({
+                        ...prev,
+                        campusLocation: {
+                          ...prev.campusLocation,
+                          lat: DEFAULT_ITI_CAMPUS_COORDS.lat,
+                          lng: DEFAULT_ITI_CAMPUS_COORDS.lng,
+                        },
+                      }));
+                      setGpsCalibrationNote({
+                        type: 'success',
+                        message: `Restored default Govt ITI Raigarh coordinates (${DEFAULT_ITI_CAMPUS_COORDS.lat}°N, ${DEFAULT_ITI_CAMPUS_COORDS.lng}°E). Click "Save Institute Settings" below to apply.`,
+                      });
+                    }}
+                    className="px-2 py-1 text-[11px] font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded-md cursor-pointer transition-colors"
+                    title="Restore default Boirdadar, Raigarh coordinates (21.8958, 83.4133)"
+                  >
+                    Default ITI Raigarh
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCaptureAdminLocation}
+                    disabled={calibratingGps}
+                    className="px-2.5 py-1 text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-md flex items-center gap-1 cursor-pointer transition-colors shadow-xs disabled:opacity-50"
+                    title="Click to capture exact device GPS coordinates as campus center"
+                  >
+                    <MapPin className={`w-3.5 h-3.5 text-blue-600 ${calibratingGps ? 'animate-bounce' : ''}`} />
+                    <span>{calibratingGps ? 'Acquiring Device GPS...' : 'Capture Current GPS'}</span>
+                  </button>
+                </div>
               </div>
+
+              {gpsCalibrationNote && (
+                <div
+                  className={`p-2.5 rounded-lg border text-[11px] leading-relaxed ${
+                    gpsCalibrationNote.type === 'warning'
+                      ? 'bg-amber-50 border-amber-300 text-amber-900'
+                      : gpsCalibrationNote.type === 'error'
+                      ? 'bg-rose-50 border-rose-300 text-rose-900'
+                      : 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                  }`}
+                >
+                  {gpsCalibrationNote.message}
+                </div>
+              )}
 
               <div>
                 <label className="block text-slate-600 mb-1">Campus Center Latitude</label>
@@ -3413,21 +3813,104 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* MODAL: CREATE / EDIT TRADE */}
+      {/* MODAL: CREATE / EDIT TRADE OR COMMON SUBJECT */}
       {tradeModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-md w-full p-6 text-xs text-slate-800">
-            <h3 className="font-bold text-sm text-slate-900 mb-4">
-              {editingTrade ? 'Alter Trade Details' : 'Add New Trade'}
-            </h3>
-            <form onSubmit={handleSaveTrade} className="space-y-3">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-lg w-full p-6 text-xs text-slate-800 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3 mb-4">
+              <h3 className="font-bold text-sm text-slate-900">
+                {editingTrade ? 'Alter Trade / Subject Details' : 'Add New Trade or Common Subject'}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setTradeModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-700 rounded cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveTrade} className="space-y-3.5">
+              {/* Common Trade / Shared Subject Toggle */}
+              <div className="p-3 rounded-xl border border-indigo-200 bg-indigo-50/70 space-y-2.5">
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={tradeForm.isCommonTrade}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setTradeForm((prev) => ({
+                        ...prev,
+                        isCommonTrade: checked,
+                        sourceTradeIds: checked
+                          ? prev.sourceTradeIds.length > 0
+                            ? prev.sourceTradeIds
+                            : trades
+                                .filter((t) => !t.isCommonTrade && t.durationYears >= 2 && t.id !== editingTrade?.id)
+                                .map((t) => t.id)
+                          : [],
+                      }));
+                    }}
+                    className="mt-0.5 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <div>
+                    <span className="font-bold text-indigo-950 block">
+                      Mark as Common Trade / Shared Subject
+                    </span>
+                    <span className="text-[11px] text-indigo-800 leading-snug block">
+                      Automatically enroll existing trainees from selected source trades using their existing Trainee IDs (no duplicate trainee registration).
+                    </span>
+                  </div>
+                </label>
+
+                {tradeForm.isCommonTrade && (
+                  <div className="pt-1 border-t border-indigo-200/80 space-y-2">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-indigo-700">
+                      Quick Common Subject Presets:
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setTradeForm((prev) => ({
+                            ...prev,
+                            name: 'Workshop Calculation & Science (WCS)',
+                            code: prev.code || 'WCS-01',
+                            workshopLocation: prev.workshopLocation || 'Common Theory Hall 1',
+                            description: 'Common subject shared across eligible engineering trades',
+                          }))
+                        }
+                        className="px-2.5 py-1 rounded bg-white hover:bg-indigo-100 text-indigo-900 border border-indigo-200 font-semibold text-[11px] cursor-pointer"
+                      >
+                        Workshop Calculation &amp; Science (WCS)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setTradeForm((prev) => ({
+                            ...prev,
+                            name: 'English & Communication Skills',
+                            code: prev.code || 'ENG-01',
+                            workshopLocation: prev.workshopLocation || 'Employability Skills Lab',
+                            description: 'Common Employability & English Communication subject shared across trades',
+                          }))
+                        }
+                        className="px-2.5 py-1 rounded bg-white hover:bg-indigo-100 text-indigo-900 border border-indigo-200 font-semibold text-[11px] cursor-pointer"
+                      >
+                        English &amp; Communication Skills
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div>
-                <label className="block font-medium mb-1">Trade Name</label>
+                <label className="block font-medium mb-1">Trade / Subject Name</label>
                 <input
                   type="text"
                   value={tradeForm.name}
                   onChange={(e) => setTradeForm({ ...tradeForm, name: e.target.value })}
-                  placeholder="e.g. Wireman / Machinist"
+                  placeholder={tradeForm.isCommonTrade ? 'e.g. Workshop Calculation & Science (WCS)' : 'e.g. Wireman / Machinist'}
                   className="w-full px-3 py-2 border border-slate-300 rounded"
                   required
                 />
@@ -3435,12 +3918,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-medium mb-1">Trade Code</label>
+                  <label className="block font-medium mb-1">Trade / Subject Code</label>
                   <input
                     type="text"
                     value={tradeForm.code}
                     onChange={(e) => setTradeForm({ ...tradeForm, code: e.target.value.toUpperCase() })}
-                    placeholder="e.g. WIR-07"
+                    placeholder={tradeForm.isCommonTrade ? 'e.g. WCS-01' : 'e.g. WIR-07'}
                     className="w-full px-3 py-2 border border-slate-300 rounded font-mono"
                     required
                   />
@@ -3457,6 +3940,96 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </select>
                 </div>
               </div>
+
+              {/* Source Trades Multi-Select when Common Trade is enabled */}
+              {tradeForm.isCommonTrade && (
+                <div className="p-3 rounded-xl border border-slate-200 bg-slate-50 space-y-2">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <span className="font-bold text-slate-800">
+                      Eligible Source Trades ({tradeForm.sourceTradeIds.length} selected)
+                    </span>
+                    <div className="flex gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setTradeForm((prev) => ({
+                            ...prev,
+                            sourceTradeIds: trades
+                              .filter((t) => !t.isCommonTrade && t.durationYears >= 2 && t.id !== editingTrade?.id)
+                              .map((t) => t.id),
+                          }))
+                        }
+                        className="px-2 py-0.5 text-[10px] font-semibold bg-white border border-slate-300 rounded hover:bg-slate-100 cursor-pointer"
+                      >
+                        2-Year Trades
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setTradeForm((prev) => ({
+                            ...prev,
+                            sourceTradeIds: trades
+                              .filter((t) => !t.isCommonTrade && t.id !== editingTrade?.id)
+                              .map((t) => t.id),
+                          }))
+                        }
+                        className="px-2 py-0.5 text-[10px] font-semibold bg-white border border-slate-300 rounded hover:bg-slate-100 cursor-pointer"
+                      >
+                        All Trades
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-36 overflow-y-auto">
+                    {trades
+                      .filter((t) => !t.isCommonTrade && t.id !== editingTrade?.id)
+                      .map((src) => {
+                        const checked = tradeForm.sourceTradeIds.includes(src.id);
+                        const activeCount = allTrainees.filter(
+                          (tr) => tr.tradeId === src.id && tr.status === 'active'
+                        ).length;
+                        return (
+                          <label
+                            key={src.id}
+                            className={`flex items-center justify-between gap-2 p-2 rounded border cursor-pointer text-[11px] ${
+                              checked
+                                ? 'bg-blue-50 border-blue-400 text-blue-950 font-semibold'
+                                : 'bg-white border-slate-200 text-slate-700'
+                            }`}
+                          >
+                            <span className="flex items-center gap-1.5 truncate">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(e) => {
+                                  const next = e.target.checked
+                                    ? [...tradeForm.sourceTradeIds, src.id]
+                                    : tradeForm.sourceTradeIds.filter((id) => id !== src.id);
+                                  setTradeForm({ ...tradeForm, sourceTradeIds: next });
+                                }}
+                                className="rounded border-slate-300 text-blue-600"
+                              />
+                              <span className="truncate">{src.name}</span>
+                            </span>
+                            <span className="font-mono text-[10px] text-slate-500 shrink-0">
+                              {activeCount}
+                            </span>
+                          </label>
+                        );
+                      })}
+                  </div>
+                  <div className="text-[11px] text-indigo-800 font-medium">
+                    Eligible active trainees to auto-link:{' '}
+                    <strong className="font-mono">
+                      {
+                        allTrainees.filter(
+                          (tr) => tr.status === 'active' && tradeForm.sourceTradeIds.includes(tr.tradeId)
+                        ).length
+                      }
+                    </strong>{' '}
+                    (using existing trainee IDs)
+                  </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -3492,19 +4065,274 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 />
               </div>
 
+              {tradeFormError && (
+                <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-[11px] font-medium">
+                  {tradeFormError}
+                </div>
+              )}
+
               <div className="pt-3 flex gap-2">
                 <button
                   type="button"
                   onClick={() => setTradeModalOpen(false)}
-                  className="flex-1 py-2 px-3 border border-slate-300 rounded hover:bg-slate-100"
+                  className="flex-1 py-2 px-3 border border-slate-300 rounded hover:bg-slate-100 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2 px-3 bg-blue-700 text-white rounded hover:bg-blue-800"
+                  className="flex-1 py-2 px-3 bg-blue-700 text-white font-semibold rounded hover:bg-blue-800 cursor-pointer"
                 >
-                  Save Trade
+                  {tradeForm.isCommonTrade ? 'Save & Auto-Enroll Trainees' : 'Save Trade'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: COMMON TRADE ENROLLMENT MANAGER */}
+      {enrollmentModalTrade && (() => {
+        const liveModalTrade = trades.find((t) => t.id === enrollmentModalTrade.id) || enrollmentModalTrade;
+        const activeEnrollments = tradeEnrollments.filter(
+          (e) => e.tradeId === liveModalTrade.id && e.status === 'enrolled'
+        );
+        const enrolledTraineeIds = new Set(activeEnrollments.map((e) => e.traineeId));
+        const unlinkedActiveTrainees = allTrainees.filter(
+          (tr) => tr.status === 'active' && tr.tradeId !== liveModalTrade.id && !enrolledTraineeIds.has(tr.id)
+        );
+        const linkedSourceNames = (liveModalTrade.sourceTradeIds || []).map(
+          (sid) => trades.find((t) => t.id === sid)?.name || sid
+        );
+
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+            <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-3xl w-full p-6 text-xs text-slate-800 max-h-[90vh] flex flex-col gap-4">
+              <div className="flex items-start justify-between gap-3 border-b border-slate-200 pb-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="p-1.5 bg-indigo-100 text-indigo-700 rounded-lg">
+                      <Link2 className="w-4 h-4" />
+                    </span>
+                    <h3 className="font-bold text-sm text-slate-900">
+                      Common Subject Enrollment Manager — {liveModalTrade.name} ({liveModalTrade.code})
+                    </h3>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Source Trades: {linkedSourceNames.length > 0 ? linkedSourceNames.join(', ') : 'Manual only'} ·{' '}
+                    <strong className="text-indigo-700">{activeEnrollments.length}</strong> linked trainee(s) using existing primary IDs
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={enrollmentActionLoading}
+                    onClick={() => handleSyncTradeEnrollments(liveModalTrade.id, liveModalTrade.name)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold rounded-lg text-[11px] cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${enrollmentActionLoading ? 'animate-spin' : ''}`} />
+                    <span>Re-Sync Eligible Trades</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEnrollmentModalTrade(null)}
+                    className="p-1 text-slate-400 hover:text-slate-700 rounded cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Manual Add Existing Trainee */}
+              <form
+                onSubmit={handleManualEnrollTrainee}
+                className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex flex-wrap items-center gap-2"
+              >
+                <div className="flex-1 min-w-[220px]">
+                  <select
+                    value={manualEnrollTraineeId}
+                    onChange={(e) => setManualEnrollTraineeId(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs"
+                  >
+                    <option value="">
+                      Select an existing active trainee to manually enroll ({unlinkedActiveTrainees.length} available)...
+                    </option>
+                    {unlinkedActiveTrainees.map((tr) => {
+                      const pTrade = trades.find((t) => t.id === tr.tradeId)?.name || tr.tradeId;
+                      return (
+                        <option key={tr.id} value={tr.id}>
+                          {tr.name} ({tr.rollNo}) — {pTrade}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+                <button
+                  type="submit"
+                  disabled={!manualEnrollTraineeId || enrollmentActionLoading}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 text-white font-semibold rounded-lg cursor-pointer"
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  <span>Enroll Existing Trainee</span>
+                </button>
+              </form>
+
+              {enrollmentActionError && (
+                <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-[11px] font-medium">
+                  {enrollmentActionError}
+                </div>
+              )}
+
+              {/* Enrolled Trainees List */}
+              <div className="overflow-y-auto border border-slate-200 rounded-xl flex-1">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead className="sticky top-0 bg-slate-50 border-b border-slate-200 text-slate-600">
+                    <tr>
+                      <th className="py-2.5 px-3 font-semibold">Trainee &amp; Roll No</th>
+                      <th className="py-2.5 px-3 font-semibold">Original Primary Trade</th>
+                      <th className="py-2.5 px-3 font-semibold text-center">Link Type</th>
+                      <th className="py-2.5 px-3 font-semibold text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {activeEnrollments.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="py-8 text-center text-slate-400 italic">
+                          No trainees currently enrolled in {liveModalTrade.name}. Click "Re-Sync Eligible Trades" or add a trainee above.
+                        </td>
+                      </tr>
+                    ) : (
+                      activeEnrollments.map((enr) => {
+                        const tr = allTrainees.find((t) => t.id === enr.traineeId);
+                        if (!tr) return null;
+                        const primaryTrade = trades.find((t) => t.id === tr.tradeId);
+                        return (
+                          <tr key={enr.id} className="hover:bg-slate-50/80">
+                            <td className="py-2.5 px-3">
+                              <div className="font-semibold text-slate-900">{tr.name}</div>
+                              <div className="font-mono text-[10px] text-slate-500">{tr.rollNo}</div>
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-200 text-[10px] font-medium">
+                                {primaryTrade?.name || tr.tradeId}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-center">
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${
+                                  enr.enrollmentType === 'manual'
+                                    ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                                    : 'bg-indigo-50 text-indigo-800 border border-indigo-200'
+                                }`}
+                              >
+                                {enr.enrollmentType}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-right">
+                              <button
+                                type="button"
+                                disabled={enrollmentActionLoading}
+                                onClick={() => handleRemoveEnrollment(liveModalTrade.id, tr.id, tr.name)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded cursor-pointer"
+                              >
+                                <UserMinus className="w-3 h-3" />
+                                <span>Remove</span>
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* MODAL: TRANSFER TRAINEE PRIMARY TRADE OR STATUS */}
+      {transferModalTrainee && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-md w-full p-6 text-xs text-slate-800 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <h3 className="font-bold text-sm text-slate-900">
+                Transfer Trade / Update Status
+              </h3>
+              <button
+                type="button"
+                onClick={() => setTransferModalTrainee(null)}
+                className="p-1 text-slate-400 hover:text-slate-700 rounded cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+              <div className="font-bold text-slate-900">{transferModalTrainee.name}</div>
+              <div className="font-mono text-[11px] text-slate-500">{transferModalTrainee.rollNo}</div>
+            </div>
+
+            <form onSubmit={handleSaveTransfer} className="space-y-3">
+              <div>
+                <label className="block font-semibold mb-1">Primary Trade</label>
+                <select
+                  value={transferForm.tradeId}
+                  onChange={(e) => setTransferForm({ ...transferForm, tradeId: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"
+                  required
+                >
+                  {trades
+                    .filter((t) => !t.isCommonTrade)
+                    .map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} ({t.code})
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-1">Enrollment Status</label>
+                <select
+                  value={transferForm.status}
+                  onChange={(e) =>
+                    setTransferForm({
+                      ...transferForm,
+                      status: e.target.value as 'active' | 'inactive' | 'passed_out',
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"
+                >
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive / Dropped</option>
+                  <option value="passed_out">Passed Out</option>
+                </select>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Auto-enrolled Common Subjects will automatically update to match the trainee's new primary trade and active status.
+                </p>
+              </div>
+
+              {transferError && (
+                <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-[11px]">
+                  {transferError}
+                </div>
+              )}
+
+              <div className="pt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTransferModalTrainee(null)}
+                  className="flex-1 py-2 px-3 border border-slate-300 rounded-lg hover:bg-slate-100 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={transferringTrainee}
+                  className="flex-1 py-2 px-3 bg-blue-700 hover:bg-blue-800 text-white font-semibold rounded-lg cursor-pointer"
+                >
+                  {transferringTrainee ? 'Updating & Syncing...' : 'Save & Sync Enrollments'}
                 </button>
               </div>
             </form>

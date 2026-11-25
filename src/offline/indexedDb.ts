@@ -208,9 +208,13 @@ export async function flushSyncQueue(): Promise<{ synced: number; failed: number
 
   for (const item of items) {
     try {
+      const token = typeof localStorage !== 'undefined' ? localStorage.getItem('iti_session_token') || '' : '';
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['x-iti-session'] = token;
       const res = await fetch(item.url, {
         method: item.method,
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers,
         body: item.body ? JSON.stringify(item.body) : undefined,
       });
 

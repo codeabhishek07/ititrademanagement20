@@ -163,6 +163,7 @@ export async function loadDatabaseFromFirestore(): Promise<LoadFirestoreResult> 
       monthlyWorkingDays,
       holidays,
       trades,
+      rawTradeEnrollments,
       officers,
       rawTrainees,
       rawAttendance,
@@ -181,6 +182,7 @@ export async function loadDatabaseFromFirestore(): Promise<LoadFirestoreResult> 
       fetchCollection('workingDays'),
       fetchCollection('holidays'),
       fetchCollection('trades'),
+      fetchCollection('tradeEnrollments'),
       fetchCollection('officers'),
       fetchCollection('trainees'),
       fetchCollection('attendance'),
@@ -198,6 +200,9 @@ export async function loadDatabaseFromFirestore(): Promise<LoadFirestoreResult> 
 
     const trainees = (rawTrainees || []).filter((t: any) => !isDemoIdOrName(t));
     const validTraineeIds = new Set(trainees.map((t: any) => t.id));
+    const tradeEnrollments = (rawTradeEnrollments || []).filter(
+      (e: any) => validTraineeIds.has(e.traineeId) && !isDemoIdOrName(e)
+    );
 
     const attendance = (rawAttendance || []).filter(
       (a: any) => validTraineeIds.has(a.traineeId) && !isDemoIdOrName(a)
@@ -238,6 +243,7 @@ export async function loadDatabaseFromFirestore(): Promise<LoadFirestoreResult> 
         monthlyWorkingDays,
         holidays: holidays || [],
         trades,
+        tradeEnrollments,
         officers,
         trainees,
         attendance,
@@ -267,6 +273,7 @@ export async function purgeAllDemoDocumentsFromFirestore(): Promise<number> {
   let totalDeleted = 0;
   const collectionsToClean = [
     'trainees',
+    'tradeEnrollments',
     'attendance',
     'assessments',
     'leaves',
@@ -362,6 +369,7 @@ export async function syncDiffToFirestore(
     diffCollection('workingDays', prevData.monthlyWorkingDays, nextData.monthlyWorkingDays);
     diffCollection('holidays', prevData.holidays || [], nextData.holidays || []);
     diffCollection('trades', prevData.trades, nextData.trades);
+    diffCollection('tradeEnrollments', prevData.tradeEnrollments || [], nextData.tradeEnrollments || []);
     diffCollection('officers', prevData.officers, nextData.officers);
     diffCollection('trainees', prevData.trainees, nextData.trainees);
     diffCollection('attendance', prevData.attendance, nextData.attendance);
@@ -422,6 +430,7 @@ export async function seedDatabaseToFirestore(dbData: DatabaseSchema): Promise<v
       batchWriteList('workingDays', dbData.monthlyWorkingDays),
       batchWriteList('holidays', dbData.holidays || []),
       batchWriteList('trades', dbData.trades),
+      batchWriteList('tradeEnrollments', dbData.tradeEnrollments || []),
       batchWriteList('officers', dbData.officers),
       batchWriteList('trainees', dbData.trainees),
       batchWriteList('attendance', dbData.attendance),

@@ -61,6 +61,8 @@ interface DigitalProgressCardTrackerProps {
   tradeId: string;
   tradeName: string;
   tradeCode?: string;
+  isCommonTrade?: boolean;
+  trades?: Trade[];
   officerName: string;
   sessions?: AcademicSession[];
   settings?: SystemSettings;
@@ -94,6 +96,46 @@ const ACADEMIC_MONTHS: MonthConfig[] = [
 
 const TOTAL_WORKING_DAYS = ACADEMIC_MONTHS.reduce((acc, m) => acc + m.workingDays, 0); // 235 days
 
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+const MONTH_SHORT_NAMES = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+function buildAcademicMonthsForStartYear(startYear: number): MonthConfig[] {
+  if (!Number.isFinite(startYear) || startYear === 2026) {
+    return ACADEMIC_MONTHS;
+  }
+  const sequence: Array<{ yearOffset: 0 | 1; monthIndex: number; workingDays: number; semester: 1 | 2 }> = [
+    { yearOffset: 0, monthIndex: 7, workingDays: 16, semester: 1 },
+    { yearOffset: 0, monthIndex: 8, workingDays: 21, semester: 1 },
+    { yearOffset: 0, monthIndex: 9, workingDays: 22, semester: 1 },
+    { yearOffset: 0, monthIndex: 10, workingDays: 20, semester: 1 },
+    { yearOffset: 0, monthIndex: 11, workingDays: 23, semester: 1 },
+    { yearOffset: 1, monthIndex: 0, workingDays: 22, semester: 1 },
+    { yearOffset: 1, monthIndex: 1, workingDays: 21, semester: 2 },
+    { yearOffset: 1, monthIndex: 2, workingDays: 22, semester: 2 },
+    { yearOffset: 1, monthIndex: 3, workingDays: 22, semester: 2 },
+    { yearOffset: 1, monthIndex: 4, workingDays: 23, semester: 2 },
+    { yearOffset: 1, monthIndex: 5, workingDays: 23, semester: 2 },
+  ];
+  return sequence.map((item, idx) => {
+    const yr = startYear + item.yearOffset;
+    const mm = String(item.monthIndex + 1).padStart(2, '0');
+    return {
+      code: String(idx + 1).padStart(2, '0'),
+      name: `${MONTH_NAMES[item.monthIndex]} ${yr}`,
+      shortName: `${MONTH_SHORT_NAMES[item.monthIndex]} ${String(yr).slice(-2)}`,
+      monthKey: `${yr}-${mm}`,
+      workingDays: item.workingDays,
+      semester: item.semester,
+    };
+  });
+}
+
 // 10 Parameters with NCVT max marks definitions
 export const PARAMETER_CONFIGS = [
   { key: 'jobCarriedOut', label: 'Job carried out in labs', short: 'Job carried out', max: 10, hint: 'Workshop practical jobs & trade skills' },
@@ -108,10 +150,63 @@ export const PARAMETER_CONFIGS = [
   { key: 'practicalExam', label: 'Practical Examination', short: 'Practical Examination', max: 10, hint: 'Timed practical job execution & finishing' },
 ] as const;
 
+type AssessmentParameters = TraineeAssessment['parameters'];
+
+const EMPTY_ASSESSMENT_PARAMETERS: AssessmentParameters = {
+  jobCarriedOut: 0,
+  recordBook: 0,
+  answerSheet: 0,
+  vivaVoce: 0,
+  progressChart: 0,
+  attendancePunctuality: 0,
+  assignment: 0,
+  projectWork: 0,
+  cbtExam: 0,
+  practicalExam: 0,
+};
+
+function normalizeAssessmentParameters(raw?: Partial<AssessmentParameters> | null): AssessmentParameters {
+  const clamp = (val: unknown, max: number) => {
+    const n = Number(val);
+    if (val === undefined || val === null || Number.isNaN(n)) return 0;
+    return Math.max(0, Math.min(max, Math.round(n)));
+  };
+  return {
+    jobCarriedOut: clamp(raw?.jobCarriedOut, 10),
+    recordBook: clamp(raw?.recordBook, 10),
+    answerSheet: clamp(raw?.answerSheet, 20),
+    vivaVoce: clamp(raw?.vivaVoce, 10),
+    progressChart: clamp(raw?.progressChart, 10),
+    attendancePunctuality: clamp(raw?.attendancePunctuality, 10),
+    assignment: clamp(raw?.assignment, 5),
+    projectWork: clamp(raw?.projectWork, 5),
+    cbtExam: clamp(raw?.cbtExam, 10),
+    practicalExam: clamp(raw?.practicalExam, 10),
+  };
+}
+
+function sumAssessmentParameters(params?: Partial<AssessmentParameters> | null): number {
+  const normalized = normalizeAssessmentParameters(params);
+  return (
+    normalized.jobCarriedOut +
+    normalized.recordBook +
+    normalized.answerSheet +
+    normalized.vivaVoce +
+    normalized.progressChart +
+    normalized.attendancePunctuality +
+    normalized.assignment +
+    normalized.projectWork +
+    normalized.cbtExam +
+    normalized.practicalExam
+  );
+}
+
 export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProps> = ({
   tradeId,
   tradeName,
   tradeCode,
+  isCommonTrade = false,
+  trades = [],
   officerName,
   sessions,
   settings,
@@ -147,34 +242,12 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
   const [form, setForm] = useState<{
     id?: string;
     month: string;
-    parameters: {
-      jobCarriedOut: number;
-      recordBook: number;
-      answerSheet: number;
-      vivaVoce: number;
-      progressChart: number;
-      attendancePunctuality: number;
-      assignment: number;
-      projectWork: number;
-      cbtExam: number;
-      practicalExam: number;
-    };
+    parameters: AssessmentParameters;
     remarks: string;
   }>({
     month: '2026-08',
-    parameters: {
-      jobCarriedOut: 8,
-      recordBook: 8,
-      answerSheet: 16,
-      vivaVoce: 8,
-      progressChart: 9,
-      attendancePunctuality: 8,
-      assignment: 5,
-      projectWork: 4,
-      cbtExam: 8,
-      practicalExam: 7,
-    },
-    remarks: 'Good progress and consistent practical attendance.',
+    parameters: { ...EMPTY_ASSESSMENT_PARAMETERS },
+    remarks: 'Satisfactory progress in workshop practicals and theory.',
   });
 
   const printRef = useRef<HTMLDivElement>(null);
@@ -232,8 +305,8 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
       return;
     }
 
-    // Load Assessments
-    fetchAssessments(selectedTraineeId)
+    // Load Assessments strictly scoped to this Trade / Common Subject
+    fetchAssessments(selectedTraineeId, tradeId)
       .then((data) => {
         setAssessments(data);
         if (data.length > 0) {
@@ -245,8 +318,8 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
       })
       .catch(() => setAssessments([]));
 
-    // Load Attendance Records for this trainee
-    fetchAttendance({ traineeId: selectedTraineeId })
+    // Load Attendance Records strictly scoped to this Trade / Common Subject
+    fetchAttendance({ traineeId: selectedTraineeId, tradeId })
       .then((att) => setAttendanceRecords(att))
       .catch(() => setAttendanceRecords([]));
 
@@ -263,13 +336,37 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
   }, []);
 
   const selectedTrainee = trainees.find((t) => t.id === selectedTraineeId);
+  const primaryTradeName = selectedTrainee
+    ? trades.find((t) => t.id === selectedTrainee.tradeId)?.name || ''
+    : '';
+  const isCrossTradeSubject = Boolean(
+    isCommonTrade || (selectedTrainee && selectedTrainee.tradeId !== tradeId)
+  );
   const activeSessionId =
     selectedTrainee?.sessionId ||
     sessions?.find((s) => s.status === 'active')?.id ||
     settings?.currentSessionId;
+  const activeSessionObj = sessions?.find((s) => s.id === activeSessionId);
+
+  const sessionMonthsBase = useMemo(() => {
+    const startMatch = /^(\d{4})-/.exec(activeSessionObj?.startDate || '');
+    const startYear = startMatch ? Number(startMatch[1]) : 2026;
+    return buildAcademicMonthsForStartYear(startYear);
+  }, [activeSessionObj?.startDate]);
+
+  useEffect(() => {
+    if (sessionMonthsBase.length === 0) return;
+    setSelectedBreakdownMonth((prev) => {
+      if (prev && sessionMonthsBase.some((m) => m.monthKey === prev)) return prev;
+      const latestSaved = [...assessments]
+        .filter((a) => sessionMonthsBase.some((m) => m.monthKey === a.month))
+        .sort((a, b) => b.month.localeCompare(a.month))[0];
+      return latestSaved?.month || sessionMonthsBase[0].monthKey;
+    });
+  }, [sessionMonthsBase, assessments]);
 
   const computedAcademicMonths = useMemo(() => {
-    return ACADEMIC_MONTHS.map((m) => {
+    return sessionMonthsBase.map((m) => {
       const [yStr, mStr] = m.monthKey.split('-');
       const year = Number(yStr);
       const monthNum = Number(mStr);
@@ -287,7 +384,7 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
         adminDesignatedHolidays: breakdown.adminDesignatedHolidays,
       };
     });
-  }, [holidays, activeSessionId]);
+  }, [sessionMonthsBase, holidays, activeSessionId]);
 
   const computedTotalWorkingDays = useMemo(
     () => computedAcademicMonths.reduce((acc, m) => acc + m.workingDays, 0),
@@ -298,21 +395,35 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
   const instituteTitle = settings?.instituteName || 'GOVERNMENT INDUSTRIAL TRAINING INSTITUTE BILHA';
   const tradeDisplay = tradeName || 'Computer Operator and Programming Assistant';
   const nsqfLevel = 'NSQF-3.5';
-  const sessionLabel = 'August 2026 – June 2027';
+  const sessionLabel =
+    sessionMonthsBase.length > 0
+      ? `${sessionMonthsBase[0].name} – ${sessionMonthsBase[sessionMonthsBase.length - 1].name}`
+      : 'August 2026 – June 2027';
 
   // --------------------------------------------------------------------------
   // MONTH-WISE DATA INTEGRATION (Attendance + Formative Assessments)
   // --------------------------------------------------------------------------
   const monthWiseData = useMemo(() => {
-    return computedAcademicMonths.map((m) => {
-      // Find matching assessment
-      const asm = assessments.find((a) => a.month === m.monthKey);
+    const resolveAssessmentTradeId = (a: TraineeAssessment) =>
+      a.tradeId || selectedTrainee?.tradeId || tradeId;
+    const resolveAttendanceTradeId = (r: AttendanceRecord) =>
+      r.tradeId || selectedTrainee?.tradeId || tradeId;
 
-      // Compute attendance stats from database for this month strictly on actual working days
+    return computedAcademicMonths.map((m) => {
+      // Find matching independent monthly assessment strictly for this trainee, trade/subject & month
+      const asm = assessments.find(
+        (a) =>
+          a.month === m.monthKey &&
+          (!selectedTraineeId || a.traineeId === selectedTraineeId) &&
+          resolveAssessmentTradeId(a) === tradeId
+      );
+
+      // Compute attendance stats from database for this month & trade strictly on actual working days
       // (Sundays, 2nd Saturdays, 3rd Saturdays, and Admin-designated holidays are excluded)
       const monthRecords = attendanceRecords.filter(
         (r) =>
           r.date.startsWith(m.monthKey) &&
+          resolveAttendanceTradeId(r) === tradeId &&
           getDateHolidayStatus(r.date, holidays, activeSessionId).isWorkingDay
       );
 
@@ -343,8 +454,8 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
       let remarks = 'Upcoming';
 
       if (asm) {
-        const sumParams = Object.values(asm.parameters || {}).reduce((sum, v) => sum + (Number(v) || 0), 0);
-        assessmentScore = sumParams > 0 ? sumParams : (asm.testMarks || 0);
+        const sumParams = sumAssessmentParameters(asm.parameters);
+        assessmentScore = sumParams > 0 || asm.parameters ? sumParams : (Number(asm.testMarks) || 0);
         assessmentPercent = assessmentScore; // Out of 100
         remarks = asm.remarks || (assessmentScore >= 80 ? 'Good' : assessmentScore >= 60 ? 'Satisfactory' : 'Needs Improvement');
       }
@@ -358,13 +469,13 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
         attPercent,
         assessmentScore,
         assessmentPercent,
-        hasAssessment: Boolean(asm) || (m.monthKey === '2026-08'),
+        hasAssessment: Boolean(asm),
         assessmentId: asm?.id,
         remarks,
         assessmentObj: asm,
       };
     });
-  }, [computedAcademicMonths, assessments, attendanceRecords, holidays, activeSessionId]);
+  }, [computedAcademicMonths, assessments, attendanceRecords, holidays, activeSessionId, selectedTraineeId, tradeId, selectedTrainee?.tradeId]);
 
   // Totals & Cumulative Aggregations
   const sessionTotals = useMemo(() => {
@@ -442,70 +553,68 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
     };
   }, [monthWiseData, computedTotalWorkingDays]);
 
-  // Selected Month Breakdown Object
+  // Selected Month Breakdown Object (strictly reads saved month record without dummy fallback)
   const selectedBreakdown = useMemo(() => {
-    const found = assessments.find((a) => a.month === selectedBreakdownMonth);
+    const found = assessments.find(
+      (a) =>
+        a.month === selectedBreakdownMonth &&
+        (!selectedTraineeId || a.traineeId === selectedTraineeId) &&
+        (a.tradeId || selectedTrainee?.tradeId || tradeId) === tradeId
+    );
     if (found) {
+      const normalized = normalizeAssessmentParameters(found.parameters);
+      const total = sumAssessmentParameters(normalized);
       return {
         month: found.month,
-        parameters: found.parameters,
-        total: Object.values(found.parameters).reduce((s, v) => s + (Number(v) || 0), 0),
-        remarks: found.remarks,
+        hasSavedData: true,
+        parameters: normalized,
+        total,
+        remarks: found.remarks || 'Satisfactory progress.',
       };
     }
-    // Fallback matching PDF reference for August 2026
     return {
-      month: '2026-08',
-      parameters: {
-        jobCarriedOut: 8,
-        recordBook: 8,
-        answerSheet: 16,
-        vivaVoce: 8,
-        progressChart: 9,
-        attendancePunctuality: 8,
-        assignment: 5,
-        projectWork: 4,
-        cbtExam: 8,
-        practicalExam: 7,
-      },
-      total: 81,
-      remarks: 'Good progress and consistent practical attendance.',
+      month: selectedBreakdownMonth,
+      hasSavedData: false,
+      parameters: { ...EMPTY_ASSESSMENT_PARAMETERS },
+      total: 0,
+      remarks: 'No formative assessment recorded for this month yet.',
     };
-  }, [assessments, selectedBreakdownMonth]);
+  }, [assessments, selectedBreakdownMonth, selectedTraineeId, tradeId, selectedTrainee?.tradeId]);
 
   // --------------------------------------------------------------------------
   // MARKS ENTRY MODAL ACTIONS
   // --------------------------------------------------------------------------
-  const handleOpenMarksModal = (targetMonth?: string) => {
-    const monthKey = targetMonth || selectedBreakdownMonth || '2026-08';
-    const existing = assessments.find((a) => a.month === monthKey);
+  const buildModalFormForMonth = (
+    monthKey: string,
+    sourceAssessments: TraineeAssessment[] = assessments
+  ) => {
+    const existing = sourceAssessments.find(
+      (a) =>
+        a.month === monthKey &&
+        (!selectedTraineeId || a.traineeId === selectedTraineeId) &&
+        (a.tradeId || selectedTrainee?.tradeId || tradeId) === tradeId
+    );
 
     if (existing) {
-      setForm({
+      return {
         id: existing.id,
         month: existing.month,
-        parameters: { ...existing.parameters },
+        parameters: normalizeAssessmentParameters(existing.parameters),
         remarks: existing.remarks || 'Satisfactory performance.',
-      });
-    } else {
-      setForm({
-        id: undefined,
-        month: monthKey,
-        parameters: {
-          jobCarriedOut: 8,
-          recordBook: 8,
-          answerSheet: 16,
-          vivaVoce: 8,
-          progressChart: 9,
-          attendancePunctuality: 8,
-          assignment: 5,
-          projectWork: 4,
-          cbtExam: 8,
-          practicalExam: 7,
-        },
-        remarks: 'Good progress in practical training and workshop performance.',
-      });
+      };
     }
+
+    return {
+      id: undefined,
+      month: monthKey,
+      parameters: { ...EMPTY_ASSESSMENT_PARAMETERS },
+      remarks: 'Satisfactory progress in workshop practicals and theory.',
+    };
+  };
+
+  const handleOpenMarksModal = (targetMonth?: string) => {
+    const monthKey = targetMonth || selectedBreakdownMonth || sessionMonthsBase[0]?.monthKey || '2026-08';
+    setForm(buildModalFormForMonth(monthKey));
     setModalOpen(true);
   };
 
@@ -521,7 +630,7 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
         const res = await restoreBackupPayload(parsed, 'officer_progress_card_upload');
         showToast(res.message || 'Progress card database restored successfully');
         if (selectedTraineeId) {
-          const updated = await fetchAssessments(selectedTraineeId);
+          const updated = await fetchAssessments(selectedTraineeId, tradeId);
           setAssessments(updated);
         }
       } catch (err: any) {
@@ -537,28 +646,55 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
     e.preventDefault();
     if (!selectedTraineeId) return;
 
-    // Calculate sum of 10 parameters
-    const totalScore = Object.values(form.parameters).reduce((acc, v) => acc + (Number(v) || 0), 0);
+    const normalizedParams = normalizeAssessmentParameters(form.parameters);
+    const totalScore = sumAssessmentParameters(normalizedParams);
+    // Resolve matching ID strictly for the currently selected target month & trade so we NEVER
+    // accidentally overwrite a previously saved month's record ID or another subject's assessment.
+    const existingTargetMonth = assessments.find(
+      (a) =>
+        a.traineeId === selectedTraineeId &&
+        a.month === form.month &&
+        (a.tradeId || selectedTrainee?.tradeId || tradeId) === tradeId
+    );
 
     try {
       setSaving(true);
-      await saveAssessment({
-        id: form.id,
+      const saveRes = await saveAssessment({
+        id: existingTargetMonth?.id,
         traineeId: selectedTraineeId,
-        sessionId: sessions?.find((s) => s.status === 'active')?.id || settings?.currentSessionId || 'session_2025_2026',
+        tradeId,
+        sessionId: activeSessionId || 'session_2026_2027',
         month: form.month,
         testMarks: totalScore,
-        attendancePercent: monthWiseData.find((m) => m.monthKey === form.month)?.attPercent || 85,
-        parameters: form.parameters,
+        attendancePercent: monthWiseData.find((m) => m.monthKey === form.month)?.attPercent ?? 0,
+        parameters: normalizedParams,
         remarks: form.remarks,
       });
 
       showToast(`Marks saved for ${form.month} (Total: ${totalScore}/100)`);
       setModalOpen(false);
 
-      // Refresh assessments
-      const updated = await fetchAssessments(selectedTraineeId);
-      setAssessments(updated);
+      // Update state immediately while preserving all other saved months
+      if (Array.isArray(saveRes?.assessments) && saveRes.assessments.length > 0) {
+        setAssessments(saveRes.assessments);
+      } else {
+        const updated = await fetchAssessments(selectedTraineeId, tradeId);
+        if (updated.length > 0) {
+          setAssessments(updated);
+        } else if (saveRes?.assessment) {
+          setAssessments((prev) => {
+            const others = prev.filter(
+              (a) =>
+                !(
+                  a.traineeId === selectedTraineeId &&
+                  a.month === form.month &&
+                  (a.tradeId || selectedTrainee?.tradeId || tradeId) === tradeId
+                )
+            );
+            return [saveRes.assessment, ...others];
+          });
+        }
+      }
       setSelectedBreakdownMonth(form.month);
 
       // Trigger automatic persistent backup to IndexedDB so entered marks survive restarts
@@ -866,7 +1002,8 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
   const plotHeight = chartHeight - padTop - padBottom;
 
   // X position for index 0..10
-  const getX = (i: number) => padLeft + (i * plotWidth) / (ACADEMIC_MONTHS.length - 1);
+  const getX = (i: number) =>
+    padLeft + (i * plotWidth) / Math.max(1, computedAcademicMonths.length - 1);
   // Y position for 0..100%
   const getY = (val: number) => padTop + plotHeight - (val / 100) * plotHeight;
 
@@ -1063,7 +1200,17 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
               Directorate of Employment &amp; Training / NCVT / DGT Guidelines
             </p>
             <p className="text-xs text-slate-600 font-semibold mt-0.5 print:text-[8px] print:mt-0 print:leading-none">
-              Trade: <span className="text-slate-900">{tradeDisplay} ({nsqfLevel})</span> | Session: <span className="text-slate-900">2026–27</span>
+              {isCrossTradeSubject ? 'Common Subject:' : 'Trade:'}{' '}
+              <span className="text-slate-900">
+                {tradeDisplay}
+                {tradeCode ? ` [${tradeCode}]` : ''} ({nsqfLevel})
+              </span>
+              {isCrossTradeSubject && (
+                <span className="ml-1.5 px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-800 border border-indigo-200 text-[10px] font-bold print:text-[7px]">
+                  Shared Subject
+                </span>
+              )}{' '}
+              | Session: <span className="text-slate-900">2026–27</span>
             </p>
           </div>
 
@@ -1102,9 +1249,12 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
             </strong>
           </div>
           <div>
-            <span className="text-slate-500 block text-[10px] print:text-[7.5px] font-medium leading-none">Trade Instructor:</span>
+            <span className="text-slate-500 block text-[10px] print:text-[7.5px] font-medium leading-none">
+              {isCrossTradeSubject && primaryTradeName ? 'Instructor / Primary Trade:' : 'Trade Instructor:'}
+            </span>
             <strong className="text-slate-900 font-bold text-sm print:text-[9.5px] block truncate">
               {officerName || 'Shoaib Ahmad'}
+              {isCrossTradeSubject && primaryTradeName ? ` · (${primaryTradeName})` : ''}
             </strong>
           </div>
         </div>
@@ -1240,9 +1390,11 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
                     {monthWiseData.map((row) => (
                       <tr
                         key={row.code}
-                        className={`hover:bg-slate-50/80 transition-colors ${
-                          row.monthKey === selectedBreakdownMonth ? 'bg-emerald-50/40' : ''
+                        onClick={() => setSelectedBreakdownMonth(row.monthKey)}
+                        className={`hover:bg-slate-50/80 transition-colors cursor-pointer ${
+                          row.monthKey === selectedBreakdownMonth ? 'bg-emerald-50/50' : ''
                         }`}
+                        title="Click row to inspect 10 formative parameters for this month"
                       >
                         <td className="py-1.5 print:py-0.5 px-2 print:px-0.5 font-mono text-[11px] print:text-[7.5px] text-slate-500 border-r border-slate-200">
                           {row.code}
@@ -1269,7 +1421,7 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
                           {row.attPercent}%
                         </td>
                         <td className="py-1.5 print:py-0.5 px-1.5 print:px-0.5 font-mono font-bold text-emerald-800 border-r border-slate-200 bg-emerald-50/20">
-                          {row.assessmentScore}/100
+                          {row.hasAssessment ? `${row.assessmentScore}/100` : '0/100'}
                         </td>
                         <td className="py-1.5 print:py-0.5 px-1.5 print:px-0.5 font-mono font-bold text-emerald-800 border-r border-slate-200 bg-emerald-50/20">
                           {row.assessmentPercent}%
@@ -1280,8 +1432,11 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
                         <td className="py-1.5 px-1.5 print:hidden text-center">
                           <button
                             type="button"
-                            onClick={() => handleOpenMarksModal(row.monthKey)}
-                            className="px-2 py-0.5 text-[10px] font-semibold text-emerald-800 hover:bg-emerald-100 rounded border border-emerald-300 transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenMarksModal(row.monthKey);
+                            }}
+                            className="px-2 py-0.5 text-[10px] font-semibold text-emerald-800 hover:bg-emerald-100 rounded border border-emerald-300 transition-colors cursor-pointer"
                             title="Enter / Edit Marks for this Month"
                           >
                             {row.hasAssessment ? 'Edit' : 'Enter'}
@@ -1468,7 +1623,7 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
                   </text>
 
                   {/* X-Axis Month Labels */}
-                  {ACADEMIC_MONTHS.map((m, idx) => {
+                  {computedAcademicMonths.map((m, idx) => {
                     const x = getX(idx);
                     return (
                       <text
@@ -1611,16 +1766,30 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
                     onChange={(e) => setSelectedBreakdownMonth(e.target.value)}
                     className="print:hidden text-[10px] font-semibold text-slate-700 bg-slate-50 border border-slate-300 rounded px-1.5 py-0.5 ml-1 cursor-pointer"
                   >
-                    {ACADEMIC_MONTHS.map((m) => (
-                      <option key={m.monthKey} value={m.monthKey}>
-                        {m.name}
-                      </option>
-                    ))}
+                    {computedAcademicMonths.map((m) => {
+                      const savedRow = monthWiseData.find((row) => row.monthKey === m.monthKey);
+                      return (
+                        <option key={m.monthKey} value={m.monthKey}>
+                          {m.name} {savedRow?.hasAssessment ? `(${savedRow.assessmentScore}/100)` : ''}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
 
-                <div className="text-[10px] print:text-[7.5px] font-bold text-emerald-900 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-mono">
-                  Total: {selectedBreakdown.total} / 100 Marks
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={`text-[9px] print:text-[6.5px] font-bold px-1.5 py-0.5 rounded border ${
+                      selectedBreakdown.hasSavedData
+                        ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                        : 'bg-slate-100 text-slate-600 border-slate-300'
+                    }`}
+                  >
+                    {selectedBreakdown.hasSavedData ? 'Saved' : 'Not Entered'}
+                  </span>
+                  <div className="text-[10px] print:text-[7.5px] font-bold text-emerald-900 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-mono">
+                    Total: {selectedBreakdown.total} / 100 Marks
+                  </div>
                 </div>
               </div>
 
@@ -1752,20 +1921,40 @@ export const DigitalProgressCardTracker: React.FC<DigitalProgressCardTrackerProp
               {/* Month Selection & Live Total Banner */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200 items-center">
                 <div>
-                  <label className="block font-semibold mb-1 text-slate-700">
-                    Select Assessment Month (माह)
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-semibold text-slate-700">
+                      Select Assessment Month (माह)
+                    </label>
+                    <span
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                        form.id
+                          ? 'bg-blue-50 text-blue-800 border-blue-200'
+                          : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                      }`}
+                    >
+                      {form.id ? 'Editing Saved Month' : 'New Month Entry'}
+                    </span>
+                  </div>
                   <select
                     value={form.month}
-                    onChange={(e) => setForm({ ...form, month: e.target.value })}
+                    onChange={(e) => setForm(buildModalFormForMonth(e.target.value))}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-semibold bg-white cursor-pointer"
                     required
                   >
-                    {computedAcademicMonths.map((m) => (
-                      <option key={m.monthKey} value={m.monthKey}>
-                        {m.code} — {m.name} ({m.workingDays} Working Days)
-                      </option>
-                    ))}
+                    {computedAcademicMonths.map((m) => {
+                      const savedMonth = assessments.find(
+                        (a) =>
+                          a.month === m.monthKey &&
+                          a.traineeId === selectedTraineeId &&
+                          (a.tradeId || selectedTrainee?.tradeId || tradeId) === tradeId
+                      );
+                      const savedSum = savedMonth ? sumAssessmentParameters(savedMonth.parameters) : null;
+                      return (
+                        <option key={m.monthKey} value={m.monthKey}>
+                          {m.code} — {m.name} ({m.workingDays} WD) {savedSum !== null ? `✓ Saved: ${savedSum}/100` : ''}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
 

@@ -84,14 +84,29 @@ export interface HolidayRecord {
 
 export interface Trade {
   id: string;
-  name: string; // e.g. "Electrician", "Fitter"
-  code: string; // e.g. "ELE-01"
+  name: string; // e.g. "Electrician", "Fitter", "Workshop Calculation & Science"
+  code: string; // e.g. "ELE-01", "WCS-01"
   durationYears: number; // 1 or 2
   sanctionedUnits: number;
   totalIntake: number;
   workshopLocation: string;
   description: string;
   status: 'active' | 'inactive';
+  isCommonTrade?: boolean;
+  sourceTradeIds?: string[];
+}
+
+export interface TradeEnrollment {
+  id: string;
+  traineeId: string;
+  tradeId: string; // common trade id
+  sourceTradeId: string; // trainee's primary tradeId
+  sessionId: string;
+  enrollmentType: 'auto' | 'manual';
+  status: 'enrolled' | 'removed';
+  removedByAdmin?: boolean;
+  enrolledAt: string;
+  updatedAt: string;
 }
 
 export interface TrainingOfficer {
@@ -323,6 +338,7 @@ export interface WeeklyPlan {
 export interface TraineeAssessment {
   id: string;
   traineeId: string;
+  tradeId?: string;
   sessionId: string;
   month: string; // YYYY-MM
   testMarks: number; // out of 100

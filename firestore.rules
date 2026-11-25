@@ -41,6 +41,12 @@ service cloud.firestore {
       allow write: if isSystemAdmin() || isSignedIn() || isValidId(tradeId);
     }
 
+    // Common trade enrollments collection
+    match /tradeEnrollments/{enrollmentId} {
+      allow read: if true;
+      allow write: if isSystemAdmin() || isSignedIn() || isValidId(enrollmentId);
+    }
+
     // Officers collection
     match /officers/{officerId} {
       allow read: if true;

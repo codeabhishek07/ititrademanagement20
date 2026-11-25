@@ -25,6 +25,7 @@ import type {
   Trainee,
   TrainingOfficer,
   Trade,
+  TradeEnrollment,
   AcademicSession,
   MonthlyWorkingDay,
   HolidayRecord,
@@ -55,6 +56,310 @@ import {
   formatClock12,
   formatClock24,
 } from './src/utils/attendanceCalendar.ts';
+
+function makeEnrollmentId(tradeId: string, traineeId: string): string {
+  const safeTrade = String(tradeId || '').replace(/[^a-zA-Z0-9_\-]/g, '_');
+  const safeTrainee = String(traineeId || '').replace(/[^a-zA-Z0-9_\-]/g, '_');
+  return `enr_${safeTrade}_${safeTrainee}`;
+}
+
+function isTraineeEnrolledInTrade(
+  data: ReturnType<typeof db.get>,
+  traineeId: string,
+  tradeId: string
+): boolean {
+  if (!traineeId || !tradeId) return false;
+  const trainee = data.trainees.find((t) => t.id === traineeId);
+  if (!trainee) return false;
+  if (trainee.tradeId === tradeId) return true;
+  return (data.tradeEnrollments || []).some(
+    (e) => e.traineeId === traineeId && e.tradeId === tradeId && e.status === 'enrolled'
+  );
+}
+
+function getEnrolledTraineesForTrade(
+  data: ReturnType<typeof db.get>,
+  tradeId: string,
+  sessionId?: string,
+  includeInactive: boolean = false
+): Trainee[] {
+  const seen = new Set<string>();
+  const result: Trainee[] = [];
+  const matchesFilter = (t: Trainee) => {
+    if (sessionId && t.sessionId !== sessionId) return false;
+    if (!includeInactive && t.status !== 'active') return false;
+    return true;
+  };
+
+  for (const t of data.trainees) {
+    if (t.tradeId === tradeId && matchesFilter(t) && !seen.has(t.id)) {
+      seen.add(t.id);
+      result.push(t);
+    }
+  }
+
+  const enrolledTraineeIds = new Set(
+    (data.tradeEnrollments || [])
+      .filter((e) => e.tradeId === tradeId && e.status === 'enrolled')
+      .map((e) => e.traineeId)
+  );
+
+  for (const t of data.trainees) {
+    if (enrolledTraineeIds.has(t.id) && matchesFilter(t) && !seen.has(t.id)) {
+      seen.add(t.id);
+      result.push(t);
+    }
+  }
+
+  return result;
+}
+
+function resolveAssessmentTradeId(
+  asm: TraineeAssessment,
+  data: ReturnType<typeof db.get>
+): string {
+  if (asm.tradeId) return asm.tradeId;
+  const trainee = data.trainees.find((t) => t.id === asm.traineeId);
+  return trainee?.tradeId || '';
+}
+
+function computeCommonTradeSyncOpsForTrade(
+  data: ReturnType<typeof db.get>,
+  tradeId: string,
+  ops: PendingFirestoreOp[]
+): { added: number; updated: number; removed: number } {
+  if (!Array.isArray(data.tradeEnrollments)) data.tradeEnrollments = [];
+  const trade = data.trades.find((t) => t.id === tradeId);
+  if (!trade) return { added: 0, updated: 0, removed: 0 };
+
+  const nowIso = new Date().toISOString();
+  const sourceSet = new Set(
+    (Array.isArray(trade.sourceTradeIds) ? trade.sourceTradeIds : []).filter((id) => id && id !== trade.id)
+  );
+  let added = 0;
+  let updated = 0;
+  let removed = 0;
+
+  if (!trade.isCommonTrade || trade.status !== 'active') {
+    data.tradeEnrollments.forEach((enr, idx) => {
+      if (enr.tradeId === trade.id && enr.status === 'enrolled') {
+        const nextEnr: TradeEnrollment = {
+          ...enr,
+          status: 'removed',
+          updatedAt: nowIso,
+        };
+        data.tradeEnrollments[idx] = nextEnr;
+        ops.push({ type: 'set', coll: 'tradeEnrollments', id: nextEnr.id, data: nextEnr });
+        removed++;
+      }
+    });
+    return { added, updated, removed };
+  }
+
+  for (const trainee of data.trainees) {
+    const isEligible =
+      trainee.tradeId !== trade.id &&
+      trainee.status === 'active' &&
+      sourceSet.has(trainee.tradeId);
+
+    const idx = data.tradeEnrollments.findIndex(
+      (e) => e.tradeId === trade.id && e.traineeId === trainee.id
+    );
+
+    if (isEligible) {
+      if (idx === -1) {
+        const created: TradeEnrollment = {
+          id: makeEnrollmentId(trade.id, trainee.id),
+          traineeId: trainee.id,
+          tradeId: trade.id,
+          sourceTradeId: trainee.tradeId,
+          sessionId: trainee.sessionId,
+          enrollmentType: 'auto',
+          status: 'enrolled',
+          removedByAdmin: false,
+          enrolledAt: nowIso,
+          updatedAt: nowIso,
+        };
+        data.tradeEnrollments.push(created);
+        ops.push({ type: 'set', coll: 'tradeEnrollments', id: created.id, data: created });
+        added++;
+      } else {
+        const current = data.tradeEnrollments[idx];
+        if (current.removedByAdmin) {
+          if (current.sourceTradeId !== trainee.tradeId || current.sessionId !== trainee.sessionId) {
+            const nextEnr: TradeEnrollment = {
+              ...current,
+              sourceTradeId: trainee.tradeId,
+              sessionId: trainee.sessionId,
+              updatedAt: nowIso,
+            };
+            data.tradeEnrollments[idx] = nextEnr;
+            ops.push({ type: 'set', coll: 'tradeEnrollments', id: nextEnr.id, data: nextEnr });
+          }
+        } else if (
+          current.status !== 'enrolled' ||
+          current.sourceTradeId !== trainee.tradeId ||
+          current.sessionId !== trainee.sessionId
+        ) {
+          const nextEnr: TradeEnrollment = {
+            ...current,
+            sourceTradeId: trainee.tradeId,
+            sessionId: trainee.sessionId,
+            status: 'enrolled',
+            removedByAdmin: false,
+            updatedAt: nowIso,
+          };
+          data.tradeEnrollments[idx] = nextEnr;
+          ops.push({ type: 'set', coll: 'tradeEnrollments', id: nextEnr.id, data: nextEnr });
+          updated++;
+        }
+      }
+    } else if (idx !== -1) {
+      const current = data.tradeEnrollments[idx];
+      const shouldForceRemove =
+        trainee.status !== 'active' ||
+        trainee.tradeId === trade.id ||
+        current.enrollmentType !== 'manual';
+
+      if (shouldForceRemove && current.status === 'enrolled') {
+        const nextEnr: TradeEnrollment = {
+          ...current,
+          sourceTradeId: trainee.tradeId,
+          sessionId: trainee.sessionId,
+          status: 'removed',
+          removedByAdmin: false,
+          updatedAt: nowIso,
+        };
+        data.tradeEnrollments[idx] = nextEnr;
+        ops.push({ type: 'set', coll: 'tradeEnrollments', id: nextEnr.id, data: nextEnr });
+        removed++;
+      } else if (
+        current.status === 'enrolled' &&
+        (current.sourceTradeId !== trainee.tradeId || current.sessionId !== trainee.sessionId)
+      ) {
+        const nextEnr: TradeEnrollment = {
+          ...current,
+          sourceTradeId: trainee.tradeId,
+          sessionId: trainee.sessionId,
+          updatedAt: nowIso,
+        };
+        data.tradeEnrollments[idx] = nextEnr;
+        ops.push({ type: 'set', coll: 'tradeEnrollments', id: nextEnr.id, data: nextEnr });
+        updated++;
+      }
+    }
+  }
+
+  return { added, updated, removed };
+}
+
+async function syncCommonTradeForTrade(tradeId: string) {
+  const data = db.get();
+  const ops: PendingFirestoreOp[] = [];
+  const res = computeCommonTradeSyncOpsForTrade(data, tradeId, ops);
+  if (ops.length > 0) {
+    await db.persistBatchNow(ops);
+  }
+  return res;
+}
+
+async function syncCommonTradesForTrainees(traineeIds: string[]) {
+  const data = db.get();
+  if (!Array.isArray(data.tradeEnrollments)) data.tradeEnrollments = [];
+  const ops: PendingFirestoreOp[] = [];
+  const nowIso = new Date().toISOString();
+  const idSet = new Set(traineeIds.filter(Boolean));
+  const commonTrades = data.trades.filter((t) => t.isCommonTrade);
+
+  for (const traineeId of idSet) {
+    const trainee = data.trainees.find((t) => t.id === traineeId);
+    if (!trainee) continue;
+
+    for (const trade of commonTrades) {
+      const sourceSet = new Set(
+        (Array.isArray(trade.sourceTradeIds) ? trade.sourceTradeIds : []).filter((id) => id && id !== trade.id)
+      );
+      const isEligible =
+        trade.status === 'active' &&
+        trainee.status === 'active' &&
+        trainee.tradeId !== trade.id &&
+        sourceSet.has(trainee.tradeId);
+
+      const idx = data.tradeEnrollments.findIndex(
+        (e) => e.tradeId === trade.id && e.traineeId === trainee.id
+      );
+
+      if (isEligible) {
+        if (idx === -1) {
+          const created: TradeEnrollment = {
+            id: makeEnrollmentId(trade.id, trainee.id),
+            traineeId: trainee.id,
+            tradeId: trade.id,
+            sourceTradeId: trainee.tradeId,
+            sessionId: trainee.sessionId,
+            enrollmentType: 'auto',
+            status: 'enrolled',
+            removedByAdmin: false,
+            enrolledAt: nowIso,
+            updatedAt: nowIso,
+          };
+          data.tradeEnrollments.push(created);
+          ops.push({ type: 'set', coll: 'tradeEnrollments', id: created.id, data: created });
+        } else {
+          const current = data.tradeEnrollments[idx];
+          if (!current.removedByAdmin && current.status !== 'enrolled') {
+            const nextEnr: TradeEnrollment = {
+              ...current,
+              sourceTradeId: trainee.tradeId,
+              sessionId: trainee.sessionId,
+              status: 'enrolled',
+              removedByAdmin: false,
+              updatedAt: nowIso,
+            };
+            data.tradeEnrollments[idx] = nextEnr;
+            ops.push({ type: 'set', coll: 'tradeEnrollments', id: nextEnr.id, data: nextEnr });
+          } else if (
+            current.sourceTradeId !== trainee.tradeId ||
+            current.sessionId !== trainee.sessionId
+          ) {
+            const nextEnr: TradeEnrollment = {
+              ...current,
+              sourceTradeId: trainee.tradeId,
+              sessionId: trainee.sessionId,
+              updatedAt: nowIso,
+            };
+            data.tradeEnrollments[idx] = nextEnr;
+            ops.push({ type: 'set', coll: 'tradeEnrollments', id: nextEnr.id, data: nextEnr });
+          }
+        }
+      } else if (idx !== -1) {
+        const current = data.tradeEnrollments[idx];
+        const shouldRemove =
+          trade.status !== 'active' ||
+          trainee.status !== 'active' ||
+          trainee.tradeId === trade.id ||
+          current.enrollmentType !== 'manual';
+
+        if (shouldRemove && current.status === 'enrolled') {
+          const nextEnr: TradeEnrollment = {
+            ...current,
+            sourceTradeId: trainee.tradeId,
+            sessionId: trainee.sessionId,
+            status: 'removed',
+            removedByAdmin: false,
+            updatedAt: nowIso,
+          };
+          data.tradeEnrollments[idx] = nextEnr;
+          ops.push({ type: 'set', coll: 'tradeEnrollments', id: nextEnr.id, data: nextEnr });
+        }
+      }
+    }
+  }
+
+  if (ops.length > 0) {
+    await db.persistBatchNow(ops);
+  }
+}
 
 function findHolidayForDate(data: ReturnType<typeof db.get>, dateStr: string, sessionId?: string): HolidayRecord | undefined {
   return findAdminHolidayForDate(data.holidays || [], dateStr, sessionId) || undefined;
@@ -215,6 +520,141 @@ async function startServer() {
     return cookies.iti_session_token || '';
   }
 
+  type AuthenticatedActor =
+    | { id: 'usr_admin'; role: 'admin'; name: string }
+    | {
+        id: string;
+        role: 'officer';
+        name: string;
+        officer: TrainingOfficer;
+        assignedTradeIds: string[];
+        primaryTradeIds: string[];
+        commonTradeIds: string[];
+        hasPrimaryTrade: boolean;
+      }
+    | { id: string; role: 'trainee'; name: string; trainee: Trainee };
+
+  function getAuthenticatedActor(req: Request): AuthenticatedActor | null {
+    const token = extractSessionToken(req);
+    if (!token) return null;
+    const data = db.get();
+    const sess = (data.authSessions || []).find((s) => s.token === token);
+    if (!sess || new Date(sess.expiresAt).getTime() <= Date.now()) return null;
+
+    if (sess.role === 'admin') {
+      return {
+        id: 'usr_admin',
+        role: 'admin',
+        name: data.settings.adminAccount?.name || 'Principal / Admin',
+      };
+    }
+    if (sess.role === 'officer') {
+      const officer = data.officers.find((o) => o.id === sess.userId && o.status === 'active');
+      if (!officer) return null;
+      const assignedTradeIds = Array.isArray(officer.assignedTradeIds) ? officer.assignedTradeIds : [];
+      const primaryTradeIds = assignedTradeIds.filter((tid) => {
+        const t = data.trades.find((tr) => tr.id === tid);
+        return Boolean(t && !t.isCommonTrade);
+      });
+      const commonTradeIds = assignedTradeIds.filter((tid) => {
+        const t = data.trades.find((tr) => tr.id === tid);
+        return Boolean(t?.isCommonTrade);
+      });
+      return {
+        id: officer.id,
+        role: 'officer',
+        name: officer.name,
+        officer,
+        assignedTradeIds,
+        primaryTradeIds,
+        commonTradeIds,
+        hasPrimaryTrade: primaryTradeIds.length > 0,
+      };
+    }
+    if (sess.role === 'trainee') {
+      const trainee = data.trainees.find((t) => t.id === sess.userId && t.status === 'active');
+      if (!trainee) return null;
+      return {
+        id: trainee.id,
+        role: 'trainee',
+        name: trainee.name,
+        trainee,
+      };
+    }
+    return null;
+  }
+
+  function requireActor(req: Request, res: Response): AuthenticatedActor | null {
+    const actor = getAuthenticatedActor(req);
+    if (!actor) {
+      res.status(401).json({ error: 'Authentication required. Please sign in to continue.' });
+      return null;
+    }
+    return actor;
+  }
+
+  function isCommonTradeId(data: ReturnType<typeof db.get>, tradeId?: string): boolean {
+    if (!tradeId) return false;
+    return Boolean(data.trades.find((t) => t.id === tradeId)?.isCommonTrade);
+  }
+
+  function assertPrimaryTradeOfficerOrAdmin(
+    actor: AuthenticatedActor,
+    res: Response,
+    targetTradeId: string | undefined,
+    featureLabel: string
+  ): boolean {
+    const data = db.get();
+    if (targetTradeId && isCommonTradeId(data, targetTradeId)) {
+      res.status(403).json({
+        error: `${featureLabel} is restricted to Primary Trades only and is not permitted under Common Trade accounts.`,
+      });
+      return false;
+    }
+    if (actor.role === 'admin') return true;
+    if (actor.role !== 'officer') {
+      res.status(403).json({
+        error: `Access denied: ${featureLabel} requires Administrator or Primary Trade Officer authorization.`,
+      });
+      return false;
+    }
+    if (!actor.hasPrimaryTrade) {
+      res.status(403).json({
+        error: `Access denied: Common Trade Officers are not permitted to access ${featureLabel}.`,
+      });
+      return false;
+    }
+    if (targetTradeId && !actor.primaryTradeIds.includes(targetTradeId)) {
+      res.status(403).json({
+        error: `Access denied: you are not assigned as the Primary Trade Officer for this trade.`,
+      });
+      return false;
+    }
+    return true;
+  }
+
+  function assertAssignedTradeOfficerOrAdmin(
+    actor: AuthenticatedActor,
+    res: Response,
+    targetTradeId: string | undefined,
+    featureLabel: string
+  ): boolean {
+    if (actor.role === 'admin') return true;
+    if (actor.role !== 'officer') {
+      res.status(403).json({
+        error: `Access denied: ${featureLabel} requires Administrator or assigned Training Officer authorization.`,
+      });
+      return false;
+    }
+    if (targetTradeId && !actor.assignedTradeIds.includes(targetTradeId)) {
+      res.status(403).json({
+        error: `Access denied: you are not assigned to this trade or common subject.`,
+      });
+      return false;
+    }
+    return true;
+  }
+
   async function createPersistentSession(user: Record<string, any>, res: Response) {
     const data = db.get();
     const token = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
@@ -271,13 +711,16 @@ async function startServer() {
       settings: data.settings,
       sessions: data.sessions,
       trades: data.trades,
+      tradeEnrollments: (data.tradeEnrollments || []).filter((e) => e.status === 'enrolled'),
       holidays: data.holidays || [],
       documentsCount: (data.documents || []).length,
       firestoreStatus: db.getFirestoreConnectionStatus(),
       stats: {
         totalTrades: data.trades.filter((t) => t.status === 'active').length,
+        totalCommonTrades: data.trades.filter((t) => t.status === 'active' && t.isCommonTrade).length,
         totalOfficers: data.officers.filter((o) => o.status === 'active').length,
         totalTrainees: data.trainees.filter((t) => t.status === 'active').length,
+        totalCommonEnrollments: (data.tradeEnrollments || []).filter((e) => e.status === 'enrolled').length,
         totalInventoryItems: data.inventory.length,
       },
     });
@@ -1457,8 +1900,14 @@ async function startServer() {
 
   app.post('/api/trades', async (req: Request, res: Response) => {
     const data = db.get();
+    const newId = `trade_${Date.now()}`;
+    const isCommonTrade = Boolean(req.body.isCommonTrade);
+    const sourceTradeIds: string[] = isCommonTrade && Array.isArray(req.body.sourceTradeIds)
+      ? Array.from<string>(new Set<string>(req.body.sourceTradeIds.map((id: any) => String(id).trim()).filter((id: string) => Boolean(id) && id !== newId)))
+      : [];
+
     const newTrade: Trade = {
-      id: `trade_${Date.now()}`,
+      id: newId,
       name: req.body.name,
       code: req.body.code,
       durationYears: Number(req.body.durationYears) || 2,
@@ -1467,48 +1916,221 @@ async function startServer() {
       workshopLocation: req.body.workshopLocation || 'Main Campus',
       description: req.body.description || '',
       status: req.body.status || 'active',
+      isCommonTrade,
+      sourceTradeIds,
     };
     data.trades.push(newTrade);
     await db.persistItemNow('trades', newTrade.id, newTrade);
+
+    const syncResult = isCommonTrade
+      ? await syncCommonTradeForTrade(newTrade.id)
+      : { added: 0, updated: 0, removed: 0 };
+
     db.addAuditLog({
       userId: 'usr_admin',
       userName: 'Principal / Admin',
       userRole: 'admin',
       action: 'ADD_TRADE',
-      details: `Added new trade: ${newTrade.name} (${newTrade.code}).`,
+      details: isCommonTrade
+        ? `Added common trade/subject: ${newTrade.name} (${newTrade.code}) linked to ${sourceTradeIds.length} source trade(s); auto-enrolled ${syncResult.added} existing trainees.`
+        : `Added new trade: ${newTrade.name} (${newTrade.code}).`,
     });
-    res.json({ success: true, trade: newTrade });
+    res.json({ success: true, trade: newTrade, syncResult });
   });
 
   app.put('/api/trades/:id', async (req: Request, res: Response) => {
     const data = db.get();
     const idx = data.trades.findIndex((t) => t.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: 'Trade not found' });
-    data.trades[idx] = { ...data.trades[idx], ...req.body };
+
+    const nextIsCommon = req.body.isCommonTrade !== undefined ? Boolean(req.body.isCommonTrade) : Boolean(data.trades[idx].isCommonTrade);
+    const nextSources: string[] = req.body.sourceTradeIds !== undefined
+      ? (nextIsCommon && Array.isArray(req.body.sourceTradeIds)
+          ? Array.from<string>(new Set<string>(req.body.sourceTradeIds.map((id: any) => String(id).trim()).filter((id: string) => Boolean(id) && id !== req.params.id)))
+          : [])
+      : (nextIsCommon ? (data.trades[idx].sourceTradeIds || []) : []);
+
+    data.trades[idx] = {
+      ...data.trades[idx],
+      ...req.body,
+      isCommonTrade: nextIsCommon,
+      sourceTradeIds: nextSources,
+    };
     await db.persistItemNow('trades', data.trades[idx].id, data.trades[idx]);
+
+    const syncResult = await syncCommonTradeForTrade(data.trades[idx].id);
+
     db.addAuditLog({
       userId: 'usr_admin',
       userName: 'Principal / Admin',
       userRole: 'admin',
       action: 'ALTER_TRADE',
-      details: `Updated trade details for: ${data.trades[idx].name}.`,
+      details: nextIsCommon
+        ? `Updated common trade ${data.trades[idx].name} (auto-sync: +${syncResult.added} added, ${syncResult.updated} reactivated, ${syncResult.removed} removed).`
+        : `Updated trade details for: ${data.trades[idx].name}.`,
     });
-    res.json({ success: true, trade: data.trades[idx] });
+    res.json({ success: true, trade: data.trades[idx], syncResult });
   });
 
   app.delete('/api/trades/:id', async (req: Request, res: Response) => {
     const data = db.get();
-    const trade = data.trades.find((t) => t.id === req.params.id);
-    data.trades = data.trades.filter((t) => t.id !== req.params.id);
-    await db.deleteItemNow('trades', req.params.id);
+    const targetId = req.params.id;
+    const trade = data.trades.find((t) => t.id === targetId);
+    const ops: PendingFirestoreOp[] = [{ type: 'delete', coll: 'trades', id: targetId }];
+
+    const relatedEnrollments = (data.tradeEnrollments || []).filter(
+      (e) => e.tradeId === targetId || e.sourceTradeId === targetId
+    );
+    relatedEnrollments.forEach((e) => ops.push({ type: 'delete', coll: 'tradeEnrollments', id: e.id }));
+    data.tradeEnrollments = (data.tradeEnrollments || []).filter(
+      (e) => e.tradeId !== targetId && e.sourceTradeId !== targetId
+    );
+
+    data.trades = data.trades
+      .filter((t) => t.id !== targetId)
+      .map((t) => {
+        if (Array.isArray(t.sourceTradeIds) && t.sourceTradeIds.includes(targetId)) {
+          const updated = { ...t, sourceTradeIds: t.sourceTradeIds.filter((id) => id !== targetId) };
+          ops.push({ type: 'set', coll: 'trades', id: updated.id, data: updated });
+          return updated;
+        }
+        return t;
+      });
+
+    await db.persistBatchNow(ops);
     db.addAuditLog({
       userId: 'usr_admin',
       userName: 'Principal / Admin',
       userRole: 'admin',
       action: 'DELETE_TRADE',
-      details: `Deleted trade: ${trade?.name || req.params.id}.`,
+      details: `Deleted trade: ${trade?.name || targetId}.`,
     });
     res.json({ success: true });
+  });
+
+  // Common Trade Shared Enrollments
+  app.get('/api/trade-enrollments', (req: Request, res: Response) => {
+    const { tradeId, traineeId, includeRemoved } = req.query;
+    const data = db.get();
+    let list = [...(data.tradeEnrollments || [])];
+    if (tradeId) list = list.filter((e) => e.tradeId === String(tradeId));
+    if (traineeId) list = list.filter((e) => e.traineeId === String(traineeId));
+    if (includeRemoved !== 'true') list = list.filter((e) => e.status === 'enrolled');
+    res.json(list);
+  });
+
+  app.post('/api/trade-enrollments/enroll', async (req: Request, res: Response) => {
+    const { tradeId, traineeId } = req.body;
+    const data = db.get();
+    const trade = data.trades.find((t) => t.id === tradeId);
+    const trainee = data.trainees.find((t) => t.id === traineeId);
+
+    if (!trade) return res.status(404).json({ error: 'Common trade not found' });
+    if (!trade.isCommonTrade) return res.status(400).json({ error: 'Target trade is not configured as a Common Trade / Shared Subject.' });
+    if (!trainee) return res.status(404).json({ error: 'Trainee not found' });
+    if (trainee.tradeId === trade.id) return res.status(400).json({ error: 'Trainee already belongs to this trade as their primary trade.' });
+    if (trainee.status !== 'active') return res.status(400).json({ error: 'Only active trainees can be enrolled in common subjects.' });
+
+    if (!Array.isArray(data.tradeEnrollments)) data.tradeEnrollments = [];
+    const nowIso = new Date().toISOString();
+    const id = makeEnrollmentId(trade.id, trainee.id);
+    const idx = data.tradeEnrollments.findIndex((e) => e.tradeId === trade.id && e.traineeId === trainee.id);
+    const enrollment: TradeEnrollment = {
+      id,
+      traineeId: trainee.id,
+      tradeId: trade.id,
+      sourceTradeId: trainee.tradeId,
+      sessionId: trainee.sessionId,
+      enrollmentType: 'manual',
+      status: 'enrolled',
+      removedByAdmin: false,
+      enrolledAt: idx >= 0 ? data.tradeEnrollments[idx].enrolledAt : nowIso,
+      updatedAt: nowIso,
+    };
+
+    if (idx >= 0) {
+      data.tradeEnrollments[idx] = enrollment;
+    } else {
+      data.tradeEnrollments.push(enrollment);
+    }
+    await db.persistItemNow('tradeEnrollments', enrollment.id, enrollment);
+    db.addAuditLog({
+      userId: 'usr_admin',
+      userName: 'Principal / Admin',
+      userRole: 'admin',
+      action: 'ENROLL_COMMON_TRADE_TRAINEE',
+      details: `Manually enrolled existing trainee ${trainee.name} (${trainee.rollNo}) in common subject ${trade.name}.`,
+    });
+    res.json({ success: true, enrollment });
+  });
+
+  app.post('/api/trade-enrollments/remove', async (req: Request, res: Response) => {
+    const { tradeId, traineeId } = req.body;
+    const data = db.get();
+    if (!Array.isArray(data.tradeEnrollments)) data.tradeEnrollments = [];
+    const trade = data.trades.find((t) => t.id === tradeId);
+    const trainee = data.trainees.find((t) => t.id === traineeId);
+    const idx = data.tradeEnrollments.findIndex((e) => e.tradeId === tradeId && e.traineeId === traineeId);
+    const nowIso = new Date().toISOString();
+
+    const updated: TradeEnrollment = idx >= 0
+      ? {
+          ...data.tradeEnrollments[idx],
+          status: 'removed',
+          removedByAdmin: true,
+          updatedAt: nowIso,
+        }
+      : {
+          id: makeEnrollmentId(String(tradeId), String(traineeId)),
+          traineeId: String(traineeId),
+          tradeId: String(tradeId),
+          sourceTradeId: trainee?.tradeId || '',
+          sessionId: trainee?.sessionId || '',
+          enrollmentType: 'manual',
+          status: 'removed',
+          removedByAdmin: true,
+          enrolledAt: nowIso,
+          updatedAt: nowIso,
+        };
+
+    if (idx >= 0) {
+      data.tradeEnrollments[idx] = updated;
+    } else {
+      data.tradeEnrollments.push(updated);
+    }
+    await db.persistItemNow('tradeEnrollments', updated.id, updated);
+    db.addAuditLog({
+      userId: 'usr_admin',
+      userName: 'Principal / Admin',
+      userRole: 'admin',
+      action: 'REMOVE_COMMON_TRADE_TRAINEE',
+      details: `Removed trainee ${trainee?.name || traineeId} (${trainee?.rollNo || ''}) from common subject ${trade?.name || tradeId}.`,
+    });
+    res.json({ success: true, enrollment: updated });
+  });
+
+  app.post('/api/trade-enrollments/sync', async (req: Request, res: Response) => {
+    const { tradeId } = req.body || {};
+    const data = db.get();
+    const targetTrades = tradeId
+      ? data.trades.filter((t) => t.id === tradeId)
+      : data.trades.filter((t) => t.isCommonTrade);
+
+    const ops: PendingFirestoreOp[] = [];
+    let added = 0;
+    let updated = 0;
+    let removed = 0;
+
+    for (const trd of targetTrades) {
+      const r = computeCommonTradeSyncOpsForTrade(data, trd.id, ops);
+      added += r.added;
+      updated += r.updated;
+      removed += r.removed;
+    }
+    if (ops.length > 0) {
+      await db.persistBatchNow(ops);
+    }
+    res.json({ success: true, summary: { added, updated, removed } });
   });
 
   // Training Officers
@@ -1614,16 +2236,68 @@ async function startServer() {
 
   // Trainees
   app.get('/api/trainees', (req: Request, res: Response) => {
+    const actor = requireActor(req, res);
+    if (!actor) return;
     const { tradeId, sessionId } = req.query;
     const data = db.get();
+
+    if (actor.role === 'trainee') {
+      return res.json([actor.trainee]);
+    }
+
+    if (tradeId) {
+      const targetTradeId = String(tradeId);
+      if (actor.role === 'officer' && !actor.assignedTradeIds.includes(targetTradeId)) {
+        return res.status(403).json({ error: 'Access denied: you are not assigned to this trade or common subject.' });
+      }
+      const list = getEnrolledTraineesForTrade(
+        data,
+        targetTradeId,
+        sessionId ? String(sessionId) : undefined,
+        true
+      );
+      return res.json(list);
+    }
+
+    if (actor.role === 'officer') {
+      const seen = new Set<string>();
+      const scoped: Trainee[] = [];
+      for (const tid of actor.assignedTradeIds) {
+        const members = getEnrolledTraineesForTrade(
+          data,
+          tid,
+          sessionId ? String(sessionId) : undefined,
+          true
+        );
+        for (const m of members) {
+          if (!seen.has(m.id)) {
+            seen.add(m.id);
+            scoped.push(m);
+          }
+        }
+      }
+      return res.json(scoped);
+    }
+
     let list = data.trainees;
-    if (tradeId) list = list.filter((t) => t.tradeId === tradeId);
-    if (sessionId) list = list.filter((t) => t.sessionId === sessionId);
+    if (sessionId) list = list.filter((t) => t.sessionId === String(sessionId));
     res.json(list);
   });
 
   app.post('/api/trainees', async (req: Request, res: Response) => {
+    const actor = requireActor(req, res);
+    if (!actor) return;
     const data = db.get();
+    const targetTradeId = String(req.body.tradeId || '').trim();
+    if (!assertPrimaryTradeOfficerOrAdmin(actor, res, targetTradeId || undefined, 'Trainee registration')) {
+      return;
+    }
+    const targetTrade = data.trades.find((t) => t.id === targetTradeId);
+    if (targetTrade?.isCommonTrade) {
+      return res.status(403).json({
+        error: 'Cannot register a new trainee directly under a Common Subject. Admit trainees under their primary core trade, or use Common Trade Enrollment to link existing trainees.',
+      });
+    }
     const newTrainee: Trainee = {
       id: `tr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       rollNo: req.body.rollNo,
@@ -1645,10 +2319,11 @@ async function startServer() {
     };
     data.trainees.push(newTrainee);
     await db.persistItemNow('trainees', newTrainee.id, newTrainee);
+    await syncCommonTradesForTrainees([newTrainee.id]);
     db.addAuditLog({
-      userId: req.body.officerId || 'usr_admin',
-      userName: req.body.officerName || 'Training Officer',
-      userRole: 'officer',
+      userId: req.body.officerId || actor.id || 'usr_admin',
+      userName: req.body.officerName || actor.name || 'Training Officer',
+      userRole: actor.role === 'admin' ? 'admin' : 'officer',
       action: 'ADD_TRAINEE',
       details: `Added new trainee: ${newTrainee.name} (Roll: ${newTrainee.rollNo}).`,
     });
@@ -1656,12 +2331,23 @@ async function startServer() {
   });
 
   app.post('/api/trainees/bulk', async (req: Request, res: Response) => {
+    const actor = requireActor(req, res);
+    if (!actor) return;
     const { trainees, tradeId, sessionId, officerId, officerName } = req.body;
     if (!Array.isArray(trainees) || trainees.length === 0) {
       return res.status(400).json({ error: 'No trainee records provided for bulk import.' });
     }
     const data = db.get();
-    const targetTradeId = tradeId || data.trades[0]?.id;
+    const targetTradeId = String(tradeId || data.trades.find((t) => !t.isCommonTrade)?.id || data.trades[0]?.id || '').trim();
+    if (!assertPrimaryTradeOfficerOrAdmin(actor, res, targetTradeId || undefined, 'Bulk trainee import')) {
+      return;
+    }
+    const targetTrade = data.trades.find((t) => t.id === targetTradeId);
+    if (targetTrade?.isCommonTrade) {
+      return res.status(403).json({
+        error: 'Bulk trainee registration is restricted to primary trades. Common Subjects inherit trainees automatically.',
+      });
+    }
     const targetSessionId = sessionId || data.settings.currentSessionId;
     const addedTrainees: Trainee[] = [];
     const ops: PendingFirestoreOp[] = [];
@@ -1702,6 +2388,7 @@ async function startServer() {
     });
 
     await db.persistBatchNow(ops);
+    await syncCommonTradesForTrainees(addedTrainees.map((t) => t.id));
     db.addAuditLog({
       userId: officerId || 'usr_officer',
       userName: officerName || 'Training Officer',
@@ -1714,21 +2401,62 @@ async function startServer() {
   });
 
   app.put('/api/trainees/:id', async (req: Request, res: Response) => {
+    const actor = requireActor(req, res);
+    if (!actor) return;
     const data = db.get();
     const idx = data.trainees.findIndex((t) => t.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: 'Trainee not found' });
     const oldEmail = data.trainees[idx].email;
+    const oldTradeId = data.trainees[idx].tradeId;
+    const oldStatus = data.trainees[idx].status;
+
+    if (actor.role === 'trainee') {
+      if (actor.id !== req.params.id) {
+        return res.status(403).json({ error: 'Access denied: you may only update your own profile.' });
+      }
+      if ((req.body.tradeId && req.body.tradeId !== oldTradeId) || (req.body.status && req.body.status !== oldStatus)) {
+        return res.status(403).json({ error: 'Access denied: trainees cannot alter enrollment trade or status.' });
+      }
+    } else {
+      if (!assertPrimaryTradeOfficerOrAdmin(actor, res, oldTradeId, 'Trainee record updates')) {
+        return;
+      }
+      if (req.body.tradeId && req.body.tradeId !== oldTradeId) {
+        if (isCommonTradeId(data, String(req.body.tradeId))) {
+          return res.status(400).json({ error: 'Primary trade cannot be set to a Common Subject.' });
+        }
+        if (actor.role === 'officer' && !actor.primaryTradeIds.includes(String(req.body.tradeId))) {
+          return res.status(403).json({ error: 'Access denied: you are not assigned to the destination primary trade.' });
+        }
+      }
+    }
+
+    if (req.body.tradeId) {
+      const targetTrade = data.trades.find((t) => t.id === req.body.tradeId);
+      if (targetTrade?.isCommonTrade) {
+        return res.status(400).json({ error: 'Primary trade cannot be set to a Common Subject.' });
+      }
+    }
+
     data.trainees[idx] = { ...data.trainees[idx], ...req.body };
     if (req.body.email) {
       data.trainees[idx].email = String(req.body.email).trim();
     }
     await db.persistItemNow('trainees', data.trainees[idx].id, data.trainees[idx]);
+    await syncCommonTradesForTrainees([data.trainees[idx].id]);
+
+    const tradeChanged = data.trainees[idx].tradeId !== oldTradeId;
+    const statusChanged = data.trainees[idx].status !== oldStatus;
     db.addAuditLog({
       userId: req.body.editorId || req.params.id,
       userName: req.body.editorName || data.trainees[idx].name,
-      userRole: (req.body.editorRole as any) || 'trainee',
-      action: 'UPDATE_TRAINEE_RECORD',
-      details: req.body.email && req.body.email.trim() !== oldEmail
+      userRole: (req.body.editorRole as any) || actor.role,
+      action: tradeChanged ? 'TRANSFER_TRAINEE_TRADE' : 'UPDATE_TRAINEE_RECORD',
+      details: tradeChanged
+        ? `Transferred trainee ${data.trainees[idx].name} (${data.trainees[idx].rollNo}) from trade ${oldTradeId} to ${data.trainees[idx].tradeId} and synced common subject enrollments.`
+        : statusChanged
+        ? `Updated status for trainee ${data.trainees[idx].name} to ${data.trainees[idx].status} and synced common subject enrollments.`
+        : req.body.email && req.body.email.trim() !== oldEmail
         ? `Updated email for trainee ${data.trainees[idx].name} (${data.trainees[idx].rollNo}) to: ${data.trainees[idx].email}.`
         : `Updated profile details for trainee: ${data.trainees[idx].name} (${data.trainees[idx].rollNo}).`,
     });
@@ -1736,11 +2464,18 @@ async function startServer() {
   });
 
   app.delete('/api/trainees/:id', async (req: Request, res: Response) => {
+    const actor = requireActor(req, res);
+    if (!actor) return;
     const data = db.get();
     const targetId = req.params.id;
     const trainee = data.trainees.find((t) => t.id === targetId);
+    if (!trainee) return res.status(404).json({ error: 'Trainee not found' });
+    if (!assertPrimaryTradeOfficerOrAdmin(actor, res, trainee.tradeId, 'Trainee deletion')) {
+      return;
+    }
     const ops: PendingFirestoreOp[] = [{ type: 'delete', coll: 'trainees', id: targetId }];
 
+    (data.tradeEnrollments || []).filter((e) => e.traineeId === targetId).forEach((e) => ops.push({ type: 'delete', coll: 'tradeEnrollments', id: e.id }));
     data.attendance.filter((a) => a.traineeId === targetId).forEach((a) => ops.push({ type: 'delete', coll: 'attendance', id: a.id }));
     data.assessments.filter((asm) => asm.traineeId === targetId).forEach((asm) => ops.push({ type: 'delete', coll: 'assessments', id: asm.id }));
     data.leaves.filter((l) => l.traineeId === targetId).forEach((l) => ops.push({ type: 'delete', coll: 'leaves', id: l.id }));
@@ -1748,6 +2483,7 @@ async function startServer() {
     data.indents.filter((i) => i.traineeId === targetId).forEach((i) => ops.push({ type: 'delete', coll: 'indents', id: i.id }));
 
     data.trainees = data.trainees.filter((t) => t.id !== targetId);
+    data.tradeEnrollments = (data.tradeEnrollments || []).filter((e) => e.traineeId !== targetId);
     data.attendance = data.attendance.filter((a) => a.traineeId !== targetId);
     data.assessments = data.assessments.filter((asm) => asm.traineeId !== targetId);
     data.leaves = data.leaves.filter((l) => l.traineeId !== targetId);
@@ -1756,9 +2492,9 @@ async function startServer() {
 
     await db.persistBatchNow(ops);
     db.addAuditLog({
-      userId: req.query.officerId?.toString() || 'usr_admin',
-      userName: req.query.officerName?.toString() || 'Training Officer',
-      userRole: 'officer',
+      userId: req.query.officerId?.toString() || actor.id || 'usr_admin',
+      userName: req.query.officerName?.toString() || actor.name || 'Training Officer',
+      userRole: actor.role === 'admin' ? 'admin' : 'officer',
       action: 'DELETE_TRAINEE',
       details: `Deleted trainee record: ${trainee?.name || targetId} (${trainee?.rollNo}).`,
     });
@@ -1767,9 +2503,23 @@ async function startServer() {
 
   // Attendance Records
   app.get('/api/attendance', (req: Request, res: Response) => {
+    const actor = requireActor(req, res);
+    if (!actor) return;
     const { date, tradeId, traineeId, sessionId, month } = req.query;
     const data = db.get();
     let records = data.attendance;
+
+    if (actor.role === 'trainee') {
+      records = records.filter((r) => r.traineeId === actor.id);
+    } else if (actor.role === 'officer') {
+      if (tradeId) {
+        if (!actor.assignedTradeIds.includes(String(tradeId))) {
+          return res.status(403).json({ error: 'Access denied: you are not assigned to this trade or common subject.' });
+        }
+      } else {
+        records = records.filter((r) => actor.assignedTradeIds.includes(r.tradeId));
+      }
+    }
 
     if (date) records = records.filter((r) => r.date === date);
     if (tradeId) records = records.filter((r) => r.tradeId === tradeId);
@@ -1782,10 +2532,25 @@ async function startServer() {
 
   // Trainee mark attendance with GPS Geofencing verification
   app.post('/api/attendance/mark-trainee', async (req: Request, res: Response) => {
-    const { traineeId, userLat, userLng, accuracy, forceSimulation } = req.body;
+    const actor = requireActor(req, res);
+    if (!actor) return;
+    const { traineeId, tradeId, userLat, userLng, accuracy, forceSimulation } = req.body;
+    if (actor.role === 'trainee' && actor.id !== traineeId) {
+      return res.status(403).json({ error: 'Access denied: you can only mark attendance for your own account.' });
+    }
+    if (actor.role === 'officer') {
+      return res.status(403).json({ error: 'Access denied: officers must use officer attendance muster submission.' });
+    }
     const data = db.get();
     const trainee = data.trainees.find((t) => t.id === traineeId);
     if (!trainee) return res.status(404).json({ error: 'Trainee not found' });
+
+    const targetTradeId = String(tradeId || trainee.tradeId).trim();
+    if (!isTraineeEnrolledInTrade(data, traineeId, targetTradeId)) {
+      return res.status(403).json({
+        error: 'You are not enrolled in the selected trade or common subject.',
+      });
+    }
 
     const now = new Date();
     const windowEval = evaluateAttendanceWindow(data.settings.attendanceWindow, now);
@@ -1802,17 +2567,48 @@ async function startServer() {
       });
     }
 
-    const existing = data.attendance.find((a) => a.traineeId === traineeId && a.date === todayStr);
+    const existing = data.attendance.find(
+      (a) => a.traineeId === traineeId && a.date === todayStr && a.tradeId === targetTradeId
+    );
     if (existing) {
       return res.status(400).json({
-        error: `Attendance already recorded for today as: ${existing.status} at ${existing.timestamp}.`,
+        error: `Attendance already recorded for today in this subject/trade as: ${existing.status} at ${existing.timestamp}.`,
         record: existing,
       });
     }
 
     const campus = data.settings.campusLocation;
-    let distance = calculateDistanceMeters(userLat, userLng, campus.lat, campus.lng);
-    const accuracyBuffer = Math.min(Number(accuracy) || 0, 150);
+    const parsedLat = Number(userLat);
+    const parsedLng = Number(userLng);
+    const parsedAccuracy = Number(accuracy);
+
+    if (
+      !forceSimulation &&
+      (!Number.isFinite(parsedLat) ||
+        !Number.isFinite(parsedLng) ||
+        parsedLat < -90 ||
+        parsedLat > 90 ||
+        parsedLng < -180 ||
+        parsedLng > 180 ||
+        (Math.abs(parsedLat) < 0.0001 && Math.abs(parsedLng) < 0.0001))
+    ) {
+      return res.status(400).json({
+        error:
+          'Valid client-side device GPS coordinates (latitude & longitude) are required. Please enable Location/GPS access on your device and tap Refresh Device GPS.',
+      });
+    }
+
+    const effectiveLat = forceSimulation
+      ? Number((campus.lat + 0.0002).toFixed(6))
+      : parseFloat(parsedLat.toFixed(6));
+    const effectiveLng = forceSimulation
+      ? Number((campus.lng + 0.0001).toFixed(6))
+      : parseFloat(parsedLng.toFixed(6));
+    const sanitizedAccuracy =
+      Number.isFinite(parsedAccuracy) && parsedAccuracy > 0 ? Math.round(parsedAccuracy) : 10;
+
+    let distance = calculateDistanceMeters(effectiveLat, effectiveLng, campus.lat, campus.lng);
+    const accuracyBuffer = Math.min(Math.max(0, sanitizedAccuracy), 250);
     const effectiveDistance = Math.max(0, distance - accuracyBuffer);
     let isWithinCampus = distance <= campus.radiusMeters || effectiveDistance <= campus.radiusMeters;
 
@@ -1823,9 +2619,19 @@ async function startServer() {
 
     if (!isWithinCampus) {
       return res.status(400).json({
-        error: `Geofence verification failed. You are currently ${distance}m away from ITI Raigarh Campus (Allowed radius: ${campus.radiusMeters}m). You must be present physically at the campus to record attendance.`,
+        error: `Geofence verification failed. Device GPS (${effectiveLat}°N, ${effectiveLng}°E, ±${sanitizedAccuracy}m) is ${distance}m away from configured Campus Center (${campus.lat}°N, ${campus.lng}°E; allowed radius: ${campus.radiusMeters}m).`,
         distance,
+        effectiveDistance,
         allowedRadius: campus.radiusMeters,
+        receivedCoords: {
+          lat: effectiveLat,
+          lng: effectiveLng,
+          accuracy: sanitizedAccuracy,
+        },
+        campusCenter: {
+          lat: campus.lat,
+          lng: campus.lng,
+        },
       });
     }
 
@@ -1839,26 +2645,29 @@ async function startServer() {
     }
 
     const timestampStr = formatClock12(windowEval.istHours, windowEval.istMinutes);
+    const targetTrade = data.trades.find((t) => t.id === targetTradeId);
     const newRecord: AttendanceRecord = {
       id: `att_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       traineeId: trainee.id,
       traineeName: trainee.name,
       rollNo: trainee.rollNo,
-      tradeId: trainee.tradeId,
+      tradeId: targetTradeId,
       sessionId: trainee.sessionId,
       date: todayStr,
       status: 'Present',
       timestamp: timestampStr,
       markedBy: 'trainee_gps',
       geotag: {
-        lat: userLat,
-        lng: userLng,
-        accuracyMeters: accuracy || 10,
+        lat: effectiveLat,
+        lng: effectiveLng,
+        accuracyMeters: sanitizedAccuracy,
         distanceFromCampusMeters: distance,
         isWithinCampus: true,
         verified: true,
       },
-      remarks: 'Verified via Trainee GPS Geotag at ITI Campus',
+      remarks: targetTrade?.isCommonTrade
+        ? `Verified via Client Device GPS Geotag (${targetTrade.name})`
+        : 'Verified via Client Device GPS Geotag at ITI Campus',
     };
 
     data.attendance.push(newRecord);
@@ -1869,7 +2678,7 @@ async function startServer() {
       userName: trainee.name,
       userRole: 'trainee',
       action: 'GPS_ATTENDANCE_MARKED',
-      details: `Marked Present via GPS. Distance: ${distance}m, Accuracy: ${accuracy || 10}m.`,
+      details: `Marked Present for ${targetTrade?.name || targetTradeId} via Device GPS (${effectiveLat}, ${effectiveLng}). Distance: ${distance}m, Accuracy: ±${sanitizedAccuracy}m.`,
     });
 
     res.json({ success: true, record: newRecord, message: 'Attendance recorded successfully!' });
@@ -1877,12 +2686,19 @@ async function startServer() {
 
   // Training Officer: Batch attendance save or override
   app.post('/api/attendance/batch-officer', async (req: Request, res: Response) => {
-    const { date, officerId, officerName, records } = req.body;
+    const actor = requireActor(req, res);
+    if (!actor) return;
+    const { date, tradeId, officerId, officerName, records } = req.body;
     const data = db.get();
-    const officer = data.officers.find((o) => o.id === officerId);
+    const officer = actor.role === 'officer' ? actor.officer : data.officers.find((o) => o.id === officerId);
 
     if (!records || !Array.isArray(records)) {
       return res.status(400).json({ error: 'Invalid attendance records payload' });
+    }
+
+    const explicitTradeId = String(tradeId || '').trim();
+    if (!assertAssignedTradeOfficerOrAdmin(actor, res, explicitTradeId || undefined, 'Attendance management')) {
+      return;
     }
 
     const targetDate = String(date || '').trim();
@@ -1903,29 +2719,37 @@ async function startServer() {
     const batchIst = getIstClockParts();
     const timestampStr = formatClock12(batchIst.hours, batchIst.minutes);
     const ops: PendingFirestoreOp[] = [];
+    let savedCount = 0;
 
     records.forEach((item) => {
       const trainee = data.trainees.find((t) => t.id === item.traineeId);
       if (!trainee) return;
       if (getDayAttendanceLock(data, targetDate, trainee.sessionId).isHoliday) return;
 
-      const existingIdx = data.attendance.findIndex((a) => a.traineeId === item.traineeId && a.date === targetDate);
+      const effectiveTradeId = explicitTradeId || trainee.tradeId;
+      if (actor.role === 'officer' && !actor.assignedTradeIds.includes(effectiveTradeId)) return;
+      if (!isTraineeEnrolledInTrade(data, trainee.id, effectiveTradeId)) return;
+
+      const existingIdx = data.attendance.findIndex(
+        (a) => a.traineeId === item.traineeId && a.date === targetDate && a.tradeId === effectiveTradeId
+      );
       if (existingIdx >= 0) {
         data.attendance[existingIdx] = {
           ...data.attendance[existingIdx],
           status: item.status,
           remarks: item.remarks || data.attendance[existingIdx].remarks || 'Updated by Training Officer',
           authorizedCorrection: true,
-          correctedBy: officerName || officer?.name || 'Training Officer',
+          correctedBy: officerName || officer?.name || actor.name || 'Training Officer',
         };
         ops.push({ type: 'set', coll: 'attendance', id: data.attendance[existingIdx].id, data: data.attendance[existingIdx] });
+        savedCount++;
       } else {
         const created: AttendanceRecord = {
           id: `att_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
           traineeId: trainee.id,
           traineeName: trainee.name,
           rollNo: trainee.rollNo,
-          tradeId: trainee.tradeId,
+          tradeId: effectiveTradeId,
           sessionId: trainee.sessionId,
           date: targetDate,
           status: item.status,
@@ -1933,30 +2757,42 @@ async function startServer() {
           markedBy: 'officer_manual',
           remarks: item.remarks || 'Recorded by Training Officer',
           authorizedCorrection: false,
-          correctedBy: officerName,
+          correctedBy: officerName || officer?.name || actor.name,
         };
         data.attendance.push(created);
         ops.push({ type: 'set', coll: 'attendance', id: created.id, data: created });
+        savedCount++;
       }
     });
 
     await db.persistBatchNow(ops);
     db.addAuditLog({
-      userId: officerId || 'usr_officer',
-      userName: officerName || 'Training Officer',
-      userRole: 'officer',
+      userId: officerId || actor.id || 'usr_officer',
+      userName: officerName || actor.name || 'Training Officer',
+      userRole: actor.role === 'admin' ? 'admin' : 'officer',
       action: 'OFFICER_ATTENDANCE_UPDATE',
-      details: `Updated/marked attendance for ${records.length} trainees on date ${targetDate}.`,
+      details: `Updated/marked attendance for ${savedCount} trainees (${explicitTradeId || 'primary trade'}) on date ${targetDate}.`,
     });
 
-    res.json({ success: true, count: records.length });
+    res.json({ success: true, count: savedCount });
   });
 
   // Auto-mark Absent for trainees who haven't marked attendance past cutoff time
   app.post('/api/attendance/auto-absent', async (req: Request, res: Response) => {
-    const { date, tradeId } = req.body;
+    const actor = requireActor(req, res);
+    if (!actor) return;
+    const { date, tradeId, primaryTradeId } = req.body;
     const targetDate = String(date || getIstDateStr()).trim();
+    const targetTradeId = String(tradeId || '').trim();
+    const primaryTradeFilter = String(primaryTradeId || '').trim();
     const data = db.get();
+
+    if (actor.role === 'officer' && !targetTradeId) {
+      return res.status(400).json({ error: 'tradeId is required for Training Officer auto-absent execution.' });
+    }
+    if (!assertAssignedTradeOfficerOrAdmin(actor, res, targetTradeId || undefined, 'Auto-absent attendance marking')) {
+      return;
+    }
 
     const baseLock = getDayAttendanceLock(data, targetDate);
     if (baseLock.isWeeklyHoliday) {
@@ -1971,8 +2807,13 @@ async function startServer() {
     }
 
     const globalHoliday = findHolidayForDate(data, targetDate);
-    let targetTrainees = data.trainees.filter((t) => t.status === 'active');
-    if (tradeId) targetTrainees = targetTrainees.filter((t) => t.tradeId === tradeId);
+    let targetTrainees = targetTradeId
+      ? getEnrolledTraineesForTrade(data, targetTradeId, undefined, false)
+      : data.trainees.filter((t) => t.status === 'active');
+
+    if (primaryTradeFilter && primaryTradeFilter !== 'all') {
+      targetTrainees = targetTrainees.filter((t) => t.tradeId === primaryTradeFilter);
+    }
 
     if (globalHoliday && (!globalHoliday.sessionId || globalHoliday.sessionId === 'all')) {
       return res.status(400).json({
@@ -2002,14 +2843,17 @@ async function startServer() {
     const ops: PendingFirestoreOp[] = [];
     targetTrainees.forEach((tr) => {
       if (getDayAttendanceLock(data, targetDate, tr.sessionId).isHoliday) return;
-      const exists = data.attendance.find((a) => a.traineeId === tr.id && a.date === targetDate);
+      const effectiveTradeId = targetTradeId || tr.tradeId;
+      const exists = data.attendance.find(
+        (a) => a.traineeId === tr.id && a.date === targetDate && a.tradeId === effectiveTradeId
+      );
       if (!exists) {
         const rec: AttendanceRecord = {
           id: `att_auto_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
           traineeId: tr.id,
           traineeName: tr.name,
           rollNo: tr.rollNo,
-          tradeId: tr.tradeId,
+          tradeId: effectiveTradeId,
           sessionId: tr.sessionId,
           date: targetDate,
           status: 'Absent',
@@ -2027,20 +2871,37 @@ async function startServer() {
     res.json({ success: true, markedCount: newlyMarkedAbsent, date: targetDate });
   });
 
-  // Leave Management
+  // Leave Management (Strictly Primary Trade Only for Officers; Common Trade Officers blocked)
   app.get('/api/leaves', (req: Request, res: Response) => {
+    const actor = requireActor(req, res);
+    if (!actor) return;
     const { traineeId, tradeId, status } = req.query;
     const data = db.get();
     let list = data.leaves;
 
-    if (traineeId) list = list.filter((l) => l.traineeId === traineeId);
-    if (tradeId) list = list.filter((l) => l.tradeId === tradeId);
-    if (status) list = list.filter((l) => l.status === status);
+    if (actor.role === 'trainee') {
+      list = list.filter((l) => l.traineeId === actor.id);
+    } else {
+      const requestedTradeId = tradeId ? String(tradeId).trim() : undefined;
+      if (!assertPrimaryTradeOfficerOrAdmin(actor, res, requestedTradeId, 'Leave Register & Approvals')) {
+        return;
+      }
+      if (requestedTradeId) {
+        list = list.filter((l) => l.tradeId === requestedTradeId);
+      } else if (actor.role === 'officer') {
+        list = list.filter((l) => actor.primaryTradeIds.includes(l.tradeId));
+      }
+      if (traineeId) list = list.filter((l) => l.traineeId === String(traineeId));
+    }
+
+    if (status) list = list.filter((l) => l.status === String(status));
 
     res.json(list);
   });
 
   app.post('/api/leaves/apply', async (req: Request, res: Response) => {
+    const actor = requireActor(req, res);
+    if (!actor) return;
     const {
       traineeId,
       leaveType,
@@ -2052,6 +2913,12 @@ async function startServer() {
       attachmentName,
       attachmentUrl,
     } = req.body;
+    if (actor.role === 'trainee' && actor.id !== traineeId) {
+      return res.status(403).json({ error: 'Access denied: you can only submit leave applications for yourself.' });
+    }
+    if (actor.role === 'officer') {
+      return res.status(403).json({ error: 'Access denied: leave applications must be submitted by the trainee.' });
+    }
     const data = db.get();
     const trainee = data.trainees.find((t) => t.id === traineeId);
     if (!trainee) return res.status(404).json({ error: 'Trainee not found' });
@@ -2088,14 +2955,19 @@ async function startServer() {
   });
 
   app.put('/api/leaves/:id/review', async (req: Request, res: Response) => {
+    const actor = requireActor(req, res);
+    if (!actor) return;
     const { status, officerName, reviewerRemarks } = req.body;
     const data = db.get();
     const idx = data.leaves.findIndex((l) => l.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: 'Leave request not found' });
 
     const leave = data.leaves[idx];
+    if (!assertPrimaryTradeOfficerOrAdmin(actor, res, leave.tradeId, 'Leave Approval / Sanction')) {
+      return;
+    }
     leave.status = status; // 'approved' | 'rejected'
-    leave.reviewedBy = officerName;
+    leave.reviewedBy = officerName || actor.name;
     leave.reviewerRemarks = reviewerRemarks;
     leave.reviewedAt = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
 
@@ -2103,10 +2975,11 @@ async function startServer() {
       { type: 'set', coll: 'leaves', id: leave.id, data: leave },
     ];
 
-    // If approved, update or insert attendance ONLY on valid working days (skip Sundays, 2nd/3rd Saturdays, Admin Holidays)
+    // If approved, update or insert attendance ONLY on valid working days and strictly for the trainee's Primary Trade
     if (status === 'approved') {
       const attStatus = leave.leaveType === 'Casual Leave (CL)' ? 'CL' : leave.leaveType === 'Medical Leave (ML)' ? 'Medical Leave' : 'Half-Day Leave';
       const trainee = data.trainees.find((t) => t.id === leave.traineeId);
+      const primaryTradeId = trainee?.tradeId || leave.tradeId;
       const validWorkingDates = expandLeaveWorkingDates(
         leave.fromDate,
         leave.toDate,
@@ -2116,12 +2989,14 @@ async function startServer() {
       );
 
       for (const dateStr of validWorkingDates) {
-        const attIdx = data.attendance.findIndex((a) => a.traineeId === leave.traineeId && a.date === dateStr);
+        const attIdx = data.attendance.findIndex(
+          (a) => a.traineeId === leave.traineeId && a.date === dateStr && a.tradeId === primaryTradeId
+        );
         if (attIdx >= 0) {
           data.attendance[attIdx].status = attStatus;
           data.attendance[attIdx].remarks = `Approved leave (${leave.leaveType}): ${reviewerRemarks || 'Sanctioned by Training Officer'}`;
           data.attendance[attIdx].authorizedCorrection = true;
-          data.attendance[attIdx].correctedBy = officerName || 'Training Officer';
+          data.attendance[attIdx].correctedBy = officerName || actor.name || 'Training Officer';
           ops.push({ type: 'set', coll: 'attendance', id: data.attendance[attIdx].id, data: data.attendance[attIdx] });
         } else if (trainee) {
           const newAtt: AttendanceRecord = {
@@ -2129,7 +3004,7 @@ async function startServer() {
             traineeId: trainee.id,
             traineeName: trainee.name,
             rollNo: trainee.rollNo,
-            tradeId: trainee.tradeId,
+            tradeId: primaryTradeId,
             sessionId: trainee.sessionId,
             date: dateStr,
             status: attStatus,
@@ -2137,7 +3012,7 @@ async function startServer() {
             markedBy: 'officer_manual',
             remarks: `Approved leave (${leave.leaveType}): ${reviewerRemarks || leave.reason}`,
             authorizedCorrection: true,
-            correctedBy: officerName || 'Training Officer',
+            correctedBy: officerName || actor.name || 'Training Officer',
           };
           data.attendance.push(newAtt);
           ops.push({ type: 'set', coll: 'attendance', id: newAtt.id, data: newAtt });
@@ -2147,9 +3022,9 @@ async function startServer() {
 
     await db.persistBatchNow(ops);
     db.addAuditLog({
-      userId: 'officer',
-      userName: officerName || 'Training Officer',
-      userRole: 'officer',
+      userId: actor.id || 'officer',
+      userName: officerName || actor.name || 'Training Officer',
+      userRole: actor.role === 'admin' ? 'admin' : 'officer',
       action: `LEAVE_${status.toUpperCase()}`,
       details: `${status.toUpperCase()} leave request for ${leave.traineeName} (${leave.leaveType}).`,
     });
@@ -2157,24 +3032,56 @@ async function startServer() {
     res.json({ success: true, leave });
   });
 
-  // Warning Notices for Trainees <80% Attendance
+  // Warning Notices for Trainees <80% Attendance (Strictly Primary Trade Only)
   app.get('/api/warnings', (req: Request, res: Response) => {
+    const actor = requireActor(req, res);
+    if (!actor) return;
     const { traineeId, tradeId } = req.query;
     const data = db.get();
     let list = data.warnings;
 
-    if (traineeId) list = list.filter((w) => w.traineeId === traineeId);
-    if (tradeId) list = list.filter((w) => w.tradeId === tradeId);
+    if (actor.role === 'trainee') {
+      list = list.filter((w) => w.traineeId === actor.id);
+    } else {
+      const requestedTradeId = tradeId ? String(tradeId).trim() : undefined;
+      if (!assertPrimaryTradeOfficerOrAdmin(actor, res, requestedTradeId, 'Disciplinary & Warning Notices')) {
+        return;
+      }
+      if (requestedTradeId) {
+        list = list.filter((w) => w.tradeId === requestedTradeId);
+      } else if (actor.role === 'officer') {
+        list = list.filter((w) => actor.primaryTradeIds.includes(w.tradeId));
+      }
+      if (traineeId) list = list.filter((w) => w.traineeId === String(traineeId));
+    }
 
     res.json(list);
   });
 
   app.post('/api/warnings', async (req: Request, res: Response) => {
-    const { traineeId, officerId, officerName, subject, subjectHindi, message, messageHindi, attendancePercent } = req.body;
+    const actor = requireActor(req, res);
+    if (!actor) return;
+    const { traineeId, tradeId, officerId, officerName, subject, subjectHindi, message, messageHindi, attendancePercent } = req.body;
     const data = db.get();
     const trainee = data.trainees.find((t) => t.id === traineeId);
     if (!trainee) return res.status(404).json({ error: 'Trainee not found' });
-    const trade = data.trades.find((t) => t.id === trainee.tradeId);
+
+    const requestedTradeId = String(tradeId || '').trim();
+    if (requestedTradeId && isCommonTradeId(data, requestedTradeId)) {
+      return res.status(403).json({
+        error: 'Issuing warning notices is restricted to Primary Trades only. Common Trade Officers cannot issue warning notices.',
+      });
+    }
+    const effectiveTradeId = requestedTradeId || trainee.tradeId;
+    if (!assertPrimaryTradeOfficerOrAdmin(actor, res, effectiveTradeId, 'Disciplinary & Warning Notices')) {
+      return;
+    }
+    if (actor.role === 'officer' && !actor.primaryTradeIds.includes(trainee.tradeId)) {
+      return res.status(403).json({
+        error: 'Access denied: only the trainee’s Primary Trade Officer can issue disciplinary warning notices.',
+      });
+    }
+    const trade = data.trades.find((t) => t.id === effectiveTradeId);
 
     const refNumber = `ITI-RAI/${trade?.code || 'TRD'}/WARN/${getIstYear()}/${Math.floor(10 + Math.random() * 90)}`;
     const pct = Number(attendancePercent);
@@ -2191,10 +3098,10 @@ async function startServer() {
       traineeId: trainee.id,
       traineeName: trainee.name,
       rollNo: trainee.rollNo,
-      tradeId: trainee.tradeId,
+      tradeId: effectiveTradeId,
       tradeName: trade?.name || 'Trade',
-      officerId,
-      officerName,
+      officerId: officerId || actor.id,
+      officerName: officerName || actor.name,
       attendancePercent: pct,
       subject: subject || `Official Warning: Deficit Attendance Below Minimum 80% Requirement (${pct}%)`,
       subjectHindi: resolvedSubjectHindi,
@@ -2207,39 +3114,60 @@ async function startServer() {
     data.warnings.unshift(newWarning);
     await db.persistItemNow('warnings', newWarning.id, newWarning);
     db.addAuditLog({
-      userId: officerId,
-      userName: officerName,
-      userRole: 'officer',
+      userId: officerId || actor.id,
+      userName: officerName || actor.name,
+      userRole: actor.role === 'admin' ? 'admin' : 'officer',
       action: 'ISSUE_ATTENDANCE_WARNING',
-      details: `Issued formal bilingual warning ${refNumber} to ${trainee.name} (Attendance: ${attendancePercent}%).`,
+      details: `Issued formal bilingual warning ${refNumber} (${trade?.name || effectiveTradeId}) to ${trainee.name} (Attendance: ${attendancePercent}%).`,
     });
 
     res.json({ success: true, warning: newWarning });
   });
 
   app.put('/api/warnings/:id/acknowledge', async (req: Request, res: Response) => {
+    const actor = requireActor(req, res);
+    if (!actor) return;
     const data = db.get();
     const warning = data.warnings.find((w) => w.id === req.params.id);
     if (!warning) return res.status(404).json({ error: 'Warning notice not found' });
+    if (actor.role !== 'admin' && !(actor.role === 'trainee' && warning.traineeId === actor.id)) {
+      return res.status(403).json({ error: 'Access denied: only the concerned trainee may acknowledge this warning.' });
+    }
     warning.status = 'acknowledged';
     warning.acknowledgedAt = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
     await db.persistItemNow('warnings', warning.id, warning);
     res.json({ success: true, warning });
   });
 
-  // Tools & Equipment Inventory
+  // Tools & Equipment Inventory (Strictly Primary Trade Only)
   app.get('/api/inventory', (req: Request, res: Response) => {
+    const actor = requireActor(req, res);
+    if (!actor) return;
     const { tradeId, category } = req.query;
     const data = db.get();
+    const requestedTradeId = tradeId ? String(tradeId).trim() : undefined;
+    if (!assertPrimaryTradeOfficerOrAdmin(actor, res, requestedTradeId, 'Workshop Inventory')) {
+      return;
+    }
     let list = data.inventory;
 
-    if (tradeId) list = list.filter((i) => i.tradeId === tradeId);
+    if (requestedTradeId) {
+      list = list.filter((i) => i.tradeId === requestedTradeId);
+    } else if (actor.role === 'officer') {
+      list = list.filter((i) => actor.primaryTradeIds.includes(i.tradeId));
+    }
     if (category) list = list.filter((i) => i.category === category);
 
     res.json(list);
   });
 
   app.post('/api/inventory', async (req: Request, res: Response) => {
+    const actor = requireActor(req, res);
+    if (!actor) return;
+    const targetTradeId = String(req.body.tradeId || '').trim();
+    if (!assertPrimaryTradeOfficerOrAdmin(actor, res, targetTradeId || undefined, 'Workshop Inventory')) {
+      return;
+    }
     const data = db.get();
     const total = Number(req.body.totalStock) || 0;
     const issued = Number(req.body.issuedCount) || 0;
@@ -2264,9 +3192,9 @@ async function startServer() {
     data.inventory.push(newItem);
     await db.persistItemNow('inventory', newItem.id, newItem);
     db.addAuditLog({
-      userId: req.body.officerId || 'usr_officer',
-      userName: req.body.officerName || 'Training Officer',
-      userRole: 'officer',
+      userId: req.body.officerId || actor.id || 'usr_officer',
+      userName: req.body.officerName || actor.name || 'Training Officer',
+      userRole: actor.role === 'admin' ? 'admin' : 'officer',
       action: 'ADD_INVENTORY_ITEM',
       details: `Added inventory item: ${newItem.name} (${newItem.toolCode}) - Stock: ${total}.`,
     });
@@ -2274,9 +3202,14 @@ async function startServer() {
   });
 
   app.put('/api/inventory/:id', async (req: Request, res: Response) => {
+    const actor = requireActor(req, res);
+    if (!actor) return;
     const data = db.get();
     const idx = data.inventory.findIndex((i) => i.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: 'Item not found' });
+    if (!assertPrimaryTradeOfficerOrAdmin(actor, res, data.inventory[idx].tradeId, 'Workshop Inventory')) {
+      return;
+    }
 
     const total = req.body.totalStock !== undefined ? Number(req.body.totalStock) : data.inventory[idx].totalStock;
     const issued = req.body.issuedCount !== undefined ? Number(req.body.issuedCount) : data.inventory[idx].issuedCount;
@@ -2298,40 +3231,69 @@ async function startServer() {
   });
 
   app.delete('/api/inventory/:id', async (req: Request, res: Response) => {
+    const actor = requireActor(req, res);
+    if (!actor) return;
     const data = db.get();
     const item = data.inventory.find((i) => i.id === req.params.id);
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+    if (!assertPrimaryTradeOfficerOrAdmin(actor, res, item.tradeId, 'Workshop Inventory')) {
+      return;
+    }
     data.inventory = data.inventory.filter((i) => i.id !== req.params.id);
     await db.deleteItemNow('inventory', req.params.id);
     db.addAuditLog({
-      userId: 'usr_officer',
-      userName: 'Training Officer',
-      userRole: 'officer',
+      userId: actor.id || 'usr_officer',
+      userName: actor.name || 'Training Officer',
+      userRole: actor.role === 'admin' ? 'admin' : 'officer',
       action: 'DELETE_INVENTORY_ITEM',
       details: `Deleted inventory item: ${item?.name || req.params.id}.`,
     });
     res.json({ success: true });
   });
 
-  // Indent Registers
+  // Indent Registers (Strictly Primary Trade Only)
   app.get('/api/indent', (req: Request, res: Response) => {
+    const actor = requireActor(req, res);
+    if (!actor) return;
     const { tradeId, traineeId, status } = req.query;
     const data = db.get();
     let list = data.indents;
 
-    if (tradeId) list = list.filter((i) => i.tradeId === tradeId);
-    if (traineeId) list = list.filter((i) => i.traineeId === traineeId);
+    if (actor.role === 'trainee') {
+      list = list.filter((i) => i.traineeId === actor.id);
+    } else {
+      const requestedTradeId = tradeId ? String(tradeId).trim() : undefined;
+      if (!assertPrimaryTradeOfficerOrAdmin(actor, res, requestedTradeId, 'Tool Indent Register')) {
+        return;
+      }
+      if (requestedTradeId) {
+        list = list.filter((i) => i.tradeId === requestedTradeId);
+      } else if (actor.role === 'officer') {
+        list = list.filter((i) => actor.primaryTradeIds.includes(i.tradeId));
+      }
+      if (traineeId) list = list.filter((i) => i.traineeId === traineeId);
+    }
     if (status) list = list.filter((i) => i.status === status);
 
     res.json(list);
   });
 
   app.post('/api/indent/issue', async (req: Request, res: Response) => {
+    const actor = requireActor(req, res);
+    if (!actor) return;
     const { tradeId, officerId, officerName, traineeId, itemId, quantity, expectedReturnDate, remarks } = req.body;
     const data = db.get();
     const trainee = data.trainees.find((t) => t.id === traineeId);
     const item = data.inventory.find((i) => i.id === itemId);
 
+    const requestedTradeId = String(tradeId || item?.tradeId || trainee?.tradeId || '').trim();
+    if (!assertPrimaryTradeOfficerOrAdmin(actor, res, requestedTradeId || undefined, 'Tool Indent Issue')) {
+      return;
+    }
     if (!trainee || !item) return res.status(400).json({ error: 'Trainee or Item not found' });
+    if (!assertPrimaryTradeOfficerOrAdmin(actor, res, item.tradeId, 'Tool Indent Issue')) {
+      return;
+    }
     const qty = Number(quantity) || 1;
 
     if (item.availableStock < qty) {
@@ -2345,9 +3307,9 @@ async function startServer() {
     const newIndent: IndentRecord = {
       id: `ind_${Date.now()}`,
       indentNo: `IND/${getIstYear()}/${item.toolCode.slice(0, 4)}/${Math.floor(100 + Math.random() * 900)}`,
-      tradeId,
-      officerId,
-      officerName,
+      tradeId: requestedTradeId || item.tradeId,
+      officerId: officerId || actor.id,
+      officerName: officerName || actor.name,
       traineeId: trainee.id,
       traineeName: trainee.name,
       rollNo: trainee.rollNo,
@@ -2367,9 +3329,9 @@ async function startServer() {
     ]);
 
     db.addAuditLog({
-      userId: officerId,
-      userName: officerName,
-      userRole: 'officer',
+      userId: officerId || actor.id,
+      userName: officerName || actor.name,
+      userRole: actor.role === 'admin' ? 'admin' : 'officer',
       action: 'INDENT_ISSUE',
       details: `Issued ${qty}x ${item.name} to ${trainee.name} (${trainee.rollNo}) under Indent ${newIndent.indentNo}.`,
     });
@@ -2378,10 +3340,15 @@ async function startServer() {
   });
 
   app.put('/api/indent/:id/return', async (req: Request, res: Response) => {
+    const actor = requireActor(req, res);
+    if (!actor) return;
     const { returnCondition, remarks, officerName } = req.body;
     const data = db.get();
     const indent = data.indents.find((i) => i.id === req.params.id);
     if (!indent) return res.status(404).json({ error: 'Indent record not found' });
+    if (!assertPrimaryTradeOfficerOrAdmin(actor, res, indent.tradeId, 'Tool Indent Return')) {
+      return;
+    }
 
     const item = data.inventory.find((i) => i.id === indent.itemId);
 
@@ -2406,9 +3373,9 @@ async function startServer() {
 
     await db.persistBatchNow(ops);
     db.addAuditLog({
-      userId: 'usr_officer',
-      userName: officerName || 'Training Officer',
-      userRole: 'officer',
+      userId: actor.id || 'usr_officer',
+      userName: officerName || actor.name || 'Training Officer',
+      userRole: actor.role === 'admin' ? 'admin' : 'officer',
       action: 'INDENT_RETURN',
       details: `Returned Indent ${indent.indentNo} for ${indent.itemName} (Condition: ${returnCondition || 'Good'}).`,
     });
@@ -2449,9 +3416,11 @@ async function startServer() {
       });
     });
 
-    // 2. Trainee Real-time Attendance Deficit Alert (<80%) using government working-day formula
+    // 2. Trainee Real-time Attendance Deficit Alert (<80%) using government working-day formula (primary trade scoped)
     const traineeObj = data.trainees.find((t) => t.id === traineeId);
-    const records = data.attendance.filter((a) => a.traineeId === traineeId);
+    const records = data.attendance.filter(
+      (a) => a.traineeId === traineeId && a.tradeId === trainee.tradeId
+    );
     const metrics = calculateTraineeAttendanceMetrics({
       records,
       holidays: data.holidays || [],
@@ -2543,21 +3512,35 @@ async function startServer() {
   // -------------------------------------------------------------
   // Training Officer Academic & Administrative Routine APIs
   // -------------------------------------------------------------
-  // 1. Lesson Plans
+  // 1. Lesson Plans (Allowed for both Primary and assigned Common Subject Officers)
   app.get('/api/lesson-plans', (req: Request, res: Response) => {
-    const tradeId = req.query.tradeId as string;
+    const actor = requireActor(req, res);
+    if (!actor) return;
+    const tradeId = String(req.query.tradeId || '').trim();
+    if (!assertAssignedTradeOfficerOrAdmin(actor, res, tradeId || undefined, 'Lesson Plans')) {
+      return;
+    }
     const list = db.get().lessonPlans || [];
     if (tradeId) {
       return res.json(list.filter((lp) => lp.tradeId === tradeId));
+    }
+    if (actor.role === 'officer') {
+      return res.json(list.filter((lp) => actor.assignedTradeIds.includes(lp.tradeId)));
     }
     res.json(list);
   });
 
   app.post('/api/lesson-plans', async (req: Request, res: Response) => {
+    const actor = requireActor(req, res);
+    if (!actor) return;
     const body = req.body;
+    const targetTradeId = String(body.tradeId || 'trade_elec').trim();
+    if (!assertAssignedTradeOfficerOrAdmin(actor, res, targetTradeId, 'Lesson Plans')) {
+      return;
+    }
     const newPlan: LessonPlan = {
       id: `lp_${Date.now()}`,
-      tradeId: body.tradeId || 'trade_elec',
+      tradeId: targetTradeId,
       unitName: body.unitName || 'New Module',
       syllabusRef: body.syllabusRef || 'NCVT Syllabus',
       startDate: body.startDate || getIstDateStr(),
@@ -2568,7 +3551,7 @@ async function startServer() {
       keyLearningPoints: body.keyLearningPoints || '',
       assignment: body.assignment || '',
       reference: body.reference || '',
-      officerName: body.officerName || 'Training Officer',
+      officerName: body.officerName || actor.name || 'Training Officer',
     };
     db.get().lessonPlans.unshift(newPlan);
     await db.persistItemNow('plans', newPlan.id, newPlan, 'lesson');
@@ -2576,39 +3559,65 @@ async function startServer() {
   });
 
   app.put('/api/lesson-plans/:id', async (req: Request, res: Response) => {
+    const actor = requireActor(req, res);
+    if (!actor) return;
     const id = req.params.id;
     const body = req.body;
     const list = db.get().lessonPlans;
     const index = list.findIndex((lp) => lp.id === id);
     if (index === -1) return res.status(404).json({ error: 'Lesson plan not found' });
+    if (!assertAssignedTradeOfficerOrAdmin(actor, res, list[index].tradeId, 'Lesson Plans')) {
+      return;
+    }
     list[index] = { ...list[index], ...body };
     await db.persistItemNow('plans', id, list[index], 'lesson');
     res.json({ success: true, lessonPlan: list[index] });
   });
 
   app.delete('/api/lesson-plans/:id', async (req: Request, res: Response) => {
+    const actor = requireActor(req, res);
+    if (!actor) return;
     const id = req.params.id;
     const data = db.get();
+    const existing = data.lessonPlans.find((lp) => lp.id === id);
+    if (!existing) return res.status(404).json({ error: 'Lesson plan not found' });
+    if (!assertAssignedTradeOfficerOrAdmin(actor, res, existing.tradeId, 'Lesson Plans')) {
+      return;
+    }
     data.lessonPlans = data.lessonPlans.filter((lp) => lp.id !== id);
     await db.deleteItemNow('plans', id);
     res.json({ success: true });
   });
 
-  // 2. Demonstration Plans
+  // 2. Demonstration Plans (Strictly Primary Trade Only)
   app.get('/api/demonstration-plans', (req: Request, res: Response) => {
-    const tradeId = req.query.tradeId as string;
+    const actor = requireActor(req, res);
+    if (!actor) return;
+    const tradeId = String(req.query.tradeId || '').trim();
+    if (!assertPrimaryTradeOfficerOrAdmin(actor, res, tradeId || undefined, 'Practical Demonstration Plans')) {
+      return;
+    }
     const list = db.get().demonstrationPlans || [];
     if (tradeId) {
       return res.json(list.filter((dp) => dp.tradeId === tradeId));
+    }
+    if (actor.role === 'officer') {
+      return res.json(list.filter((dp) => actor.primaryTradeIds.includes(dp.tradeId)));
     }
     res.json(list);
   });
 
   app.post('/api/demonstration-plans', async (req: Request, res: Response) => {
+    const actor = requireActor(req, res);
+    if (!actor) return;
     const body = req.body;
+    const targetTradeId = String(body.tradeId || 'trade_elec').trim();
+    if (!assertPrimaryTradeOfficerOrAdmin(actor, res, targetTradeId, 'Practical Demonstration Plans')) {
+      return;
+    }
     const newDemo: DemonstrationPlan = {
       id: `dp_${Date.now()}`,
-      tradeId: body.tradeId || 'trade_elec',
+      tradeId: targetTradeId,
       practicalTitle: body.practicalTitle || 'Practical Demonstration',
       toolsRequired: body.toolsRequired || 'Standard Tools',
       allottedHours: Number(body.allottedHours || 4),
@@ -2617,7 +3626,7 @@ async function startServer() {
       objectives: body.objectives || '',
       procedureSteps: body.procedureSteps || ['Prepare workstation', 'Execute step by step', 'Verify results'],
       hints: body.hints || 'Follow safety guidelines.',
-      officerName: body.officerName || 'Training Officer',
+      officerName: body.officerName || actor.name || 'Training Officer',
     };
     db.get().demonstrationPlans.unshift(newDemo);
     await db.persistItemNow('plans', newDemo.id, newDemo, 'demo');
@@ -2625,39 +3634,65 @@ async function startServer() {
   });
 
   app.put('/api/demonstration-plans/:id', async (req: Request, res: Response) => {
+    const actor = requireActor(req, res);
+    if (!actor) return;
     const id = req.params.id;
     const body = req.body;
     const list = db.get().demonstrationPlans;
     const index = list.findIndex((dp) => dp.id === id);
     if (index === -1) return res.status(404).json({ error: 'Demonstration plan not found' });
+    if (!assertPrimaryTradeOfficerOrAdmin(actor, res, list[index].tradeId, 'Practical Demonstration Plans')) {
+      return;
+    }
     list[index] = { ...list[index], ...body };
     await db.persistItemNow('plans', id, list[index], 'demo');
     res.json({ success: true, demonstrationPlan: list[index] });
   });
 
   app.delete('/api/demonstration-plans/:id', async (req: Request, res: Response) => {
+    const actor = requireActor(req, res);
+    if (!actor) return;
     const id = req.params.id;
     const data = db.get();
+    const existing = data.demonstrationPlans.find((dp) => dp.id === id);
+    if (!existing) return res.status(404).json({ error: 'Demonstration plan not found' });
+    if (!assertPrimaryTradeOfficerOrAdmin(actor, res, existing.tradeId, 'Practical Demonstration Plans')) {
+      return;
+    }
     data.demonstrationPlans = data.demonstrationPlans.filter((dp) => dp.id !== id);
     await db.deleteItemNow('plans', id);
     res.json({ success: true });
   });
 
-  // 3. Weekly Plans
+  // 3. Weekly Plans (Allowed for both Primary and assigned Common Subject Officers)
   app.get('/api/weekly-plans', (req: Request, res: Response) => {
-    const tradeId = req.query.tradeId as string;
+    const actor = requireActor(req, res);
+    if (!actor) return;
+    const tradeId = String(req.query.tradeId || '').trim();
+    if (!assertAssignedTradeOfficerOrAdmin(actor, res, tradeId || undefined, 'Weekly Teaching Plans')) {
+      return;
+    }
     const list = db.get().weeklyPlans || [];
     if (tradeId) {
       return res.json(list.filter((wp) => wp.tradeId === tradeId));
+    }
+    if (actor.role === 'officer') {
+      return res.json(list.filter((wp) => actor.assignedTradeIds.includes(wp.tradeId)));
     }
     res.json(list);
   });
 
   app.post('/api/weekly-plans', async (req: Request, res: Response) => {
+    const actor = requireActor(req, res);
+    if (!actor) return;
     const body = req.body;
+    const targetTradeId = String(body.tradeId || 'trade_elec').trim();
+    if (!assertAssignedTradeOfficerOrAdmin(actor, res, targetTradeId, 'Weekly Teaching Plans')) {
+      return;
+    }
     const newWeekly: WeeklyPlan = {
       id: `wp_${Date.now()}`,
-      tradeId: body.tradeId || 'trade_elec',
+      tradeId: targetTradeId,
       weekNumber: Number(body.weekNumber || 1),
       dateRange: body.dateRange || 'Current Week',
       dailyBreakdown: body.dailyBreakdown || [],
@@ -2665,7 +3700,7 @@ async function startServer() {
       summaryTheoryPlanned: Number(body.summaryTheoryPlanned || 5),
       summaryPracticalDone: Number(body.summaryPracticalDone || 0),
       summaryPracticalPlanned: Number(body.summaryPracticalPlanned || 5),
-      officerName: body.officerName || 'Training Officer',
+      officerName: body.officerName || actor.name || 'Training Officer',
     };
     db.get().weeklyPlans.unshift(newWeekly);
     await db.persistItemNow('plans', newWeekly.id, newWeekly, 'weekly');
@@ -2673,108 +3708,272 @@ async function startServer() {
   });
 
   app.put('/api/weekly-plans/:id', async (req: Request, res: Response) => {
+    const actor = requireActor(req, res);
+    if (!actor) return;
     const id = req.params.id;
     const body = req.body;
     const list = db.get().weeklyPlans;
     const index = list.findIndex((wp) => wp.id === id);
     if (index === -1) return res.status(404).json({ error: 'Weekly plan not found' });
+    if (!assertAssignedTradeOfficerOrAdmin(actor, res, list[index].tradeId, 'Weekly Teaching Plans')) {
+      return;
+    }
     list[index] = { ...list[index], ...body };
     await db.persistItemNow('plans', id, list[index], 'weekly');
     res.json({ success: true, weeklyPlan: list[index] });
   });
 
   app.delete('/api/weekly-plans/:id', async (req: Request, res: Response) => {
+    const actor = requireActor(req, res);
+    if (!actor) return;
     const id = req.params.id;
     const data = db.get();
+    const existing = data.weeklyPlans.find((wp) => wp.id === id);
+    if (!existing) return res.status(404).json({ error: 'Weekly plan not found' });
+    if (!assertAssignedTradeOfficerOrAdmin(actor, res, existing.tradeId, 'Weekly Teaching Plans')) {
+      return;
+    }
     data.weeklyPlans = data.weeklyPlans.filter((wp) => wp.id !== id);
     await db.deleteItemNow('plans', id);
     res.json({ success: true });
   });
 
-  // 4. Trainee Assessments & Progress Cards
+  // 4. Trainee Assessments & Progress Cards (Strictly Primary Trade Only)
+  const normalizeAssessmentParams = (raw: any): TraineeAssessment['parameters'] => {
+    const clamp = (val: unknown, max: number, fallback: number) => {
+      const n = Number(val);
+      if (val === undefined || val === null || val === '' || Number.isNaN(n)) return fallback;
+      return Math.max(0, Math.min(max, Math.round(n)));
+    };
+    return {
+      jobCarriedOut: clamp(raw?.jobCarriedOut, 10, 0),
+      recordBook: clamp(raw?.recordBook, 10, 0),
+      answerSheet: clamp(raw?.answerSheet, 20, 0),
+      vivaVoce: clamp(raw?.vivaVoce, 10, 0),
+      progressChart: clamp(raw?.progressChart, 10, 0),
+      attendancePunctuality: clamp(raw?.attendancePunctuality, 10, 0),
+      assignment: clamp(raw?.assignment, 5, 0),
+      projectWork: clamp(raw?.projectWork, 5, 0),
+      cbtExam: clamp(raw?.cbtExam, 10, 0),
+      practicalExam: clamp(raw?.practicalExam, 10, 0),
+    };
+  };
+
   app.get('/api/assessments', (req: Request, res: Response) => {
-    const traineeId = req.query.traineeId as string;
-    const list = db.get().assessments || [];
-    if (traineeId) {
-      return res.json(list.filter((asm) => asm.traineeId === traineeId));
+    const actor = requireActor(req, res);
+    if (!actor) return;
+    res.setHeader('Cache-Control', 'no-store');
+    const traineeId = String(req.query.traineeId || '').trim();
+    const tradeId = String(req.query.tradeId || '').trim();
+    const data = db.get();
+    let list = data.assessments || [];
+
+    if (actor.role === 'trainee') {
+      if (tradeId && isCommonTradeId(data, tradeId)) {
+        return res.status(403).json({ error: 'Internal assessments apply to Primary Trades only.' });
+      }
+      list = list.filter((asm) => asm.traineeId === actor.id);
+    } else {
+      if (!assertPrimaryTradeOfficerOrAdmin(actor, res, tradeId || undefined, 'Internal Assessments & Digital Progress Card')) {
+        return;
+      }
+      if (traineeId) {
+        list = list.filter((asm) => asm.traineeId === traineeId);
+      }
+      if (tradeId) {
+        list = list.filter((asm) => resolveAssessmentTradeId(asm, data) === tradeId);
+      } else if (actor.role === 'officer') {
+        list = list.filter((asm) => actor.primaryTradeIds.includes(resolveAssessmentTradeId(asm, data)));
+      }
     }
     res.json(list);
   });
 
   const handleAssessmentUpsert = async (body: any, targetId?: string) => {
-    const list = db.get().assessments;
-    const idToLookFor = targetId || body.id;
-    let existingIndex = -1;
+    const data = db.get();
+    const list = data.assessments;
+    const traineeId = String(body.traineeId || '').trim();
+    const month = String(body.month || '').trim() || getIstYearMonth();
+    const idToLookFor = String(targetId || body.id || '').trim();
 
-    if (idToLookFor) {
-      existingIndex = list.findIndex((asm) => asm.id === idToLookFor);
+    if (!traineeId) {
+      throw new Error('traineeId is required to save monthly assessment marks.');
     }
-    if (existingIndex === -1 && body.traineeId && body.month) {
-      existingIndex = list.findIndex(
-        (asm) => asm.traineeId === body.traineeId && asm.month === body.month
-      );
+
+    const trainee = data.trainees.find((t) => t.id === traineeId);
+    const effectiveTradeId = String(body.tradeId || trainee?.tradeId || '').trim();
+
+    // Always resolve existing record strictly by (traineeId, month, effectiveTradeId) first so saving
+    // a new month or a common subject can NEVER overwrite another month or primary trade's marks.
+    let existingIndex = list.findIndex(
+      (asm) =>
+        asm.traineeId === traineeId &&
+        asm.month === month &&
+        (!effectiveTradeId || resolveAssessmentTradeId(asm, data) === effectiveTradeId)
+    );
+
+    if (existingIndex === -1 && idToLookFor) {
+      const idMatchedIndex = list.findIndex((asm) => asm.id === idToLookFor);
+      if (
+        idMatchedIndex !== -1 &&
+        list[idMatchedIndex].traineeId === traineeId &&
+        list[idMatchedIndex].month === month &&
+        (!effectiveTradeId || resolveAssessmentTradeId(list[idMatchedIndex], data) === effectiveTradeId)
+      ) {
+        existingIndex = idMatchedIndex;
+      }
     }
+
+    const baseExisting = existingIndex !== -1 ? list[existingIndex] : undefined;
+    const normalizedParams = body.parameters
+      ? normalizeAssessmentParams({
+          ...(baseExisting?.parameters || {}),
+          ...body.parameters,
+        })
+      : normalizeAssessmentParams(
+          baseExisting?.parameters || {
+            jobCarriedOut: 8,
+            recordBook: 8,
+            answerSheet: 16,
+            vivaVoce: 8,
+            progressChart: 8,
+            attendancePunctuality: 8,
+            assignment: 4,
+            projectWork: 4,
+            cbtExam: 8,
+            practicalExam: 8,
+          }
+        );
+
+    const computedTotal = Object.values(normalizedParams).reduce(
+      (sum, v) => sum + (Number(v) || 0),
+      0
+    );
 
     if (existingIndex !== -1) {
-      list[existingIndex] = {
+      const updatedRecord: TraineeAssessment = {
         ...list[existingIndex],
-        ...body,
-        id: list[existingIndex].id,
+        traineeId,
+        tradeId: effectiveTradeId || list[existingIndex].tradeId || trainee?.tradeId,
+        sessionId: String(body.sessionId || list[existingIndex].sessionId || 'session_2026_2027'),
+        month,
+        parameters: normalizedParams,
+        testMarks: computedTotal,
+        attendancePercent:
+          body.attendancePercent !== undefined
+            ? Number(body.attendancePercent)
+            : Number(list[existingIndex].attendancePercent || 0),
+        remarks:
+          typeof body.remarks === 'string' && body.remarks.trim()
+            ? body.remarks.trim()
+            : list[existingIndex].remarks || 'Satisfactory progress.',
       };
-      await db.persistItemNow('assessments', list[existingIndex].id, list[existingIndex]);
-      return list[existingIndex];
+      list[existingIndex] = updatedRecord;
+      await db.persistItemNow('assessments', updatedRecord.id, updatedRecord);
+      return {
+        saved: updatedRecord,
+        traineeAssessments: list.filter(
+          (asm) =>
+            asm.traineeId === traineeId &&
+            (!effectiveTradeId || resolveAssessmentTradeId(asm, data) === effectiveTradeId)
+        ),
+      };
     }
 
+    // Create a brand-new independent monthly assessment record (never reuse another month's ID)
+    const idBelongsToOtherRecord =
+      idToLookFor && list.some((asm) => asm.id === idToLookFor);
+    const newId =
+      idToLookFor && !idBelongsToOtherRecord
+        ? idToLookFor
+        : `asm_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+
     const newAsm: TraineeAssessment = {
-      id: idToLookFor || `asm_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      traineeId: body.traineeId,
-      sessionId: body.sessionId || 'session_2025_2026',
-      month: body.month || getIstYearMonth(),
-      testMarks: Number(body.testMarks || 0),
-      attendancePercent: Number(body.attendancePercent || 85),
-      parameters: body.parameters || {
-        jobCarriedOut: 8,
-        recordBook: 8,
-        answerSheet: 16,
-        vivaVoce: 8,
-        progressChart: 8,
-        attendancePunctuality: 8,
-        assignment: 4,
-        projectWork: 4,
-        cbtExam: 8,
-        practicalExam: 8,
-      },
-      remarks: body.remarks || 'Satisfactory progress.',
+      id: newId,
+      traineeId,
+      tradeId: effectiveTradeId || trainee?.tradeId,
+      sessionId: String(body.sessionId || 'session_2026_2027'),
+      month,
+      testMarks: computedTotal,
+      attendancePercent: Number(body.attendancePercent ?? 0),
+      parameters: normalizedParams,
+      remarks:
+        typeof body.remarks === 'string' && body.remarks.trim()
+          ? body.remarks.trim()
+          : 'Satisfactory progress.',
     };
 
     list.unshift(newAsm);
     await db.persistItemNow('assessments', newAsm.id, newAsm);
-    return newAsm;
+    return {
+      saved: newAsm,
+      traineeAssessments: list.filter(
+        (asm) =>
+          asm.traineeId === traineeId &&
+          (!effectiveTradeId || resolveAssessmentTradeId(asm, data) === effectiveTradeId)
+      ),
+    };
   };
 
   app.post('/api/assessments', async (req: Request, res: Response) => {
+    const actor = requireActor(req, res);
+    if (!actor) return;
+    const data = db.get();
+    const trainee = data.trainees.find((t) => t.id === String(req.body?.traineeId || '').trim());
+    const effectiveTradeId = String(req.body?.tradeId || trainee?.tradeId || '').trim();
+    if (!assertPrimaryTradeOfficerOrAdmin(actor, res, effectiveTradeId || undefined, 'Internal Assessments & Digital Progress Card')) {
+      return;
+    }
+    if (actor.role === 'officer' && trainee && !actor.primaryTradeIds.includes(trainee.tradeId)) {
+      return res.status(403).json({
+        error: 'Access denied: internal assessments can only be recorded by the trainee’s Primary Trade Officer.',
+      });
+    }
     try {
-      const saved = await handleAssessmentUpsert(req.body);
-      res.json({ success: true, assessment: saved });
+      const { saved, traineeAssessments } = await handleAssessmentUpsert(req.body);
+      res.json({ success: true, assessment: saved, assessments: traineeAssessments });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to save assessment' });
     }
   });
 
   app.put('/api/assessments/:id', async (req: Request, res: Response) => {
+    const actor = requireActor(req, res);
+    if (!actor) return;
+    const data = db.get();
+    const trainee = data.trainees.find((t) => t.id === String(req.body?.traineeId || '').trim());
+    const existingById = (data.assessments || []).find((a) => a.id === req.params.id);
+    const effectiveTradeId = String(
+      req.body?.tradeId || trainee?.tradeId || (existingById ? resolveAssessmentTradeId(existingById, data) : '')
+    ).trim();
+    if (!assertPrimaryTradeOfficerOrAdmin(actor, res, effectiveTradeId || undefined, 'Internal Assessments & Digital Progress Card')) {
+      return;
+    }
+    if (actor.role === 'officer' && trainee && !actor.primaryTradeIds.includes(trainee.tradeId)) {
+      return res.status(403).json({
+        error: 'Access denied: internal assessments can only be updated by the trainee’s Primary Trade Officer.',
+      });
+    }
     try {
-      const saved = await handleAssessmentUpsert(req.body, req.params.id);
-      res.json({ success: true, assessment: saved });
+      const { saved, traineeAssessments } = await handleAssessmentUpsert(req.body, req.params.id);
+      res.json({ success: true, assessment: saved, assessments: traineeAssessments });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to update assessment' });
     }
   });
 
   app.delete('/api/assessments/:id', async (req: Request, res: Response) => {
+    const actor = requireActor(req, res);
+    if (!actor) return;
     const id = req.params.id;
-    const list = db.get().assessments || [];
+    const data = db.get();
+    const list = data.assessments || [];
     const index = list.findIndex((asm) => asm.id === id);
     if (index === -1) return res.status(404).json({ error: 'Assessment not found' });
+    const tradeId = resolveAssessmentTradeId(list[index], data);
+    if (!assertPrimaryTradeOfficerOrAdmin(actor, res, tradeId || undefined, 'Internal Assessments & Digital Progress Card')) {
+      return;
+    }
     list.splice(index, 1);
     await db.deleteItemNow('assessments', id);
     res.json({ success: true, message: 'Assessment deleted' });
@@ -2886,7 +4085,9 @@ async function startServer() {
           if (tr.status === 'active') {
             // Do not mark auto-absent on Sundays, 2nd/3rd Saturdays, or Admin-designated holidays
             if (getDateHolidayStatus(todayStr, data.holidays || [], tr.sessionId).isHoliday) return;
-            const exists = data.attendance.find((a) => a.traineeId === tr.id && a.date === todayStr);
+            const exists = data.attendance.find(
+              (a) => a.traineeId === tr.id && a.date === todayStr && a.tradeId === tr.tradeId
+            );
             if (!exists) {
               const rec: AttendanceRecord = {
                 id: `att_auto_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`,
